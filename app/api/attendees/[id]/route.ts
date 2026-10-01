@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
+import { parseHubSpotId } from '@/lib/hubspotIds';
 import { getDb } from '@/lib/getDb';
 import { requireCapability } from '@/lib/requireCapability';
 import { classifySeniority } from '@/lib/parsers';
@@ -238,6 +239,48 @@ export async function PATCH(
     if ('crm_contact_link' in body) {
       setClauses.push('crm_contact_link = ?');
       args.push((body.crm_contact_link as string | undefined) || null);
+    }
+    if ('phone' in body) {
+      setClauses.push('phone = ?');
+      args.push((body.phone as string | undefined) || null);
+    }
+    /*
+     * The HubSpot pairing key: settable while blank, changeable only by an
+     * admin after that.
+     *
+     * Enforced here rather than by disabling the input. A read-only field in
+     * the form is a suggestion — this route takes the value straight off the
+     * body, so anything that can call it could re-point a person's whole
+     * conference history at a different HubSpot record.
+     *
+     * Read as an id whatever was sent: a rep pasting a record URL from a
+     * HubSpot tab is the expected way to fill one in by hand.
+     */
+    if ('hubspot_contact_id' in body) {
+      const submitted = parseHubSpotId(body.hubspot_contact_id);
+      const currentRow = await db.execute({
+        sql: 'SELECT hubspot_contact_id FROM attendees WHERE id = ?',
+        args: [params.id],
+      });
+      const current = currentRow.rows[0]?.hubspot_contact_id
+        ? String(currentRow.rows[0].hubspot_contact_id) : null;
+      if (current && submitted !== current && authResult.role !== 'administrator') {
+        return NextResponse.json(
+          { error: 'The HubSpot contact id is already set. An administrator can change it.' },
+          { status: 403 },
+        );
+      }
+      // A cleared field is a real edit — an admin unpairing a record — but a
+      // value that could not be read as an id is a mistake, not an unpair.
+      if (submitted || !String(body.hubspot_contact_id ?? '').trim()) {
+        setClauses.push('hubspot_contact_id = ?');
+        args.push(submitted);
+      } else {
+        return NextResponse.json(
+          { error: 'That does not look like a HubSpot contact id or record link.' },
+          { status: 400 },
+        );
+      }
     }
 
     // company_type and wse live on the company, not the attendee, so a request

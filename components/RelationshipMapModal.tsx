@@ -9,7 +9,7 @@ import {
   useSidebarCollapse, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_EXPANDED_WIDTH,
 } from '@/components/SidebarCollapseContext';
 import {
-  countSignals, deriveSignals, SIGNAL_FULL_LABELS,
+  countSignals, deriveSignals, isCustomerType, SIGNAL_FULL_LABELS,
   type SignalKey, type SignalRelationship, type SwitchPair,
 } from '@/lib/competitiveSignals';
 import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map/MapCanvas';
@@ -371,11 +371,24 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
    * scope. No window on the internal one: somebody here knowing somebody there
    * is a standing fact, not a recent event.
    */
+  /*
+   * Accounts of ours, for the At Risk signal.
+   *
+   * Off the nodes the map already carries rather than a field of its own on
+   * the competitive payload: the grid reads the same company_types to draw a
+   * card's type pills, so the badge and the pill beside it can never disagree
+   * about whether a company is a customer.
+   */
+  const customerIds = useMemo(
+    () => nodes.filter(n => isCustomerType(n.company_types)).map(n => n.id),
+    [nodes],
+  );
   const competitive = useMemo(() => deriveSignals({
     relationships: competitiveData.relationships,
+    customerCompanyIds: customerIds,
     companiesWithInternal: competitiveData.companiesWithInternal,
     switches: competitiveData.switches,
-  }), [competitiveData]);
+  }), [competitiveData, customerIds]);
   const signalCounts = useMemo(() => countSignals(competitive.cells), [competitive]);
   const competitors = competitiveData.competitors;
   /** Columns the rail has not switched off, in the order it lists them. */

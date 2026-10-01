@@ -49,7 +49,7 @@ export type GridRow = 'activeEvaluation' | 'useCompetitor' | 'recentChange';
 
 /** Signals. Keys, not labels — see SIGNAL_LABELS. */
 export type SignalKey =
-  'evaluatingAlternatives' | 'switched' | 'recentChange' | 'internalRelationship';
+  'atRisk' | 'evaluatingAlternatives' | 'switched' | 'recentChange' | 'internalRelationship';
 
 /**
  * Every signal, in the order they are shown.
@@ -59,7 +59,10 @@ export type SignalKey =
  * map and hope its keys are the whole set.
  */
 export const SIGNAL_KEYS: SignalKey[] = [
-  'evaluatingAlternatives', 'switched', 'recentChange', 'internalRelationship',
+  // At Risk leads. The others describe what an account is doing; this one says
+  // the account doing it is already ours, which is the only one that costs
+  // revenue rather than just failing to win it.
+  'atRisk', 'evaluatingAlternatives', 'switched', 'recentChange', 'internalRelationship',
 ];
 
 /**
@@ -89,6 +92,9 @@ export const ROW_LABELS: Record<GridRow, string> = {
 };
 
 export const SIGNAL_LABELS: Record<SignalKey, string> = {
+  // Not pluralised like the rest: the others name a thing you can have several
+  // of, this names a state an account is in.
+  atRisk: 'At Risk',
   evaluatingAlternatives: 'Evaluating Alternatives',
   switched: 'Switched Vendors',
   recentChange: 'Recent Changes',
@@ -104,6 +110,7 @@ export const SIGNAL_LABELS: Record<SignalKey, string> = {
  * spells the names out in full rather than repeating these.
  */
 export const SIGNAL_ABBREVIATIONS: Record<SignalKey, string> = {
+  atRisk: 'AR',
   evaluatingAlternatives: 'EA',
   switched: 'SW',
   recentChange: 'RC',
@@ -119,6 +126,7 @@ export const SIGNAL_ABBREVIATIONS: Record<SignalKey, string> = {
  * to find out what IR means.
  */
 export const SIGNAL_FULL_LABELS: Record<SignalKey, string> = {
+  atRisk: 'At Risk',
   evaluatingAlternatives: 'Evaluating Alternatives',
   switched: 'Switched Vendors',
   recentChange: 'Recent Change',
@@ -134,11 +142,46 @@ export const SIGNAL_FULL_LABELS: Record<SignalKey, string> = {
  * vendors is the one worth a call today.
  */
 export const SIGNAL_TONE: Record<SignalKey, string> = {
+  // Bright red, and the only red on the grid. Amber already means "weighing
+  // alternatives"; this one means one of those accounts is ours.
+  atRisk: '#DC2626',
   evaluatingAlternatives: '#D97706',
   switched: '#7C3AED',
   recentChange: '#2563EB',
   internalRelationship: '#059669',
 };
+
+/**
+ * The signals drawn with a border rather than a fill alone.
+ *
+ * Only At Risk. Four badges in four tones read as four facts of equal weight,
+ * which is right for four facts of equal weight — and wrong for the one that
+ * says an account you already have is being competed for. The outline is what
+ * makes it read as an alarm beside them rather than as a fifth colour.
+ */
+export const SIGNAL_OUTLINED: Record<SignalKey, boolean> = {
+  atRisk: true,
+  evaluatingAlternatives: false,
+  switched: false,
+  recentChange: false,
+  internalRelationship: false,
+};
+
+/**
+ * Whether a company's types make it one of ours.
+ *
+ * Matched on the value, which the seeded option locks, rather than on an
+ * action_key — that option has none. Trimmed and case-folded the way the
+ * competitor type is matched everywhere else, because these strings arrive
+ * from a comma-separated column and from imports.
+ *
+ * "Former Customer" is deliberately NOT one: an account that has already left
+ * is not at risk of leaving, and badging it would put the alarm on the one
+ * group it cannot help.
+ */
+export function isCustomerType(types: readonly string[]): boolean {
+  return types.some(t => String(t).trim().toLowerCase() === 'customer');
+}
 
 /**
  * Which row a relationship sits in, by what its status means.
@@ -197,6 +240,14 @@ export interface SignalInput {
    * name; see BACKLOG.md.
    */
   companiesWithInternal?: Iterable<number>;
+  /**
+   * Companies tagged with the Customer company type — accounts of ours.
+   *
+   * Passed in rather than read here, because what a company IS lives on the
+   * company record and this module only ever sees relationships. See
+   * isCustomerType for the matching rule.
+   */
+  customerCompanyIds?: Iterable<number>;
   now?: Date;
 }
 
@@ -291,6 +342,7 @@ export function isRecent(raw: string | null | undefined, now: Date): boolean {
 export function deriveSignals(input: SignalInput): SignalResult {
   const now = input.now ?? new Date();
   const withInternal = new Set(input.companiesWithInternal ?? []);
+  const customers = new Set(input.customerCompanyIds ?? []);
   const switchPairs = input.switches ?? [];
   // Both ends of every recorded switch, so a cell knows it is one of them.
   const inSwitch = new Set<string>();
@@ -373,6 +425,21 @@ export function deriveSignals(input: SignalInput): SignalResult {
       switched: inSwitch.has(`${r.companyId}:${r.competitorId}`),
       recentChange: isRecent(r.statusChangedAt, now),
       internalRelationship: withInternal.has(r.companyId),
+      /*
+       * Ours, and being competed for.
+       *
+       * Both halves, on the same cell: a customer with no competitive activity
+       * is not at risk of anything, and an account weighing competitors that
+       * we do not have is a deal we have not won rather than one we are
+       * losing.
+       *
+       * Evaluating or current only — the two rows the grid draws as Active
+       * Evaluation and Use Competitor. A customer in Left Competitor has
+       * walked AWAY from a competitor, which is the opposite of at risk, and
+       * badging that red would have the alarm firing on good news.
+       */
+      atRisk: customers.has(r.companyId)
+        && (r.statusClass === 'evaluating' || r.statusClass === 'current'),
     },
   }));
 
@@ -387,6 +454,7 @@ export function deriveSignals(input: SignalInput): SignalResult {
 /** How many cells carry each signal, for the rail's filter counts. */
 export function countSignals(cells: SignalCell[]): Record<SignalKey, number> {
   const counts: Record<SignalKey, number> = {
+    atRisk: 0,
     evaluatingAlternatives: 0, switched: 0, recentChange: 0, internalRelationship: 0,
   };
   for (const c of cells) {

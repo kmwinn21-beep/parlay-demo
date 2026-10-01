@@ -129,19 +129,32 @@ function HeadlinePill({ kind, conference }: { kind: BannerHeadlineKind; conferen
 }
 
 export function DashboardConferenceBanner() {
-  // Starts expanded to match what the server rendered, then takes the stored
-  // preference after mount. Reading localStorage during the first render made
-  // anyone who had collapsed the banner disagree with the server HTML, and this
-  // banner sits in a Suspense boundary, so that mismatch took the whole
-  // dashboard down (React #418 → #422 → a crash inside React's recovery).
-  const [collapsed, setCollapsed] = useState(false);
+  /*
+   * Shut until somebody opens it.
+   *
+   * The dashboard's own sections are what the page is for; the banner is its
+   * header, and opening by default put a panel of conference cards over them
+   * every time the page loaded.
+   *
+   * The stored preference is read AFTER mount, never during the first render:
+   * reading localStorage there made anyone whose stored state differed
+   * disagree with the server HTML, and this banner sits in a Suspense
+   * boundary, so that mismatch took the whole dashboard down (React #418 →
+   * #422 → a crash inside React's recovery). Collapsed is now both the
+   * server's output and the first client render, so they agree by default.
+   *
+   * Absent means collapsed, so the new default reaches everyone who has not
+   * expressed a preference. Only an explicit 'false' — somebody who opened it
+   * — reopens it.
+   */
+  const [collapsed, setCollapsed] = useState(true);
   const [conferences, setConferences] = useState<ProgramCardConference[] | null>(null);
   const [territories, setTerritories] = useState<ProgramCardTerritory[]>([]);
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const isPhone = useIsPhone();
 
   useEffect(() => {
-    setCollapsed(localStorage.getItem('parlay_banner_collapsed') === 'true');
+    setCollapsed(localStorage.getItem('parlay_banner_collapsed') !== 'false');
   }, []);
 
   /*
@@ -286,6 +299,11 @@ export function DashboardConferenceBanner() {
                       // is whether the list is in, and outreach is assigned on
                       // the page that shows both.
                       showOutreach={false}
+                      // And a button to aim at rather than a card-sized target.
+                      // These sit in a row you swipe, inside a panel that opens
+                      // over the page — a whole-card link there fires on the
+                      // way past it.
+                      linkMode="button"
                     />
                   </div>
                 ))}

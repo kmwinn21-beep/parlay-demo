@@ -495,6 +495,8 @@ export async function POST(
       website?: string;
       /** Company-level, from the CRM Link column — see lib/columnMapping.ts. */
       crm_link?: string;
+      /** The company's HubSpot record id — the bridge's pairing key. */
+      hubspot_company_id?: string;
       company_type?: string;
       assigned_user?: string;
       assigned_user_supplied?: boolean;
@@ -526,6 +528,7 @@ export async function POST(
             email: p.email?.trim(),
             website: p.website?.trim(),
             crm_link: p.crm_link?.trim(),
+            hubspot_company_id: p.hubspot_company_id?.trim(),
             company_type: p.company_type?.trim(),
             assigned_user: resolvedAssigned ?? undefined,
             assigned_user_supplied: Boolean(rawAssigned),
@@ -543,6 +546,7 @@ export async function POST(
           if (!existing.email && p.email?.trim()) existing.email = p.email.trim();
           if (!existing.website && p.website?.trim()) existing.website = p.website.trim();
           if (!existing.crm_link && p.crm_link?.trim()) existing.crm_link = p.crm_link.trim();
+          if (!existing.hubspot_company_id && p.hubspot_company_id?.trim()) existing.hubspot_company_id = p.hubspot_company_id.trim();
           if (!existing.company_type && p.company_type?.trim()) existing.company_type = p.company_type.trim();
           if (!existing.hqState && p.state?.trim()) existing.hqState = p.state.trim();
           if (!existing.assigned_user) {
@@ -718,7 +722,7 @@ export async function POST(
     // Update existing matched companies with CSV-provided fields
     const existingToUpdate = Array.from(companyEntries.entries()).filter(([n, entry]) => {
       const id = companyIdCache.get(n);
-      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.crm_link || entry.wse || entry.services || entry.hqState || entry.entityStructure || entry.territoryId != null);
+      return id !== undefined && id > 0 && (entry.company_type || entry.assigned_user || entry.website || entry.crm_link || entry.hubspot_company_id || entry.wse || entry.services || entry.hqState || entry.entityStructure || entry.territoryId != null);
     });
     if (existingToUpdate.length > 0) {
       const updateStmts: { sql: string; args: (string | number | null)[] }[] = [];
@@ -744,6 +748,15 @@ export async function POST(
         addCoField('company_type', 'company_type', entry.company_type || null);
         addCoField('website', 'website', entry.website || null);
         addCoField('crm_link', 'crm_link', entry.crm_link || null);
+        /* The pairing key is written once and never overwritten by a file.
+           Not through addCoField: its COALESCE(?, field) takes the new value
+           whenever one is supplied, which is right for a website and wrong
+           for the id a whole conference's export pairs on. Changing one is an
+           admin action on the company record. */
+        if (entry.hubspot_company_id) {
+          setClauses.push("hubspot_company_id = CASE WHEN (hubspot_company_id IS NULL OR hubspot_company_id = '') THEN ? ELSE hubspot_company_id END");
+          setArgs.push(entry.hubspot_company_id);
+        }
         addCoField('wse', 'wse', entry.wse ?? null);
         addCoField('industry', 'industry', entry.industry || null);
         addCoField('hq_state', 'hq_state', entry.hqState || null);
@@ -806,13 +819,14 @@ export async function POST(
         const wse = entry.wse ?? null;
         const services = entry.services || null;
         const crmLink = entry.crm_link || null;
+        const hubspotCompanyId = entry.hubspot_company_id || null;
         const industry = entry.industry || null;
         const hqState = entry.hqState || null;
         const entityStructure = entry.entityStructure || null;
         const territoryId = entry.territoryId ?? null;
         return {
-          sql: 'INSERT INTO companies (name, company_type, website, crm_link, assigned_user, wse, services, industry, hq_state, entity_structure, territory_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-          args: [n, detectedType || null, website, crmLink, assignedUser, wse, services, industry, hqState, entityStructure, territoryId],
+          sql: 'INSERT INTO companies (name, company_type, website, crm_link, hubspot_company_id, assigned_user, wse, services, industry, hq_state, entity_structure, territory_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+          args: [n, detectedType || null, website, crmLink, hubspotCompanyId, assignedUser, wse, services, industry, hqState, entityStructure, territoryId],
         };
       });
       for (let i = 0; i < newCoNames.length; i++) {
@@ -936,9 +950,9 @@ export async function POST(
     };
 
     const attendeeIdCache = new Map<string, number>();
-    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; linkedin_url?: string; crm_contact_link?: string; function?: string; product?: string; consent?: string; seniority?: string; is_placeholder?: boolean };
+    type NewAttendee = { first_name: string; last_name: string; title?: string; company_id: number | null; email?: string; linkedin_url?: string; crm_contact_link?: string; phone?: string; hubspot_contact_id?: string; function?: string; product?: string; consent?: string; seniority?: string; is_placeholder?: boolean };
     const newAttendees: NewAttendee[] = [];
-    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; linkedin_url: string | null; crm_contact_link: string | null; function?: string; product?: string; consent?: string };
+    type ExistingAttendeeUpdate = { id: number; company_id: number | null; title: string | null; email: string | null; linkedin_url: string | null; crm_contact_link: string | null; phone?: string; hubspot_contact_id?: string; function?: string; product?: string; consent?: string };
     const existingAttendeeUpdates: ExistingAttendeeUpdate[] = [];
     const seen = new Set<string>();
 
@@ -962,7 +976,7 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || p.crm_contact_link?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || p.crm_contact_link?.trim() || p.phone?.trim() || p.hubspot_contact_id?.trim() || functionVal || rawProduct || autoProduct || consentVal;
         if (hasUpdate) existingAttendeeUpdates.push({
           id: hit.match.id,
           company_id: companyId && companyId > 0 ? companyId : null,
@@ -970,6 +984,8 @@ export async function POST(
           email: p.email?.trim() || null,
           linkedin_url: p.linkedin_url?.trim() || null,
           crm_contact_link: p.crm_contact_link?.trim() || null,
+          phone: p.phone?.trim() || undefined,
+          hubspot_contact_id: p.hubspot_contact_id?.trim() || undefined,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -991,6 +1007,8 @@ export async function POST(
           email: p.email?.trim() || undefined,
           linkedin_url: p.linkedin_url?.trim() || undefined,
           crm_contact_link: p.crm_contact_link?.trim() || undefined,
+          phone: p.phone?.trim() || undefined,
+          hubspot_contact_id: p.hubspot_contact_id?.trim() || undefined,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -1023,7 +1041,7 @@ export async function POST(
         const rawProduct = p.product?.trim() || undefined;
         const autoProduct = !rawProduct ? computeAutoProducts(undefined, p.title?.trim(), functionVal) : null;
         const consentVal = p.consent?.trim() ? normalizeConsentValue(p.consent.trim()) : undefined;
-        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || p.crm_contact_link?.trim() || functionVal || rawProduct || autoProduct || consentVal;
+        const hasUpdate = (companyId && companyId > 0) || p.title?.trim() || p.email?.trim() || p.linkedin_url?.trim() || p.crm_contact_link?.trim() || p.phone?.trim() || p.hubspot_contact_id?.trim() || functionVal || rawProduct || autoProduct || consentVal;
         if (hasUpdate) existingAttendeeUpdates.push({
           id: existingId,
           company_id: companyId && companyId > 0 ? companyId : null,
@@ -1031,6 +1049,8 @@ export async function POST(
           email: p.email?.trim() || null,
           linkedin_url: p.linkedin_url?.trim() || null,
           crm_contact_link: p.crm_contact_link?.trim() || null,
+          phone: p.phone?.trim() || undefined,
+          hubspot_contact_id: p.hubspot_contact_id?.trim() || undefined,
           function: functionVal,
           product: rawProduct ?? autoProduct ?? undefined,
           consent: consentVal,
@@ -1081,6 +1101,23 @@ export async function POST(
           setArgs.push(u.crm_contact_link);
         }
 
+        // phone: fill-if-blank, like LinkedIn above. A re-upload must not
+        // replace a number a rep corrected on the floor.
+        if (u.phone) {
+          setClauses.push("phone = CASE WHEN (phone IS NULL OR phone = '') THEN ? ELSE phone END");
+          setArgs.push(u.phone);
+        }
+
+        /* hubspot_contact_id: written once and never overwritten here.
+           It is the bridge's pairing key, so a re-upload changing it would
+           silently re-point a person's whole conference history at a
+           different HubSpot record. Changing one is an admin action on the
+           attendee record, not a side effect of loading a file. */
+        if (u.hubspot_contact_id) {
+          setClauses.push("hubspot_contact_id = CASE WHEN (hubspot_contact_id IS NULL OR hubspot_contact_id = '') THEN ? ELSE hubspot_contact_id END");
+          setArgs.push(u.hubspot_contact_id);
+        }
+
         // function
         if (u.function !== undefined) {
           const fnR = atRes(u.id, 'function');
@@ -1122,8 +1159,8 @@ export async function POST(
     // Batch-insert new attendees
     if (newAttendees.length > 0) {
       const results = await batchInsert(db, newAttendees, (a) => ({
-        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, linkedin_url, crm_contact_link, "function", products, consent, seniority, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
-        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.linkedin_url ?? null, a.crm_contact_link ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null, a.is_placeholder ? 1 : 0],
+        sql: 'INSERT INTO attendees (first_name, last_name, title, company_id, email, linkedin_url, crm_contact_link, phone, hubspot_contact_id, "function", products, consent, seniority, is_placeholder) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id',
+        args: [a.first_name, a.last_name, a.title ?? null, a.company_id, a.email ?? null, a.linkedin_url ?? null, a.crm_contact_link ?? null, a.phone ?? null, a.hubspot_contact_id ?? null, a.function ?? null, a.product ?? null, a.consent ?? 'Consent Not Recorded', a.seniority ?? null, a.is_placeholder ? 1 : 0],
       }));
       for (let i = 0; i < newAttendees.length; i++) {
         const key = `${newAttendees[i].first_name} ${newAttendees[i].last_name}`.toLowerCase();

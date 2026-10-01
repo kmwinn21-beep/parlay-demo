@@ -117,6 +117,32 @@ export function OutreachStatusPill({
   );
 }
 
+/**
+ * The way into a conference when the card itself is not a link.
+ *
+ * On the Program tab the whole card is the link, which is right for a page
+ * whose job is to get you into one. In the dashboard banner the cards sit in
+ * a scrolling row inside a panel that opens over the page, and a card-sized
+ * click target there is easy to hit while swiping the row or reaching for the
+ * chevron — so the navigation is a button you aim at.
+ */
+function GoToButton({ conferenceId }: { conferenceId: number }) {
+  return (
+    <Link
+      href={`/conferences/${conferenceId}`}
+      // Pushed to the end of its row rather than placed after a spacer, so it
+      // lands on the right edge whether it follows one pill or three.
+      style={{ marginLeft: 'auto' }}
+      className="inline-flex items-center gap-1 flex-shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium text-brand-secondary border border-brand-secondary/40 hover:bg-brand-secondary hover:text-white hover:border-brand-secondary transition-colors"
+    >
+      Go to
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+      </svg>
+    </Link>
+  );
+}
+
 function formatDate(d: string): string {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -243,7 +269,7 @@ export function TerritoryPill({ conference, territories }: { conference: Program
   return null;
 }
 
-export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView, showOutreach = true }: {
+export function ProgramConferenceCard({ conference, territories, planYear, allConferences, onRepsUpdated, onQuickView, showOutreach = true, linkMode = 'card' }: {
   conference: ProgramCardConference;
   territories: ProgramCardTerritory[];
   planYear: number;
@@ -260,6 +286,20 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
    * asking whether the list is in, not how far the assignment has got.
    */
   showOutreach?: boolean;
+  /**
+   * Where the link into the conference lives.
+   *
+   * `card` — the whole card, which is the Program tab and how this has always
+   * worked. `button` — a "Go to" button in the card's bottom row and nothing
+   * else, which is the dashboard banner: its cards sit in a scrolling row
+   * inside a panel that opens over the page, and a card-sized click target
+   * there fires while swiping the row or reaching past it.
+   *
+   * One prop rather than two, because these are one decision. Splitting it
+   * would allow a card that is a link AND carries a button, or one that is
+   * neither and cannot be opened at all.
+   */
+  linkMode?: 'card' | 'button';
 }) {
   const daysUntil = Math.max(0, Math.ceil((new Date(conference.start_date + 'T00:00:00').getTime() - Date.now()) / 86_400_000));
   const bar = topBarFor(conference, daysUntil);
@@ -269,11 +309,15 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
   // from the Program tab's overview isn't the right place for that edit.
   const canAssignReps = conference.stage === 'planning';
 
-  return (
-    <Link
-      href={`/conferences/${conference.id}`}
-      className="card p-0 overflow-hidden flex flex-col hover:shadow-md transition-all hover:border-brand-secondary border border-transparent"
-    >
+  const asLink = linkMode === 'card';
+  // The hover lift only where the card itself goes somewhere. Left on a card
+  // that no longer does, it keeps promising a click that does nothing.
+  const shell = `card p-0 overflow-hidden flex flex-col border border-transparent${
+    asLink ? ' hover:shadow-md transition-all hover:border-brand-secondary' : ''
+  }`;
+
+  const body = (
+    <>
       <div
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -336,14 +380,30 @@ export function ProgramConferenceCard({ conference, territories, planYear, allCo
                 </div>
               </div>
             ))}
+            {/* A closed conference has no pill row to sit in, so the button
+                joins the stats. Without it these cards would be the only ones
+                in the banner with no way into them at all. */}
+            {!asLink && <GoToButton conferenceId={conference.id} />}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', borderTop: '0.5px solid var(--border, #E5E7EB)', paddingTop: 8, marginTop: 8 }}>
             {showOutreach && <OutreachStatusPill outreachProgress={conference.outreachProgress} />}
             <ListStatusPill hasAttendeeList={conference.hasAttendeeList} attendeeCount={conference.attendeeCount} />
+            {!asLink && <GoToButton conferenceId={conference.id} />}
           </div>
         )}
       </div>
-    </Link>
+    </>
   );
+
+  /*
+   * A link or a div, written out rather than chosen into one element.
+   *
+   * Nesting the Go-to link inside a card-wide one would be invalid HTML, so
+   * these are genuinely two shapes; a polymorphic root would only have hidden
+   * that behind a type the compiler cannot check.
+   */
+  return asLink
+    ? <Link href={`/conferences/${conference.id}`} className={shell}>{body}</Link>
+    : <div className={shell}>{body}</div>;
 }

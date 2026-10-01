@@ -2815,4 +2815,27 @@ export const migrations: string[] = [
       AND EXISTS (SELECT 1 FROM users u
                     JOIN config_options co ON co.id = u.config_id
                    WHERE u.email = entity_notes.rep AND co.value IS NOT NULL AND co.value <> '')`,
+  /* ── hubspot bridge (spec v0.1) ────────────────────────────────────────────
+     Records are paired on HubSpot's own record id rather than on email, so the
+     id is stored on the person and on the company. A bare id, not a link: the
+     link is built from it when one is needed, so an account moving region
+     costs a setting rather than a rewrite of every row. See lib/hubspotIds.ts.
+
+     Separate from the existing crm_contact_link / crm_link columns, which stay
+     as they are. Those are a free-text link to whatever CRM an account uses —
+     several tenants are on Salesforce — and overloading them with a HubSpot id
+     would make one field mean two things depending on the tenant.
+
+     Appended, like everything else here. The runner applies `migrations.slice(
+     appliedCount)`, so inserting above this point would shift every later
+     index: a database already at the old count would skip the inserted rows
+     and re-run the ones that took their place. */
+  `ALTER TABLE attendees ADD COLUMN hubspot_contact_id TEXT`,
+  `ALTER TABLE companies ADD COLUMN hubspot_company_id TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_attendees_hubspot_contact_id ON attendees(hubspot_contact_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_companies_hubspot_company_id ON companies(hubspot_company_id)`,
+  /* The conference's event code, as it reads in HubSpot — `NIC Fall - 202610 -
+     US`. It arrives in the file in and is sent back unchanged on export, so
+     both systems name the same conference the same way. */
+  `ALTER TABLE conferences ADD COLUMN event_code TEXT`,
 ];

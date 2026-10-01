@@ -23,6 +23,7 @@ const eq = (label, got, want) => {
 
 const {
   SIGNAL_KEYS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_LABELS, SIGNAL_TONE,
+  SIGNAL_OUTLINED,
 } = await import('@/lib/competitiveSignals');
 const { TABLE_COLUMN_DEFS } = await import('@/lib/useTableColumnConfig');
 
@@ -35,13 +36,20 @@ console.log('\n— every signal, declared once —');
   // Anything iterating them should not have to pick a map and hope its keys
   // are the whole set.
   eq('the keys are their own list',
-    SIGNAL_KEYS, ['evaluatingAlternatives', 'switched', 'recentChange', 'internalRelationship']);
+    SIGNAL_KEYS,
+    ['atRisk', 'evaluatingAlternatives', 'switched', 'recentChange', 'internalRelationship']);
+  // At Risk leads, and the order here is the order badges are drawn in: the
+  // one that says an account is ours and being competed for reads first.
+  eq('  with At Risk at the head of it', SIGNAL_KEYS[0], 'atRisk');
   for (const [name, map] of [
     ['labels', SIGNAL_LABELS], ['abbreviations', SIGNAL_ABBREVIATIONS],
     ['full labels', SIGNAL_FULL_LABELS], ['tones', SIGNAL_TONE],
+    ['outline flags', SIGNAL_OUTLINED],
   ]) {
     eq(`  and every one of them has ${name}`,
-      SIGNAL_KEYS.every(k => !!map[k]) && Object.keys(map).length === SIGNAL_KEYS.length, true);
+      // `in`, not truthiness: SIGNAL_OUTLINED is booleans and four of them are
+      // false, which a truthiness check would read as four missing entries.
+      SIGNAL_KEYS.every(k => k in map) && Object.keys(map).length === SIGNAL_KEYS.length, true);
   }
 }
 

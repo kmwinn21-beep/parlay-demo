@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import type { ParsedAttendee } from './db';
+import { parseHubSpotId } from './hubspotIds';
 import companyTypeLookup from './company-type-lookup.json';
 import { type ColumnMapping, type SystemFieldKey, SYSTEM_FIELD_LABELS, FIELD_ORDER } from './columnMapping';
 
@@ -26,6 +27,48 @@ const LINKEDIN_ALIASES = [
  * so looking that up first would file a contact URL against the account. The
  * same precedence LinkedIn has over Website, for the same reason.
  */
+/**
+ * Headers naming HubSpot's own record ids — the bridge's pairing key.
+ *
+ * Looked up FIRST, and removed from the candidates for everything after.
+ * `hubspot_contact` is already a CRM-contact-link alias and `company` is a
+ * company-name alias, and both match as substrings, so without claiming these
+ * first `hubspot_contact_id` filed itself as a link and `hubspot_company_id`
+ * could be read as the company name.
+ *
+ * Every alias names HubSpot, and a bare `contact_id` or `company_id` is
+ * deliberately NOT one.
+ *
+ * Most tenants here have no HubSpot bridge, and a registration export's own
+ * `contact_id` is not a HubSpot record id. Nothing read that column before,
+ * so capturing it would not break an existing mapping — it would do something
+ * worse quietly: write a foreign number into a column that pairs a person
+ * with a CRM record and is admin-only to change once set. The file Kristian
+ * sends uses the prefixed names, so nothing is lost by being strict.
+ */
+const HUBSPOT_CONTACT_ID_ALIASES = [
+  'hubspot_contact_id', 'hubspot contact id', 'hubspot_contactid',
+  'hs_contact_id', 'hs contact id', 'hubspot_record_id', 'hubspot record id',
+];
+const HUBSPOT_COMPANY_ID_ALIASES = [
+  'hubspot_company_id', 'hubspot company id', 'hubspot_companyid',
+  'hs_company_id', 'hs company id',
+];
+const EVENT_CODE_ALIASES = [
+  'event_code', 'event code', 'conference_code', 'conference code',
+  'campaign_code', 'campaign code',
+];
+/**
+ * One number per person. HubSpot's file sends mobile where it has one and the
+ * direct line otherwise, which is the same shape Parlay stores.
+ */
+const PHONE_ALIASES = [
+  'phone', 'phone_number', 'phone number', 'mobile', 'mobile_phone',
+  'mobile phone', 'cell', 'cell_phone', 'cell phone', 'telephone',
+  'direct_phone', 'direct phone', 'direct_line', 'direct line', 'work_phone',
+  'work phone',
+];
+
 const CRM_CONTACT_LINK_ALIASES = [
   'crm_contact_link', 'crm contact link', 'crm_contact_url', 'crm contact url',
   'crm_contact', 'crm contact', 'contact_link', 'contact link',
@@ -95,21 +138,31 @@ export function extractRawRows(buffer: Buffer, filename: string): Record<string,
 
 /** Return auto-suggested column mapping based on file headers. */
 export function suggestMapping(headers: string[]): ColumnMapping {
-  const linkedin = findColumn(headers, ...LINKEDIN_ALIASES);
+  // The specific ids first — see HUBSPOT_CONTACT_ID_ALIASES for why order
+  // decides this rather than alias wording.
+  const hubspotContactId = findColumn(headers, ...HUBSPOT_CONTACT_ID_ALIASES);
+  const hubspotCompanyId = findColumn(
+    hubspotContactId ? headers.filter(h => h !== hubspotContactId) : headers,
+    ...HUBSPOT_COMPANY_ID_ALIASES,
+  );
+  const idCols = new Set([hubspotContactId, hubspotCompanyId].filter((h): h is string => h !== null));
+  const rest = idCols.size > 0 ? headers.filter(h => !idCols.has(h)) : headers;
+
+  const linkedin = findColumn(rest, ...LINKEDIN_ALIASES);
   // The contact link first, then the account link against what is left: the
   // company aliases match "crm" as a substring and would otherwise take a
   // "CRM Contact URL" column for the account's.
-  const crmContactLink = findColumn(headers, ...CRM_CONTACT_LINK_ALIASES);
-  const forCrmLink = crmContactLink ? headers.filter(h => h !== crmContactLink) : headers;
+  const crmContactLink = findColumn(rest, ...CRM_CONTACT_LINK_ALIASES);
+  const forCrmLink = crmContactLink ? rest.filter(h => h !== crmContactLink) : rest;
   const crmLink = findColumn(forCrmLink, ...CRM_LINK_ALIASES);
   const claimed = new Set([linkedin, crmLink, crmContactLink].filter((h): h is string => h !== null));
-  const forWebsite = claimed.size > 0 ? headers.filter(h => !claimed.has(h)) : headers;
+  const forWebsite = claimed.size > 0 ? rest.filter(h => !claimed.has(h)) : rest;
   return {
     first_name:    findColumn(headers, 'first_name', 'firstname', 'first name', 'fname', 'given_name', 'given name'),
     last_name:     findColumn(headers, 'last_name', 'lastname', 'last name', 'lname', 'surname', 'family_name', 'family name'),
     full_name:     findColumn(headers, 'full_name', 'fullname', 'full name', 'name', 'attendee_name', 'attendee name', 'contact_name', 'contact name'),
     title:         findColumn(headers, 'title', 'job_title', 'job title', 'position', 'role', 'designation'),
-    company:       findColumn(headers, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm'),
+    company:       findColumn(rest, 'company', 'company_name', 'company name', 'organization', 'org', 'employer', 'firm'),
     email:         findColumn(headers, 'email', 'email_address', 'email address', 'e_mail', 'e-mail'),
     website:       findColumn(forWebsite, ...WEBSITE_ALIASES),
     company_type:  findColumn(headers, 'company_type', 'company type', 'registration_type', 'registration type', 'reg_type', 'reg type', 'attendee_type', 'attendee type', 'type'),
@@ -124,6 +177,10 @@ export function suggestMapping(headers: string[]): ColumnMapping {
     crm_link:      crmLink,
     crm_contact_link: crmContactLink,
     linkedin_url:  linkedin,
+    phone:         findColumn(rest, ...PHONE_ALIASES),
+    hubspot_contact_id: hubspotContactId,
+    hubspot_company_id: hubspotCompanyId,
+    event_code:    findColumn(rest, ...EVENT_CODE_ALIASES),
     consent:       findColumn(headers, 'consent', 'opt_in', 'opt in', 'opt_out', 'opt out', 'optin', 'optout', 'email_consent', 'email consent', 'marketing_consent', 'marketing consent', 'communication_preference', 'communication preference', 'contact_permission', 'contact permission', 'gdpr', 'permission'),
   };
 }
@@ -179,6 +236,20 @@ function parseRowsWithMapping(rows: Record<string, unknown>[], mapping: ColumnMa
     if (mapping.crm_link      && row[mapping.crm_link])      attendee.crm_link       = String(row[mapping.crm_link]).trim();
     if (mapping.crm_contact_link && row[mapping.crm_contact_link]) attendee.crm_contact_link = String(row[mapping.crm_contact_link]).trim();
     if (mapping.linkedin_url  && row[mapping.linkedin_url])  attendee.linkedin_url   = String(row[mapping.linkedin_url]).trim();
+    if (mapping.phone         && row[mapping.phone])         attendee.phone          = String(row[mapping.phone]).trim();
+    if (mapping.event_code    && row[mapping.event_code])    attendee.event_code     = String(row[mapping.event_code]).trim();
+    /* Ids, not whatever was in the cell. The file in sends a bare id and a rep
+       pasting from a HubSpot tab sends a URL; parseHubSpotId reads both, and
+       anything it cannot read is left unset rather than stored as junk that
+       would later be exported as a pairing key. */
+    if (mapping.hubspot_contact_id && row[mapping.hubspot_contact_id]) {
+      const id = parseHubSpotId(row[mapping.hubspot_contact_id]);
+      if (id) attendee.hubspot_contact_id = id;
+    }
+    if (mapping.hubspot_company_id && row[mapping.hubspot_company_id]) {
+      const id = parseHubSpotId(row[mapping.hubspot_company_id]);
+      if (id) attendee.hubspot_company_id = id;
+    }
     if (mapping.company_type  && row[mapping.company_type])  attendee.company_type   = String(row[mapping.company_type]).trim();
     if (mapping.assigned_user && row[mapping.assigned_user]) attendee.assigned_user  = String(row[mapping.assigned_user]).trim();
     if (mapping.state && row[mapping.state]) attendee.state = String(row[mapping.state]).trim();

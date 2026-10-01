@@ -1191,6 +1191,22 @@ export interface ParsedAttendee {
   crm_link?: string;
   /** The attendee's own CRM record, as distinct from the company's. */
   crm_contact_link?: string;
+  /** One number per person — mobile where there is one. */
+  phone?: string;
+  /**
+   * HubSpot's record ids, the bridge's pairing key. Stored as ids rather than
+   * links; see lib/hubspotIds.ts.
+   */
+  hubspot_contact_id?: string;
+  hubspot_company_id?: string;
+  /**
+   * The conference's event code, carried on every row of the file in.
+   *
+   * A conference-level fact arriving per person, because that is the shape
+   * HubSpot exports it in. The upload reads it off the rows rather than
+   * storing it per attendee.
+   */
+  event_code?: string;
   /** Stand-in row from a company-only upload — see ColumnMapping.company_only. */
   is_placeholder?: boolean;
 }

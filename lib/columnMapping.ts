@@ -5,7 +5,8 @@ export type SystemFieldKey =
   | 'first_name' | 'last_name' | 'full_name' | 'title' | 'company'
   | 'email' | 'website' | 'company_type' | 'assigned_user' | 'state' | 'wse'
   | 'services' | 'icp' | 'industry' | 'function' | 'product' | 'consent'
-  | 'crm_link' | 'crm_contact_link' | 'linkedin_url';
+  | 'crm_link' | 'crm_contact_link' | 'linkedin_url'
+  | 'phone' | 'hubspot_contact_id' | 'hubspot_company_id' | 'event_code';
 
 export interface ColumnMapping {
   first_name: string | null;
@@ -28,6 +29,22 @@ export interface ColumnMapping {
   consent: string | null;
   crm_link: string | null;
   crm_contact_link: string | null;
+  phone: string | null;
+  /**
+   * HubSpot's own record ids, the pairing key for the bridge.
+   *
+   * Distinct from crm_contact_link / crm_link, which hold a link to whatever
+   * CRM a tenant uses. These are ids, and they are what an export pairs on.
+   */
+  hubspot_contact_id: string | null;
+  hubspot_company_id: string | null;
+  /**
+   * The conference's event code, carried on every row of the file in.
+   *
+   * A conference-level fact arriving per person, because that is the shape
+   * HubSpot exports. The upload reads it off the rows and stores it once.
+   */
+  event_code: string | null;
   /**
    * Company-only list: the file has no people in it. The parser stands in a
    * placeholder attendee per company so the company registers as present.
@@ -62,10 +79,15 @@ export const SYSTEM_FIELD_LABELS: Record<SystemFieldKey, SystemFieldMeta> = {
   consent:       { label: 'Consent',             description: 'Opt-in / Opt-out / Consent Not Recorded' },
   crm_link:      { label: 'CRM Link',            description: 'Link to the company record in your CRM' },
   crm_contact_link: { label: 'CRM Contact Link', description: "Link to the attendee's contact record in your CRM" },
+  phone:         { label: 'Phone',               description: "Attendee phone number — mobile where there is one" },
+  hubspot_contact_id: { label: 'HubSpot Contact ID', description: "The contact's HubSpot record id, or a link to it" },
+  hubspot_company_id: { label: 'HubSpot Company ID', description: "The company's HubSpot record id, or a link to it" },
+  event_code:    { label: 'Event Code',          description: 'The conference code shared with HubSpot, e.g. NIC Fall - 202610 - US' },
 };
 
 export const FIELD_ORDER: SystemFieldKey[] = [
   'first_name', 'last_name', 'full_name', 'title', 'company',
   'email', 'linkedin_url', 'website', 'company_type', 'assigned_user', 'state', 'wse', 'services', 'icp',
-  'industry', 'function', 'product', 'consent', 'crm_link', 'crm_contact_link',
+  'industry', 'function', 'product', 'consent', 'phone', 'crm_link', 'crm_contact_link',
+  'hubspot_contact_id', 'hubspot_company_id', 'event_code',
 ];

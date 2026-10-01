@@ -226,7 +226,19 @@ export function CrmExportModal({ conferenceId, conferenceName, startDate, endDat
           {/* ── STEP 1 — Select CRM ── */}
           {step === 1 && (
             <div>
-              <h2 className="text-lg font-bold text-gray-900 mb-1">Select your CRM</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Generic CRM files</h2>
+              {/* What these files ARE, said once at the top, where somebody
+                  who opened the wrong thing reads it before picking a
+                  provider.
+
+                  Phrased as a plain fact rather than as a pointer to another
+                  export: most accounts have no CRM bridge, and telling them
+                  to use one they do not have is a puzzle rather than a
+                  warning. */}
+              <p className="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-3">
+                These files match records on <strong>email address</strong>. A person with no
+                email, or a different one in your CRM, arrives as a new record.
+              </p>
               <p className="text-sm text-gray-500 mb-5">
                 Choose the CRM you want to import this data into. Files will be formatted and named for the selected platform.
               </p>

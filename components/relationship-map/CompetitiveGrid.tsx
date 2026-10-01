@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import {
-  byRecency, hasAnySignal, ROW_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS, SIGNAL_TONE,
+  byRecency, hasAnySignal, ROW_LABELS, SIGNAL_ABBREVIATIONS, SIGNAL_FULL_LABELS,
+  SIGNAL_OUTLINED, SIGNAL_TONE,
   type GridRow, type SignalCell, type SignalKey,
 } from '@/lib/competitiveSignals';
 import { getBadgeClass } from '@/lib/colors';
@@ -364,7 +365,14 @@ export function SignalBadge({ signal, onClick }: {
   onClick?: () => void;
 }) {
   const shared = 'inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[9px] font-bold leading-none';
-  const style = { color: SIGNAL_TONE[signal], backgroundColor: `${SIGNAL_TONE[signal]}1F` };
+  // At Risk takes a border as well as a fill. Five badges in five tones read as
+  // five facts of equal weight; the outline is what makes this one read as the
+  // alarm it is. See SIGNAL_OUTLINED.
+  const style = {
+    color: SIGNAL_TONE[signal],
+    backgroundColor: `${SIGNAL_TONE[signal]}1F`,
+    border: SIGNAL_OUTLINED[signal] ? `1px solid ${SIGNAL_TONE[signal]}` : undefined,
+  };
   // The full name on hover. A tooltip repeating the two letters already on
   // screen tells the one reader who needed it nothing.
   const label = SIGNAL_FULL_LABELS[signal];
