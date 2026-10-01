@@ -376,7 +376,7 @@ console.log('\n— and the title column made room for it —');
   const cell = table.slice(table.indexOf("case 'title': return <td"), table.indexOf("case 'rep': return <td"));
 
   // The flow span, not the guest-title spans under it, which truncate too.
-  const flowSpan = cell.slice(cell.indexOf('<span'), cell.indexOf('{titleTip?.id === m.id'));
+  const flowSpan = cell.slice(cell.indexOf('<span'), cell.indexOf('{(m.additional_attendee_records'));
   eq('the title is one line, cut short', /truncate/.test(flowSpan), true);
 
   /*
@@ -392,17 +392,64 @@ console.log('\n— and the title column made room for it —');
   eq('  no hover width is declared', /TITLE_HOVER_WIDTH|--title-hover|--title-rest/.test(table), false);
   eq('  and no hover group on the cell', /group\/title/.test(table), false);
 
-  // The tooltip itself: the shared card, positioned by the shared helper.
-  eq('hovering the title opens a tooltip',
-    /onMouseEnter=\{\(\) => \{[\s\S]{0,160}setTitleTip\(\{ id: m\.id, pos: calcTooltipPos\(el\) \}\)/.test(cell), true);
-  eq('  and leaving closes it', /onMouseLeave=\{\(\) => setTitleTip\(null\)\}/.test(cell), true);
-  eq('  only over the row being hovered', /titleTip\?\.id === m\.id/.test(cell), true);
+  // The tooltip is not here. It hangs off Name, which every table has — see
+  // the block below.
+  eq('the title cell opens nothing of its own', /onMouseEnter/.test(cell), false);
+}
+
+console.log('\n— the name cell carries the title, and the card —');
+{
+  const cell = table.slice(table.indexOf("case 'name': return <td"), table.indexOf("case 'title': return <td"));
+
+  /*
+   * A table with no Title column reads the title under the name instead. Off
+   * the column list, not off isVisible: hiding Title from the column menu
+   * should hide the title, not relocate it.
+   */
+  eq('tables without a Title column read it under the name',
+    /const titleUnderName = !orderedColumns\.some\(col => col\.key === 'title'\);/.test(table), true);
+  // The column list itself, not a regex over the file it is declared in.
+  const { TABLE_COLUMN_DEFS } = await import('../lib/useTableColumnConfig.ts');
+  eq('  and the conference meetings table is one of them',
+    TABLE_COLUMN_DEFS.conference_meetings.some(c => c.key === 'title'), false);
+  // The tables that still have the column keep it: this is the conference
+  // details table's layout, not every meetings table's.
+  for (const t of ['meetings', 'attendee_meetings', 'company_meetings']) {
+    eq(`  and ${t} keeps its Title column`,
+      TABLE_COLUMN_DEFS[t].some(c => c.key === 'title'), true);
+  }
+
+  // Second line of this cell against second line of Date/Time: the quieter
+  // half of each pair, so they are set alike.
+  eq('the title is set like the time beside it',
+    /\{titleUnderName && m\.title && \([\s\S]{0,200}font-normal text-gray-400 leading-snug truncate/.test(cell), true);
+  eq('  and the guests’ titles with it',
+    /\{titleUnderName && extra\.title && \([\s\S]{0,200}font-normal text-gray-400 leading-snug truncate/.test(cell), true);
+
+  // The name has to start at the top of the cell to sit on the date's line;
+  // with a Title column beside it, it stays centred against the avatar so the
+  // two columns keep step.
+  eq('the stack starts at the top when the title is under the name',
+    /titleUnderName \? 'items-start' : 'items-center'/.test(cell), true);
+  eq('  and Date\/Time is pinned to the top to meet it',
+    /case 'datetime': return <td key="datetime" className="[^"]*align-top"/.test(table), true);
+  eq('  with room for what the removed column held',
+    /maxWidth: titleUnderName \? NAME_WIDTH_WITH_TITLE : 220/.test(cell), true);
+  eq('  declared once', /const NAME_WIDTH_WITH_TITLE = \d+;/.test(table), true);
+
+  // The tooltip itself: the shared card, positioned by the shared helper. On
+  // Name rather than Title, because a table whose titles read under the names
+  // has no Title cell to hover.
+  eq('hovering the name opens a tooltip',
+    /onMouseEnter=\{\(\) => \{[\s\S]{0,160}setPeopleTip\(\{ id: m\.id, pos: calcTooltipPos\(el\) \}\)/.test(cell), true);
+  eq('  and leaving closes it', /onMouseLeave=\{\(\) => setPeopleTip\(null\)\}/.test(cell), true);
+  eq('  only over the row being hovered', /peopleTip\?\.id === m\.id/.test(cell), true);
   eq('  it never swallows a click', /className="pointer-events-none"/.test(cell), true);
   eq('  and it is the shared card', /<PeopleTooltipCard heading="Attendees" people=\{meetingPeople\(m\)\} \/>/.test(cell), true);
 
-  // Everyone on the meeting. The guests' titles are clipped in this same
-  // column, so a tooltip answering only for the first line would have to be
-  // hovered once per person.
+  // Everyone on the meeting. The guests' titles are clipped in the same cell,
+  // so a tooltip answering only for the first line would have to be hovered
+  // once per person.
   eq('the tooltip lists the guests too',
     /function meetingPeople[\s\S]{0,400}additional_attendee_records \?\? \[\]/.test(table), true);
   eq('  with the meeting\u2019s own attendee first',

@@ -1328,11 +1328,43 @@ export function DashboardActionCard() {
   }, [badgeScanRelevance]);
 
   return (
-    <div className="card h-full flex flex-col justify-center lg:relative">
+    <div className="card h-full flex flex-col lg:relative">
+      {/* The same header the cards around this one wear — Floor Notes, Feed,
+          Targets and Pending Review all read `font-serif font-semibold
+          text-brand-primary` with an icon in brand-secondary beside them.
+          Without one this card was the only panel on the dashboard with no
+          name on it. */}
+      <div className="flex items-center justify-between gap-2 mb-3 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {/* Filled rather than stroked, unlike the other section icons: this
+              is the supplied artwork at its own 32px viewBox, which is the
+              closest match to it. */}
+          <svg
+            className="w-5 h-5 text-brand-secondary flex-shrink-0"
+            viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"
+          >
+            <path d="M18.14 22c-.29 0-.58-.11-.81-.33a1.14 1.14 0 0 1 0-1.62l3.76-3.76-3.76-3.76a1.14 1.14 0 0 1 0-1.62 1.14 1.14 0 0 1 1.62 0l4.57 4.57c.45.45.45 1.17 0 1.62l-4.57 4.57c-.22.22-.52.33-.81.33M9 27.71c-.63 0-1.14-.51-1.14-1.14V6a1.14 1.14 0 1 1 2.28 0v20.57c0 .63-.51 1.14-1.14 1.14" />
+            <path d="M28.43 27.71H3.29c-1.89 0-3.43-1.54-3.43-3.43v-16c0-1.89 1.54-3.43 3.43-3.43h25.14c1.89 0 3.43 1.54 3.43 3.43v16c0 1.89-1.54 3.43-3.43 3.43M3.29 7.14c-.63 0-1.14.51-1.14 1.14v16c0 .63.51 1.14 1.14 1.14h25.14c.63 0 1.14-.51 1.14-1.14v-16c0-.63-.51-1.14-1.14-1.14z" />
+          </svg>
+          <span className="text-lg font-semibold text-brand-primary font-serif truncate">Quick Views</span>
+        </div>
+        {/* Which conference these three open onto.
+            Desktop only: the phone has the conference BUTTON directly below
+            this, saying the same name and able to change it, so a pill beside
+            the title would be the second copy of one fact. */}
+        {activeConference && (
+          <span className="hidden lg:inline-flex items-center gap-1.5 flex-shrink-0 px-2 py-0.5 rounded-full bg-green-50 border border-green-200 text-xs font-medium text-green-800 max-w-[55%]">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+            <span className="truncate">{activeConference.name}</span>
+          </span>
+        )}
+      </div>
+
       <div className="lg:hidden mb-3">
         <SetConferenceButton />
       </div>
-      <div className="flex flex-row gap-1">
+      {/* The tiles take the space the header leaves, still centred in it. */}
+      <div className="flex flex-row gap-1 flex-1 items-center">
 
         {/* The desktop panel opens the attendee list here — the same drawer
             the phone's first slot opens, so the two panels differ only in

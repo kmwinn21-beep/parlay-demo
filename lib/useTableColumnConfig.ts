@@ -113,8 +113,10 @@ export const TABLE_COLUMN_DEFS: Record<string, ColumnDef[]> = {
     { key: 'outcome',      label: 'Outcome' },
   ],
   conference_meetings: [
+    // No Title entry: on this table the title reads under the name rather than
+    // in a column, so there is nothing for a toggle to show or hide — the same
+    // arrangement as conference_attendees below.
     { key: 'name',         label: 'Name' },
-    { key: 'title',        label: 'Title' },
     { key: 'rep',          label: 'Rep' },
     { key: 'company',      label: 'Company' },
     { key: 'datetime',     label: 'Date/Time' },
