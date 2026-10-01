@@ -1090,11 +1090,19 @@ export async function migrateTenantDb(client: Client): Promise<void> {
   }).catch(() => ({ rows: [] as { version: unknown }[] }));
 
   const currentVersion = versionRow.rows.length > 0 ? Number(versionRow.rows[0].version) : 0;
-  if (currentVersion >= migrations.length) {
-    console.log(`[db-init] tenant schema current at v${currentVersion}, skipping`);
-    return;
+  /*
+   * The counter decides whether to REPLAY migrations, and nothing more.
+   *
+   * It used to return here, which is the one case that had to be reconciled:
+   * a database whose counter says every migration ran is exactly the database
+   * where one of them silently did not. Returning early skipped the repair
+   * for the only tenants that needed it.
+   */
+  const upToDate = currentVersion >= migrations.length;
+  if (upToDate) {
+    console.log(`[db-init] tenant schema current at v${currentVersion}`);
   }
-  const pending = migrations.slice(currentVersion);
+  const pending = upToDate ? [] : migrations.slice(currentVersion);
 
   let rowExists = versionRow.rows.length > 0;
   for (let i = 0; i < pending.length; i++) {
@@ -1122,6 +1130,10 @@ export async function migrateTenantDb(client: Client): Promise<void> {
    * That happened — attendees.crm_contact_link went missing on a live tenant
    * and every attendee edit failed with "no such column" while the version
    * said the schema was current. See lib/schemaReconcile.ts.
+   *
+   * Reached whatever the counter said, including when it says there is
+   * nothing to do. Its own stamp keeps this to one pass per database per
+   * change to the migration list.
    */
   await reconcileOnce(client, migrations);
 }

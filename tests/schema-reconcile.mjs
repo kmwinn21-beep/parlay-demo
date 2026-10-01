@@ -195,18 +195,55 @@ console.log('\n— it runs once, but only when it converged —');
   rmSync(d3, { recursive: true, force: true });
 }
 
-console.log('\n— and the runner calls it —');
+console.log('\n— the runner reaches it, counter or no counter —');
 {
+  /*
+   * Driven through migrateTenantDb itself, not read off the source.
+   *
+   * The first version of this checked that `reconcileOnce` appeared after the
+   * migration loop in the file. It did — and the repair still never ran,
+   * because an early return above it took the only path that mattered: a
+   * database whose counter says every migration has been applied is exactly
+   * the database where one of them silently was not. Comparing two string
+   * positions could not see that; calling the function can.
+   */
+  const { migrateTenantDb } = await import('@/lib/db');
+
+  const d4 = mkdtempSync(join(tmpdir(), 'reconcile4-'));
+  const db4 = createClient({ url: `file:${join(d4, 'fx.db')}` });
+  // The live tenant's state, exactly: the column gone, the counter content.
+  await db4.execute(`CREATE TABLE attendees (id INTEGER PRIMARY KEY, first_name TEXT)`);
+  await db4.execute(`CREATE TABLE _schema_version (version INTEGER NOT NULL DEFAULT 0)`);
+  await db4.execute({ sql: `INSERT INTO _schema_version (version) VALUES (?)`, args: [migrations.length] });
+
+  const had = (await db4.execute(`PRAGMA table_info(attendees)`)).rows.map(r => String(r.name));
+  eq('the counter says up to date while the column is missing',
+    [had.includes('crm_contact_link'), migrations.length], [false, migrations.length]);
+
+  await migrateTenantDb(db4);
+
+  const now = (await db4.execute(`PRAGMA table_info(attendees)`)).rows.map(r => String(r.name));
+  eq('  running the migration repairs it anyway', now.includes('crm_contact_link'), true);
+  // The thing the tenant could not do.
+  const write = await db4.execute({
+    sql: `UPDATE attendees SET crm_contact_link = ? WHERE id = 1`, args: ['x'],
+  }).then(() => 'ok').catch(e => String(e.message || e));
+  eq('    so the attendee update works on the first try', write, 'ok');
+
+  // And a database genuinely behind still replays its migrations.
+  const d5 = mkdtempSync(join(tmpdir(), 'reconcile5-'));
+  const db5 = createClient({ url: `file:${join(d5, 'fx.db')}` });
+  await migrateTenantDb(db5);
+  const v = await db5.execute(`SELECT version FROM _schema_version LIMIT 1`);
+  eq('  a fresh database is still migrated normally',
+    Number(v.rows[0].version), migrations.length);
+
+  rmSync(d4, { recursive: true, force: true });
+  rmSync(d5, { recursive: true, force: true });
+
   const src = (await import('node:fs')).readFileSync('lib/db.ts', 'utf8');
-  // Both paths: a tenant's database and master's.
-  eq('the tenant migration reconciles afterwards',
-    /await reconcileOnce\(client, migrations\);/.test(src), true);
-  eq('  and the master one does too',
+  eq('the master path reconciles too',
     /await reconcileOnce\(db, migrations\);/.test(src), true);
-  // After the loop, not instead of it: the ALTERs are still how a column is
-  // normally added, and CREATE TABLE migrations must run first.
-  eq('  after the migrations, not in place of them',
-    src.indexOf('const pending = migrations.slice(currentVersion)') < src.indexOf('await reconcileOnce(client, migrations)'), true);
 }
 
 rmSync(dir, { recursive: true, force: true });
