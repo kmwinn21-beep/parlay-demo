@@ -96,23 +96,30 @@ export function getPersonInitials(nameOrEmail: string | null | undefined): strin
   return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
-/** Resolve stored rep IDs to an array of initials strings */
-export function resolveRepInitials(stored: string | null | undefined, opts: UserOption[]): string[] {
-  if (!stored) return [];
+/**
+ * Resolve a stored rep column to the reps' display values.
+ *
+ * The value rather than the initials, because the colour of a rep's pill is
+ * looked up by it — colorMaps.user[value] — so a surface that wants both would
+ * otherwise have to resolve the column twice.
+ *
+ * Legacy rows stored a comma-separated name string instead of ids. Those are
+ * returned as written: a name with no option behind it still names a person,
+ * and dropping it would read as nobody being assigned.
+ */
+export function resolveRepValues(stored: string | null | undefined, opts: UserOption[]): string[] {
   const ids = parseRepIds(stored);
   if (ids.length === 0) {
-    // Legacy: stored as a comma-separated name string
-    return stored
-      .split(',')
-      .map(s => getRepInitials(s.trim()))
-      .filter(Boolean);
+    return String(stored ?? '').split(',').map(s => s.trim()).filter(Boolean);
   }
   return ids
-    .map(id => {
-      const user = opts.find(u => u.id === id);
-      return user ? getRepInitials(user.value) : null;
-    })
-    .filter(Boolean) as string[];
+    .map(id => opts.find(u => u.id === id)?.value)
+    .filter((v): v is string => Boolean(v));
+}
+
+/** Resolve stored rep IDs to an array of initials strings */
+export function resolveRepInitials(stored: string | null | undefined, opts: UserOption[]): string[] {
+  return resolveRepValues(stored, opts).map(getRepInitials).filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------

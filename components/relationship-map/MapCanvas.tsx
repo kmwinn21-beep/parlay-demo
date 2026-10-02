@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { VendorRelationshipCard, type VendorRelationship } from '@/components/VendorRelationshipCard';
+import { VendorRelationshipCard, RepPill, type VendorRelationship } from '@/components/VendorRelationshipCard';
 import type { UserOption } from '@/lib/useUserOptions';
 import type { EdgeTone } from '@/lib/relationshipPicker';
 import { layoutSpokes } from '@/lib/relationshipLayout';
@@ -18,6 +18,11 @@ export interface Spoke {
   id: number;
   rel: VendorRelationship;
   tone: EdgeTone;
+  /**
+   * Who covers the company this card is about, or null for one the rep pill
+   * does not apply to. Gated by the caller — see repsFor in the modal.
+   */
+  assignedReps?: string[] | null;
 }
 
 export interface Hub {
@@ -25,6 +30,8 @@ export interface Hub {
   name: string;
   types: string[];
   subtitle: string;
+  /** As on a spoke: the reps, [] for the empty seat, null for no pill. */
+  assignedReps?: string[] | null;
 }
 
 const CARD_W = 268;
@@ -219,10 +226,18 @@ export function MapCanvas({ hub, spokes, userOptions, colorMaps, onUpdated }: {
         <Grip onPointerDown={e => startDrag(e, 'hub')} label="Drag to move the hub" />
         <div className="px-3 py-2">
           <p className="text-sm font-bold text-brand-primary truncate">{hub.name}</p>
-          <div className="flex flex-wrap gap-1 mt-1">
+          <div className="flex flex-wrap items-center gap-1 mt-1">
             {hub.types.map(t => (
               <span key={t} className="px-1.5 py-0.5 rounded-full bg-gray-100 text-[10px] font-medium text-gray-600">{t}</span>
             ))}
+            {/* Same rule as the cards around it: the hub is a company too, and
+                a reader asking who covers these accounts should not have to
+                except the one in the middle. */}
+            {hub.assignedReps && (hub.assignedReps.length === 0
+              ? <RepPill value={null} colorMaps={colorMaps} sizeClass="text-[10px]" />
+              : hub.assignedReps.map(r => (
+                  <RepPill key={r} value={r} colorMaps={colorMaps} sizeClass="text-[10px]" />
+                )))}
           </div>
           <p className="text-[11px] text-gray-500 mt-1">{hub.subtitle}</p>
         </div>
@@ -247,6 +262,7 @@ export function MapCanvas({ hub, spokes, userOptions, colorMaps, onUpdated }: {
               rel={s.rel}
               userOptions={userOptions}
               colorMaps={colorMaps}
+              assignedReps={s.assignedReps}
               onUpdated={onUpdated}
             />
           </div>

@@ -91,6 +91,48 @@ function StalePill() {
   );
 }
 
+/**
+ * Who owns the account this card is about.
+ *
+ * Dotted and drained when nobody does, the way StalePill above says a status
+ * is unconfirmed: an empty seat is the absence of a fact, and a solid pill
+ * would read as a rep called REP. Shown only where the surface asked for it —
+ * see assignedReps on the card — so it marks a gap in the accounts the account
+ * cares about rather than appearing on every company ever recorded.
+ */
+export function RepPill({ value, colorMaps, sizeClass }: {
+  /** The rep's display name, or null for the empty seat. */
+  value: string | null;
+  colorMaps: Record<string, Record<string, string | null>>;
+  sizeClass: string;
+}) {
+  const icon = (
+    <svg viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3 flex-shrink-0" aria-hidden="true">
+      <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.23 0 00.41 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+    </svg>
+  );
+  if (!value) {
+    return (
+      <span
+        title="No rep assigned"
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${sizeClass} font-semibold border border-dashed border-gray-300 text-gray-400 bg-white whitespace-nowrap`}
+      >
+        {icon}
+        REP
+      </span>
+    );
+  }
+  return (
+    <span
+      title={value}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${sizeClass} font-medium whitespace-nowrap ${getPreset(colorMaps.user?.[value]).badgeClass}`}
+    >
+      {icon}
+      {getRepInitials(value)}
+    </span>
+  );
+}
+
 function StatusPill({ value, colorMaps, sizeClass = 'text-xs' }: {
   value: string;
   colorMaps: Record<string, Record<string, string | null>>;
@@ -114,7 +156,7 @@ function StatusPill({ value, colorMaps, sizeClass = 'text-xs' }: {
  * building a second one that drifts. Omitting onEdit/onDelete drops the actions
  * menu, which is what a read-only surface wants.
  */
-export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, titleBadges, title, typeBadges, statuses, bodyMaxHeight, highlight, titleCompanyId, onOpenTitleCompany }: {
+export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, onDelete, onUpdated, readOnly = false, defaultExpanded = false, titleBadges, title, typeBadges, statuses, assignedReps, bodyMaxHeight, highlight, titleCompanyId, onOpenTitleCompany }: {
   rel: VendorRelationship;
   userOptions: UserOption[];
   colorMaps: Record<string, Record<string, string | null>>;
@@ -178,6 +220,24 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
   typeBadges?: string[];
   /** The statuses as the subject reads them — the counterpart wording. */
   statuses?: string[];
+  /**
+   * Who the heading's company is assigned to, as rep display names.
+   *
+   * Three states, and the third is the point:
+   *   undefined  no rep pill at all — the card is not on a surface that asks
+   *              about ownership, or this company is not one the account
+   *              targets. Every surface but the relationship map today.
+   *   []         the empty seat: a company that SHOULD have an owner and has
+   *              none, drawn as a dotted REP pill.
+   *   ['Kevin Winn', …]  the reps, by initials.
+   *
+   * Resolved and gated by the caller rather than here. Which companies count
+   * is the account's ICP definition, which lives in admin settings and is
+   * loaded by the surface — the card has no idea what an ICP is, and giving it
+   * one would put a second copy of that rule in the only component five
+   * surfaces share.
+   */
+  assignedReps?: string[] | null;
   /**
    * Cap the EXPANDED BODY at this many pixels and scroll it, when set.
    *
@@ -365,6 +425,14 @@ export function VendorRelationshipCard({ rel, userOptions, colorMaps, onEdit, on
                     {t}
                   </span>
                 ))}
+                {/* Last in the row: the pills before it say what the company is
+                    and what this relationship is, and who covers it is the
+                    answer to "so who do I talk to" that follows them. */}
+                {assignedReps && (assignedReps.length === 0
+                  ? <RepPill value={null} colorMaps={colorMaps} sizeClass={badgeSize} />
+                  : assignedReps.map(r => (
+                      <RepPill key={r} value={r} colorMaps={colorMaps} sizeClass={badgeSize} />
+                    )))}
               </>,
             )}
           </div>

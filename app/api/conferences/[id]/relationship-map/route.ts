@@ -181,13 +181,13 @@ export async function GET(
     for (let i = 0; i < ids.length; i += CHUNK) {
       const slice = ids.slice(i, i + CHUNK);
       const res = await db.execute({
-        sql: `SELECT id, name, company_type, wse FROM companies
+        sql: `SELECT id, name, company_type, wse, assigned_user FROM companies
               WHERE id IN (${slice.map(() => '?').join(',')})`,
         args: slice,
-      // wse arrived after companies did; losing the unit counts is better than
-      // losing the map.
+      // wse and assigned_user both arrived after companies did; losing the unit
+      // counts and the rep pills is better than losing the map.
       }).catch(() => db.execute({
-        sql: `SELECT id, name, company_type, NULL AS wse FROM companies
+        sql: `SELECT id, name, company_type, NULL AS wse, NULL AS assigned_user FROM companies
               WHERE id IN (${slice.map(() => '?').join(',')})`,
         args: slice,
       }));
@@ -199,6 +199,7 @@ export async function GET(
           company_type: rawType,
           company_types: resolveTypes(rawType),
           units: r.wse != null ? Number(r.wse) : null,
+          assigned_user: r.assigned_user != null ? String(r.assigned_user) : null,
         });
       }
     }

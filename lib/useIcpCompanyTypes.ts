@@ -45,11 +45,18 @@ export function useIcpCompanyTypes(): { types: string[]; loaded: boolean } {
  * unconfigured account is noisier than offering it on none.
  */
 export function matchesIcpCompanyType(companyType: string | null | undefined, icpTypes: string[]): boolean {
+  return matchesIcpTypeList(String(companyType ?? '').split(','), icpTypes);
+}
+
+/**
+ * The same test for a company whose types are already a list.
+ *
+ * The relationship map resolves company_type to display values server-side, so
+ * re-joining them into a string to split it again here would be the one place
+ * a type containing a comma came apart.
+ */
+export function matchesIcpTypeList(types: string[], icpTypes: string[]): boolean {
   if (icpTypes.length === 0) return false;
-  const wanted = new Set(icpTypes.map(t => t.toLowerCase()));
-  return String(companyType ?? '')
-    .split(',')
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean)
-    .some(t => wanted.has(t));
+  const wanted = new Set(icpTypes.map(t => t.trim().toLowerCase()));
+  return types.map(t => t.trim().toLowerCase()).filter(Boolean).some(t => wanted.has(t));
 }

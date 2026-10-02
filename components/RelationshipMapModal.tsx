@@ -16,7 +16,8 @@ import { MapCanvas, TONE_COLOR, type Spoke } from '@/components/relationship-map
 import type { VendorRelationship } from '@/components/VendorRelationshipCard';
 import { bestTier, normalizeTier } from '@/lib/targetTiers';
 import { useConfigColors } from '@/lib/useConfigColors';
-import { useUserOptions } from '@/lib/useUserOptions';
+import { useUserOptions, resolveRepValues } from '@/lib/useUserOptions';
+import { matchesIcpTypeList } from '@/lib/useIcpCompanyTypes';
 import { toneFor, type PickerCompany } from '@/lib/relationshipPicker';
 import { RelationshipAttendeeCard } from '@/components/pre-conference/RelationshipsTab';
 import type { RelationshipRow } from '@/components/PreConferenceReview';
@@ -29,6 +30,8 @@ import { statusesFor, type InverseMap } from '@/lib/relationshipDirection';
 interface GraphNode extends PickerCompany {
   company_type: string | null;
   kind: 'operator' | 'vendor';
+  /** companies.assigned_user as stored: rep option ids, comma-separated. */
+  assigned_user?: string | null;
 }
 interface GraphEdge {
   id: number;
@@ -300,6 +303,28 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
   const hubNode = selectedId != null ? byId.get(selectedId) ?? null : null;
 
   /**
+   * Who covers a company, for the rep pill on its card — or null for a company
+   * the pill does not apply to.
+   *
+   * The gate is the account's ICP Parameters: the company types named in
+   * Admin > ICP are the ones a rep is expected to own, and those are the cards
+   * where an empty seat is worth drawing attention to. Everything else — the
+   * competitors, the vendors, the capital partners — gets no pill rather than
+   * an empty one, because nobody is supposed to be assigned to them and a
+   * dotted REP on every such card would read as a backlog.
+   *
+   * An account with no ICP company_type rule matches nothing, so the pill
+   * stays off entirely until the rule exists. See matchesIcpTypeList: the
+   * alternative, matching everything, would turn the feature on for accounts
+   * that never asked for it.
+   */
+  const repsFor = useCallback((companyId: number): string[] | null => {
+    const node = byId.get(companyId);
+    if (!node || !matchesIcpTypeList(node.company_types, icpTypes)) return null;
+    return resolveRepValues(node.assigned_user, userOptions);
+  }, [byId, icpTypes, userOptions]);
+
+  /**
    * The internal relationships to show beside the map.
    *
    * One card per tagged contact, from the map's own payload rather than from
@@ -349,8 +374,11 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
         id: rel.id,
         rel,
         tone: toneFor(rel.relationship_status, byId.get(rel.related_company_id)?.company_types ?? []),
+        // The card's subject on this view is the company at the OTHER end —
+        // the hub is the centre node, not a card — so the pill is theirs.
+        assignedReps: repsFor(rel.related_company_id),
       }));
-  }, [hubNode, rels, byId, scope, atConference]);
+  }, [hubNode, rels, byId, scope, atConference, repsFor]);
 
   // What the hub's badge says, counted the same way the spokes are drawn.
   const hubCount = hubNode
@@ -624,6 +652,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                 nameOf={nameOf}
                 typesOf={typesOf}
                 statusesOf={statusesOf}
+                repsFor={repsFor}
                 signalsOnly={signalsOnly}
                 activeSignals={activeSignals}
                 highlightSignals={highlightSignals}
@@ -650,6 +679,7 @@ export function RelationshipMapModal({ conferenceId, conferenceName, onClose }: 
                   subtitle: loadingRels
                     ? 'Loading…'
                     : `${hubCount} relationship${hubCount === 1 ? '' : 's'}`,
+                  assignedReps: repsFor(hubNode.id),
                 }}
                 spokes={spokes}
                 userOptions={userOptions}

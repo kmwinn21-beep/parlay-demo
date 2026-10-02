@@ -59,6 +59,14 @@ export interface GraphCompany {
   company_types: string[];
   /** companies.wse, under whatever label the account calls units. */
   units: number | null;
+  /**
+   * companies.assigned_user as stored — rep option ids, comma-separated.
+   *
+   * Sent as written rather than resolved to names: the browser already holds
+   * the user options for every other rep pill it draws, and resolving here
+   * would be a second place that mapping happens.
+   */
+  assigned_user?: string | null;
 }
 
 /** One relationship, as stored — from the company that has the vendor. */
