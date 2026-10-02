@@ -30,7 +30,8 @@ const eq = (label, got, want) => {
 const strip = (f) => readFileSync(f, 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const { childrenOf, clashingName } = await import('@/lib/parentChildSelection');
+const { childrenOf, clashingName, newCompanyPayload, EMPTY_NEW_COMPANY } =
+  await import('@/lib/parentChildSelection');
 
 const ids = (rows) => rows.map(r => r.id);
 const A = { id: 1, label: 'Maple Springs Anchorage' };
@@ -74,6 +75,53 @@ console.log('\n— and whether the typed name is one already on screen —');
   eq('  nor does whitespace', clashingName('   ', ['', 'Maple Ridge Living']), null);
 }
 
+console.log('\n— what the new company is created with —');
+{
+  const fields = (over) => ({ ...EMPTY_NEW_COMPANY, ...over });
+
+  // The name is the only required one, and the only one sent on its own.
+  eq('a name alone', newCompanyPayload(fields({ name: 'Maple Springs Holdings' })),
+    { name: 'Maple Springs Holdings' });
+  eq('  trimmed', newCompanyPayload(fields({ name: '  Maple Springs Holdings  ' })),
+    { name: 'Maple Springs Holdings' });
+  eq('no name is nothing to create', newCompanyPayload(fields({ name: '  ', website: 'x.com' })), null);
+
+  eq('everything filled in', newCompanyPayload(fields({
+    name: 'Maple Springs Holdings',
+    assigned_user: '1,2',
+    company_type: 'Capital',
+    website: 'https://maplesprings.example',
+    wse: '1240',
+    services: ['Memory Care', 'Skilled Nursing'],
+  })), {
+    name: 'Maple Springs Holdings',
+    assigned_user: '1,2',
+    company_type: 'Capital',
+    website: 'https://maplesprings.example',
+    wse: 1240,
+    services: ['Memory Care', 'Skilled Nursing'],
+  });
+
+  /*
+   * Blanks are LEFT OUT, not sent empty.
+   *
+   * POST /api/companies classifies a company from its name when no type comes
+   * with it, and a record added here should be indistinguishable from one
+   * typed on the companies page.
+   */
+  eq('a blank optional field is omitted',
+    Object.keys(newCompanyPayload(fields({ name: 'A', company_type: '   ', website: '' }))), ['name']);
+  eq('  and no services is no services key',
+    Object.keys(newCompanyPayload(fields({ name: 'A', services: [] }))), ['name']);
+
+  // Units go in as a number. Text in a number field is not a unit count, and
+  // sending it would store null under a value the reader believes they typed.
+  eq('units are a number', newCompanyPayload(fields({ name: 'A', wse: '240' })).wse, 240);
+  eq('  zero is a number, not a blank', newCompanyPayload(fields({ name: 'A', wse: '0' })).wse, 0);
+  eq('  and nonsense is left out',
+    Object.keys(newCompanyPayload(fields({ name: 'A', wse: 'lots' }))), ['name']);
+}
+
 console.log('\n— the action is offered on one selection —');
 {
   const table = strip('components/CompanyTable.tsx');
@@ -93,8 +141,28 @@ console.log('\n— and a parent that is not in Parlay yet can be added here —'
   eq('there is an Other option', /Other \(not in list\)/.test(modal), true);
   // Under the search, so it is the answer to having looked and not found.
   eq('  prefilled from what was searched for',
-    /setOtherOpen\(true\); setOtherName\(searchQuery\.trim\(\)\)/.test(modal), true);
+    /setOtherFields\(\{ \.\.\.EMPTY_NEW_COMPANY, name: searchQuery\.trim\(\) \}\)/.test(modal), true);
   eq('  it creates the company', /fetch\('\/api\/companies', \{\s*method: 'POST'/.test(modal), true);
+  eq('  with the payload built above',
+    /const payload = newCompanyPayload\(otherFields\);/.test(modal)
+      && /body: JSON\.stringify\(payload\)/.test(modal), true);
+
+  // Every optional field the request asked for, each off the account's own
+  // config rather than a list written out here.
+  eq('  the optional fields are all on the form',
+    ['Assigned User', 'Company Type', '{unitLabel}', 'Website', 'Services']
+      .every((label) => modal.includes(label)), true);
+  eq('  Company Type comes from config options',
+    /companyTypeOptions = configOptions\.company_type/.test(modal), true);
+  eq('  Services too', /servicesOptions = configOptions\.services/.test(modal), true);
+  eq('  Assigned User from the account’s users',
+    /options=\{userOptions\}[\s\S]{0,200}parseRepIds\(otherFields\.assigned_user\)/.test(modal), true);
+  // "Units" is whatever the account calls them — beds, doors, keys.
+  eq('  and Units is labelled as admin settings has it',
+    /const unitLabel = useUnitTypeLabel\(\);/.test(modal), true);
+  // Only the name blocks the button.
+  eq('  and only the name is required',
+    /disabled=\{!otherFields\.name\.trim\(\) \|\| isCreating\}/.test(modal), true);
   // The point of adding it here: no second screen, no reopening the modal.
   eq('  and selects it as the parent straight away',
     /setCreated\(\(prev\) => \[\.\.\.prev, company\]\);[\s\S]{0,400}setParentId\(company\.id\);/.test(modal), true);

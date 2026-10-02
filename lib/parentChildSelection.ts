@@ -38,6 +38,55 @@ export function childrenOf<T extends { id: number }>(items: T[], parentId: numbe
  * would be the modal deciding something only the reader knows. An empty name
  * matches nothing rather than matching the first blank.
  */
+/**
+ * What the "Other (not in list)" form collects.
+ *
+ * The name is the only one that has to be filled in. The rest are here because
+ * the reader adding a parent company usually knows them, and a record created
+ * with nothing but a name is one somebody has to go back and finish.
+ */
+export interface NewCompanyFields {
+  name: string;
+  assigned_user: string;
+  company_type: string;
+  website: string;
+  /** companies.wse, under whatever the account calls units. Kept as typed. */
+  wse: string;
+  services: string[];
+}
+
+export const EMPTY_NEW_COMPANY: NewCompanyFields = {
+  name: '', assigned_user: '', company_type: '', website: '', wse: '', services: [],
+};
+
+/**
+ * The POST body for a new company, with the fields nobody filled in left out.
+ *
+ * Omitted rather than sent empty, because POST /api/companies reads a missing
+ * company_type as "work it out from the name" and an empty string the same
+ * way — but `wse: ''` and `services: []` are not the same as absent to every
+ * column they touch, and a record created here should be indistinguishable
+ * from one typed on the companies page.
+ *
+ * Returns null when there is no name, which is the one thing required.
+ */
+export function newCompanyPayload(fields: NewCompanyFields): Record<string, unknown> | null {
+  const name = fields.name.trim();
+  if (!name) return null;
+
+  const body: Record<string, unknown> = { name };
+  const text = (value: string) => value.trim();
+  if (text(fields.assigned_user)) body.assigned_user = text(fields.assigned_user);
+  if (text(fields.company_type)) body.company_type = text(fields.company_type);
+  if (text(fields.website)) body.website = text(fields.website);
+  // A number, or nothing. "abc" in a number field is not a unit count, and
+  // sending it would store null under a value the reader believes they typed.
+  const wse = Number(text(fields.wse));
+  if (text(fields.wse) && Number.isFinite(wse)) body.wse = wse;
+  if (fields.services.length > 0) body.services = fields.services;
+  return body;
+}
+
 export function clashingName(name: string, existing: string[]): string | null {
   const wanted = name.trim().toLowerCase();
   if (!wanted) return null;

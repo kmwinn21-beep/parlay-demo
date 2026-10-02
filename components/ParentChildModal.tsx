@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useHideBottomNav } from './BottomNavContext';
+import { MultiSelectDropdown } from './MultiSelectDropdown';
+import { RepMultiSelect } from './RepMultiSelect';
+import { useConfigOptions } from '@/lib/useConfigOptions';
+import { useUserOptions, parseRepIds } from '@/lib/useUserOptions';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
 import { childrenOf, clashingName } from '@/lib/parentChildSelection';
+import { newCompanyPayload, EMPTY_NEW_COMPANY, type NewCompanyFields } from '@/lib/parentChildSelection';
 
 interface ParentChildItem {
   id: number;
@@ -34,6 +40,13 @@ export function ParentChildModal({
   items,
 }: ParentChildModalProps) {
   useHideBottomNav(isOpen);
+  // The account's own vocabulary for the optional fields below. Cached per
+  // page by the hooks themselves, so a mounted-but-closed modal costs nothing.
+  const configOptions = useConfigOptions('company_table');
+  const companyTypeOptions = configOptions.company_type ?? [];
+  const servicesOptions = configOptions.services ?? [];
+  const userOptions = useUserOptions();
+  const unitLabel = useUnitTypeLabel();
   const [parentId, setParentId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,7 +76,16 @@ export function ParentChildModal({
    * the list would read as it not having been saved.
    */
   const [otherOpen, setOtherOpen] = useState(false);
-  const [otherName, setOtherName] = useState('');
+  /**
+   * The panel, so opening it scrolls it into view.
+   *
+   * It opens at the bottom of a body that already scrolls, and six fields are
+   * taller than what is left below the button that opened them — without this
+   * the reader clicks Other and sees the first field appear with everything
+   * else, the Add button included, below the fold.
+   */
+  const otherPanelRef = useRef<HTMLDivElement>(null);
+  const [otherFields, setOtherFields] = useState<NewCompanyFields>(EMPTY_NEW_COMPANY);
   const [created, setCreated] = useState<SearchResult[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -74,12 +96,18 @@ export function ParentChildModal({
       setSearchQuery('');
       setSearchResults([]);
       setOtherOpen(false);
-      setOtherName('');
+      setOtherFields(EMPTY_NEW_COMPANY);
       setCreated([]);
       createdIdsRef.current = [];
       setCreateError(null);
     }
   }, [isOpen]);
+
+  // On open, not on every keystroke in it — hence the effect rather than a
+  // callback ref, which React re-runs on each render.
+  useEffect(() => {
+    if (otherOpen) otherPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [otherOpen]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -142,28 +170,33 @@ export function ParentChildModal({
    * so refusing to add a second would be the modal deciding something it
    * cannot know. It points at the match; the reader decides.
    */
-  const nameClash = clashingName(otherName, [
+  const nameClash = clashingName(otherFields.name, [
     ...items.map((i) => i.label),
     ...searchResults.map((r) => r.name),
     ...created.map((c) => c.name),
   ]);
 
+  const setField = <K extends keyof NewCompanyFields>(key: K, value: NewCompanyFields[K]) => {
+    setOtherFields((prev) => ({ ...prev, [key]: value }));
+    setCreateError(null);
+  };
+
   const handleCreateOther = async () => {
-    const name = otherName.trim();
-    if (!name || isCreating) return;
+    const payload = newCompanyPayload(otherFields);
+    if (!payload || isCreating) return;
     setIsCreating(true);
     setCreateError(null);
     try {
       const res = await fetch('/api/companies', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to add the company');
       const company: SearchResult = {
         id: Number(data.id),
-        name: String(data.name ?? name),
+        name: String(data.name ?? payload.name),
         subtitle: data.company_type ? String(data.company_type) : null,
       };
       setCreated((prev) => [...prev, company]);
@@ -175,7 +208,7 @@ export function ParentChildModal({
       // the reader came to make a relationship, not to fill in a form.
       setParentId(company.id);
       setOtherOpen(false);
-      setOtherName('');
+      setOtherFields(EMPTY_NEW_COMPANY);
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to add the company');
     } finally {
@@ -334,7 +367,11 @@ export function ParentChildModal({
             {!otherOpen ? (
               <button
                 type="button"
-                onClick={() => { setOtherOpen(true); setOtherName(searchQuery.trim()); setCreateError(null); }}
+                onClick={() => {
+                  setOtherOpen(true);
+                  setOtherFields({ ...EMPTY_NEW_COMPANY, name: searchQuery.trim() });
+                  setCreateError(null);
+                }}
                 className="mt-2 w-full flex items-center gap-2 p-3 rounded-lg border-2 border-dashed border-gray-300 text-left text-sm font-medium text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
               >
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -343,17 +380,92 @@ export function ParentChildModal({
                 Other (not in list)
               </button>
             ) : (
-              <div className="mt-2 p-3 rounded-lg border-2 border-gray-200 space-y-2">
+              <div ref={otherPanelRef} className="mt-2 p-3 rounded-lg border-2 border-gray-200 space-y-3">
                 <p className="text-xs font-semibold text-gray-700">Add a company that isn&rsquo;t in Parlay yet</p>
-                <input
-                  type="text"
-                  value={otherName}
-                  autoFocus
-                  onChange={(e) => { setOtherName(e.target.value); setCreateError(null); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreateOther(); } }}
-                  placeholder="Company name"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary bg-white"
-                />
+
+                <div>
+                  <label className="label">
+                    Company Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={otherFields.name}
+                    autoFocus
+                    onChange={(e) => setField('name', e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreateOther(); } }}
+                    placeholder="Company name"
+                    className="input-field"
+                  />
+                </div>
+
+                {/* Everything below is optional. The reader adding a parent
+                    usually knows these, and a record created with nothing but a
+                    name is one somebody has to come back and finish — but the
+                    point of this panel is the relationship, so none of it is in
+                    the way of the Add button. */}
+                <div>
+                  <label className="label">Assigned User</label>
+                  <RepMultiSelect
+                    options={userOptions}
+                    selectedIds={parseRepIds(otherFields.assigned_user)}
+                    onChange={(ids) => setField('assigned_user', ids.join(','))}
+                    triggerClass="input-field flex items-center justify-between gap-2 text-left"
+                    placeholder="Select users..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">Company Type</label>
+                    <select
+                      value={otherFields.company_type}
+                      onChange={(e) => setField('company_type', e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="">Select type...</option>
+                      {companyTypeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    {/* Whatever this account calls its unit count — beds,
+                        doors, units. The column is companies.wse either way. */}
+                    <label className="label">{unitLabel}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={otherFields.wse}
+                      onChange={(e) => setField('wse', e.target.value)}
+                      placeholder={unitLabel}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Website</label>
+                  <input
+                    type="text"
+                    value={otherFields.website}
+                    onChange={(e) => setField('website', e.target.value)}
+                    placeholder="https://example.com"
+                    className="input-field"
+                  />
+                </div>
+
+                {/* The same dropdown the companies page uses, so the options
+                    are the account's own and a service added in admin settings
+                    turns up here without this form being told about it. */}
+                <div>
+                  <MultiSelectDropdown
+                    label="Services"
+                    options={servicesOptions}
+                    values={otherFields.services}
+                    onChange={(values) => setField('services', values)}
+                    placeholder="Select services..."
+                    emptyMessage="No services configured. Add options in the Admin panel."
+                  />
+                </div>
+
                 {/* Pointed out, not prevented: two companies really can share
                     a name, and only the reader knows whether these are two. */}
                 {nameClash && (
@@ -365,7 +477,7 @@ export function ParentChildModal({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => { setOtherOpen(false); setOtherName(''); setCreateError(null); }}
+                    onClick={() => { setOtherOpen(false); setOtherFields(EMPTY_NEW_COMPANY); setCreateError(null); }}
                     className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                     disabled={isCreating}
                   >
@@ -374,7 +486,7 @@ export function ParentChildModal({
                   <button
                     type="button"
                     onClick={handleCreateOther}
-                    disabled={!otherName.trim() || isCreating}
+                    disabled={!otherFields.name.trim() || isCreating}
                     className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-secondary rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreating ? 'Adding…' : 'Add company'}
