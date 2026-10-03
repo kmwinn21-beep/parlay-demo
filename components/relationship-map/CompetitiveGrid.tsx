@@ -76,7 +76,7 @@ const CONNECTOR_SIGNALS: SignalKey[] = ['evaluatingAlternatives', 'switched'];
  * told them where to look.
  */
 export function CompetitiveGrid({
-  cells, competitors, cardFor, nameOf, typesOf, statusesOf, onOpenCompany, onOpenInternal,
+  cells, competitors, cardFor, nameOf, typesOf, statusesOf, repsFor, onOpenCompany, onOpenInternal,
   signalsOnly, activeSignals, highlightSignals,
   userOptions, colorMaps, onUpdated,
 }: {
@@ -92,6 +92,12 @@ export function CompetitiveGrid({
   nameOf: (companyId: number) => string;
   typesOf: (companyId: number) => string[];
   statusesOf: (card: VendorRelationship) => string[];
+  /**
+   * Who covers the account, for the rep pill — null for a company the pill
+   * does not apply to. Travels with the three above for the same reason: every
+   * field on these cards describes the ACCOUNT, not the column's competitor.
+   */
+  repsFor?: (companyId: number) => string[] | null;
   /** Opens a company's record beside the grid. Absent leaves names unclickable. */
   onOpenCompany?: (target: { id: number; name: string }) => void;
   /** Shows that company's internal relationships. Absent leaves IR unclickable. */
@@ -286,6 +292,7 @@ export function CompetitiveGrid({
                           title={nameOf(cell.companyId)}
                           typeBadges={typesOf(cell.companyId)}
                           statuses={statusesOf(rel)}
+                          assignedReps={repsFor?.(cell.companyId)}
                           bodyMaxHeight={GRID_BODY_MAX_HEIGHT}
                           titleBadges={
                             <SignalBadges cell={cell} onOpenInternal={onOpenInternal} />

@@ -1822,11 +1822,14 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             <button onClick={() => setShowRepRelModal(true)} className={BULK_BTN}>
               + Rep Relationship
             </button>
-            {selectedIds.size >= 2 && (
-              <button onClick={() => setShowParentChildModal(true)} className={BULK_BTN}>
-                + Parent/Child Relationship
-              </button>
-            )}
+            {/* One selection is enough. The parent does not have to be in this
+                view — the modal searches every company in the account, and can
+                create one that is in none of them — so requiring two here meant
+                leaving a conference for the companies page to link a company to
+                a parent that was never coming to the show. */}
+            <button onClick={() => setShowParentChildModal(true)} className={BULK_BTN}>
+              + Parent/Child Relationship
+            </button>
             <button onClick={() => setShowAddToConf(true)} className={BULK_BTN}>
               + to Conference
             </button>

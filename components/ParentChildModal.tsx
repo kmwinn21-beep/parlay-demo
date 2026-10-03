@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useHideBottomNav } from './BottomNavContext';
+import { MultiSelectDropdown } from './MultiSelectDropdown';
+import { RepMultiSelect } from './RepMultiSelect';
+import { useConfigOptions } from '@/lib/useConfigOptions';
+import { useUserOptions, parseRepIds } from '@/lib/useUserOptions';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { childrenOf, clashingName } from '@/lib/parentChildSelection';
+import { newCompanyPayload, EMPTY_NEW_COMPANY, type NewCompanyFields } from '@/lib/parentChildSelection';
 
 interface ParentChildItem {
   id: number;
@@ -33,20 +40,74 @@ export function ParentChildModal({
   items,
 }: ParentChildModalProps) {
   useHideBottomNav(isOpen);
+  // The account's own vocabulary for the optional fields below. Cached per
+  // page by the hooks themselves, so a mounted-but-closed modal costs nothing.
+  const configOptions = useConfigOptions('company_table');
+  const companyTypeOptions = configOptions.company_type ?? [];
+  const servicesOptions = configOptions.services ?? [];
+  const userOptions = useUserOptions();
+  const unitLabel = useUnitTypeLabel();
   const [parentId, setParentId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * The ids added from here, for the search to skip.
+   *
+   * A ref beside the state rather than the state itself: putting `created` in
+   * the search effect's deps would re-run the search — and reopen the result
+   * list the reader has just chosen from — every time a company is added.
+   */
+  const createdIdsRef = useRef<number[]>([]);
+  /**
+   * The "Other (not in list)" panel, and whatever it has created.
+   *
+   * A company that is not in Parlay yet is the common case for a parent: the
+   * child is at the conference, the holding company it belongs to was never
+   * coming and nobody has had a reason to type it in. Sending the reader to
+   * the companies page to add it and then back here to link it is three
+   * screens for one fact.
+   *
+   * `created` is a list rather than one record so a reader who adds the wrong
+   * name, adds the right one and switches between them still has both on
+   * screen — they exist now either way, and silently dropping the first from
+   * the list would read as it not having been saved.
+   */
+  const [otherOpen, setOtherOpen] = useState(false);
+  /**
+   * The panel, so opening it scrolls it into view.
+   *
+   * It opens at the bottom of a body that already scrolls, and six fields are
+   * taller than what is left below the button that opened them — without this
+   * the reader clicks Other and sees the first field appear with everything
+   * else, the Add button included, below the fold.
+   */
+  const otherPanelRef = useRef<HTMLDivElement>(null);
+  const [otherFields, setOtherFields] = useState<NewCompanyFields>(EMPTY_NEW_COMPANY);
+  const [created, setCreated] = useState<SearchResult[]>([]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
       setParentId(null);
       setSearchQuery('');
       setSearchResults([]);
+      setOtherOpen(false);
+      setOtherFields(EMPTY_NEW_COMPANY);
+      setCreated([]);
+      createdIdsRef.current = [];
+      setCreateError(null);
     }
   }, [isOpen]);
+
+  // On open, not on every keystroke in it — hence the effect rather than a
+  // callback ref, which React re-runs on each render.
+  useEffect(() => {
+    if (otherOpen) otherPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [otherOpen]);
 
   useEffect(() => {
     if (searchQuery.length < 2) {
@@ -59,8 +120,10 @@ export function ParentChildModal({
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
         const data = await res.json();
-        const itemIds = new Set(items.map((i) => i.id));
-        const filtered = (data.companies as SearchResult[]).filter((c) => !itemIds.has(c.id));
+        // Already on screen above, either as a selected company or as one added
+        // from here — listing it twice would be two radios for one company.
+        const shown = new Set([...items.map((i) => i.id), ...createdIdsRef.current]);
+        const filtered = (data.companies as SearchResult[]).filter((c) => !shown.has(c.id));
         setSearchResults(filtered);
       } catch {
         // ignore
@@ -75,24 +138,83 @@ export function ParentChildModal({
 
   if (!isOpen) return null;
 
+  const childItems = childrenOf(items, parentId);
+
+  /**
+   * A relationship needs two companies.
+   *
+   * With one company selected, naming IT as the parent leaves nothing to be
+   * its child — the route rejects that, and a button that posts a request it
+   * knows will 400 is a button that reports a server error for a choice the
+   * reader could see was empty.
+   */
+  const canSubmit = parentId != null && childItems.length > 0;
+
   const handleSubmit = async () => {
-    if (!parentId) return;
-    const childIds = items.map((i) => i.id).filter((id) => id !== parentId);
+    if (!canSubmit) return;
+    const childIds = childItems.map((i) => i.id);
     setIsLoading(true);
     try {
-      await onSubmit(parentId, childIds);
+      await onSubmit(parentId!, childIds);
       onClose();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const parentIsLocal = parentId ? !!items.find((i) => i.id === parentId) : false;
-  const childItems = parentId
-    ? parentIsLocal
-      ? items.filter((i) => i.id !== parentId)
-      : items
-    : [];
+  /**
+   * A company that already has this name, wherever it is on screen.
+   *
+   * A warning rather than a block. Two records genuinely sharing a name is why
+   * the options here carry a detail card at all — see ParentChildItem.detail —
+   * so refusing to add a second would be the modal deciding something it
+   * cannot know. It points at the match; the reader decides.
+   */
+  const nameClash = clashingName(otherFields.name, [
+    ...items.map((i) => i.label),
+    ...searchResults.map((r) => r.name),
+    ...created.map((c) => c.name),
+  ]);
+
+  const setField = <K extends keyof NewCompanyFields>(key: K, value: NewCompanyFields[K]) => {
+    setOtherFields((prev) => ({ ...prev, [key]: value }));
+    setCreateError(null);
+  };
+
+  const handleCreateOther = async () => {
+    const payload = newCompanyPayload(otherFields);
+    if (!payload || isCreating) return;
+    setIsCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch('/api/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to add the company');
+      const company: SearchResult = {
+        id: Number(data.id),
+        name: String(data.name ?? payload.name),
+        subtitle: data.company_type ? String(data.company_type) : null,
+      };
+      setCreated((prev) => [...prev, company]);
+      createdIdsRef.current = [...createdIdsRef.current, company.id];
+      // Gone from the results it was not in: the reader searched for this name
+      // and found nothing, and the row is now above.
+      setSearchResults((prev) => prev.filter((r) => r.id !== company.id));
+      // Selected straight away, which is the whole point of adding it here:
+      // the reader came to make a relationship, not to fill in a form.
+      setParentId(company.id);
+      setOtherOpen(false);
+      setOtherFields(EMPTY_NEW_COMPANY);
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Failed to add the company');
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -212,6 +334,166 @@ export function ParentChildModal({
             {searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
               <p className="text-sm text-gray-400 mt-2 text-center py-2">No companies found</p>
             )}
+
+            {/* Companies added from here, selectable like any other option. */}
+            {created.map((company) => (
+              <label
+                key={company.id}
+                className={`flex items-start gap-3 p-3 mt-2 rounded-lg border-2 cursor-pointer transition-all ${
+                  parentId === company.id
+                    ? 'border-brand-secondary bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="parent"
+                  value={company.id}
+                  checked={parentId === company.id}
+                  onChange={() => setParentId(company.id)}
+                  className="mt-0.5 accent-brand-secondary"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{company.name}</p>
+                  <p className="text-xs text-green-700">Added to Parlay</p>
+                </div>
+              </label>
+            ))}
+
+            {/* The company that is not in Parlay yet.
+                Under the search rather than beside it: it is the answer to
+                having searched and not found, and offering it first would
+                invite a duplicate of a company that is already there. */}
+            {!otherOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setOtherOpen(true);
+                  setOtherFields({ ...EMPTY_NEW_COMPANY, name: searchQuery.trim() });
+                  setCreateError(null);
+                }}
+                className="mt-2 w-full flex items-center gap-2 p-3 rounded-lg border-2 border-dashed border-gray-300 text-left text-sm font-medium text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Other (not in list)
+              </button>
+            ) : (
+              <div ref={otherPanelRef} className="mt-2 p-3 rounded-lg border-2 border-gray-200 space-y-3">
+                <p className="text-xs font-semibold text-gray-700">Add a company that isn&rsquo;t in Parlay yet</p>
+
+                <div>
+                  <label className="label">
+                    Company Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={otherFields.name}
+                    autoFocus
+                    onChange={(e) => setField('name', e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleCreateOther(); } }}
+                    placeholder="Company name"
+                    className="input-field"
+                  />
+                </div>
+
+                {/* Everything below is optional. The reader adding a parent
+                    usually knows these, and a record created with nothing but a
+                    name is one somebody has to come back and finish — but the
+                    point of this panel is the relationship, so none of it is in
+                    the way of the Add button. */}
+                <div>
+                  <label className="label">Assigned User</label>
+                  <RepMultiSelect
+                    options={userOptions}
+                    selectedIds={parseRepIds(otherFields.assigned_user)}
+                    onChange={(ids) => setField('assigned_user', ids.join(','))}
+                    triggerClass="input-field flex items-center justify-between gap-2 text-left"
+                    placeholder="Select users..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label">Company Type</label>
+                    <select
+                      value={otherFields.company_type}
+                      onChange={(e) => setField('company_type', e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="">Select type...</option>
+                      {companyTypeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    {/* Whatever this account calls its unit count — beds,
+                        doors, units. The column is companies.wse either way. */}
+                    <label className="label">{unitLabel}</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={otherFields.wse}
+                      onChange={(e) => setField('wse', e.target.value)}
+                      placeholder={unitLabel}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Website</label>
+                  <input
+                    type="text"
+                    value={otherFields.website}
+                    onChange={(e) => setField('website', e.target.value)}
+                    placeholder="https://example.com"
+                    className="input-field"
+                  />
+                </div>
+
+                {/* The same dropdown the companies page uses, so the options
+                    are the account's own and a service added in admin settings
+                    turns up here without this form being told about it. */}
+                <div>
+                  <MultiSelectDropdown
+                    label="Services"
+                    options={servicesOptions}
+                    values={otherFields.services}
+                    onChange={(values) => setField('services', values)}
+                    placeholder="Select services..."
+                    emptyMessage="No services configured. Add options in the Admin panel."
+                  />
+                </div>
+
+                {/* Pointed out, not prevented: two companies really can share
+                    a name, and only the reader knows whether these are two. */}
+                {nameClash && (
+                  <p className="text-xs text-amber-700">
+                    &ldquo;{nameClash}&rdquo; is already listed above. Add this only if it is a different company.
+                  </p>
+                )}
+                {createError && <p className="text-xs text-red-600">{createError}</p>}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setOtherOpen(false); setOtherFields(EMPTY_NEW_COMPANY); setCreateError(null); }}
+                    className="px-3 py-1.5 text-xs font-semibold text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    disabled={isCreating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCreateOther}
+                    disabled={!otherFields.name.trim() || isCreating}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-brand-secondary rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCreating ? 'Adding…' : 'Add company'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {parentId && childItems.length > 0 && (
@@ -230,7 +512,20 @@ export function ParentChildModal({
             </div>
           )}
 
-          {parentId && (
+          {/* The one-selection dead end, said out loud. With a single company
+              selected and that company named as the parent there is nothing
+              left to be its child, and a greyed-out button with no reason
+              beside it reads as the modal being broken. */}
+          {parentId && childItems.length === 0 && (
+            <div className="mb-5 p-3 bg-amber-50 rounded-lg border border-amber-200">
+              <p className="text-xs text-amber-800">
+                A company cannot be its own parent. Search for the parent company above, or add it
+                with <strong>Other (not in list)</strong>.
+              </p>
+            </div>
+          )}
+
+          {parentId && childItems.length > 0 && (
             <div className="mb-5 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
               <p className="text-xs text-yellow-800">
                 <strong>Note:</strong> Contacts and conferences will remain on the child company records. Only meetings, notes, and follow-ups from children will be visible on the parent record.
@@ -247,7 +542,10 @@ export function ParentChildModal({
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!parentId || isLoading}
+              disabled={!canSubmit || isLoading}
+              title={parentId && childItems.length === 0
+                ? 'Pick a different parent — the only company selected cannot be its own child'
+                : undefined}
               className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Creating...' : 'Create Relationship'}
