@@ -603,7 +603,19 @@ export function MasterAccountSearchModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div className="bg-white w-full sm:max-w-lg flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl" style={{ maxHeight: '85vh' }}>
+      {/* On a phone this fills the screen below the header rather than sizing
+          itself to its contents. It is a list you scroll and search — a sheet
+          that opens three rows tall and grows as you type moves the Done
+          button under your thumb between one search and the next. The height
+          is anchored to --mobile-header-h, the same variable the drawers in
+          globals.css stop at, so the top edge lands on the header's bottom
+          edge whatever the safe-area inset turns out to be.
+
+          From sm it is a centred dialog again and sizes to its contents, up to
+          85vh. modal-sheet-mobile carries the slide-up and the matching cap. */}
+      <div
+        className="modal-sheet-mobile bg-white w-full sm:max-w-lg flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl h-[calc(100dvh-var(--mobile-header-h))] sm:h-auto sm:max-h-[85vh]"
+      >
         <div className="flex items-start justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-base sm:text-lg font-bold text-brand-primary font-serif">Search Master</h2>
@@ -617,9 +629,12 @@ export function MasterAccountSearchModal({
         </div>
 
         <div className="px-4 sm:px-6 py-3 flex-shrink-0">
+          {/* Not autofocused. The box opens already filled in and the search
+              runs on its own, so on a phone the keyboard would slide up over
+              the results the reader opened this to read — and the first thing
+              they would have to do is dismiss it. */}
           <input
             value={query}
-            autoFocus
             onChange={e => setQuery(e.target.value)}
             className="input-field"
             placeholder="Search master account list…"
