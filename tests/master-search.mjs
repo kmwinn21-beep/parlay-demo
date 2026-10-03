@@ -87,6 +87,38 @@ console.log('\n— and it saves what it applies —');
     /useState\(\(\) => masterSearchSeed\(companyName\)\)/.test(field), true);
 
   /*
+   * And NOT autofocused.
+   *
+   * The seed means the search has already run by the time the dialog paints,
+   * so there is nothing to type: focusing the box would only slide a phone
+   * keyboard up over the results the reader opened it to read.
+   *
+   * Checked over the whole file rather than over a slice of it. Both the
+   * inline field and this dialog carry the same placeholder, so a slice taken
+   * from it lands on whichever comes first — which is how a check like this
+   * comes to pass while reading the wrong half of the file.
+   */
+  eq('  but nothing here takes focus on open', field.includes('autoFocus'), false);
+
+  /*
+   * On a phone it opens at the header's bottom edge and runs to the bottom of
+   * the screen, rather than sizing itself to its contents.
+   *
+   * It is a list you search: a sheet that opens three rows tall and grows as
+   * you type moves the Done button under your thumb between one search and the
+   * next. Anchored to --mobile-header-h, which is what every other sheet and
+   * drawer in globals.css stops at, so the top edge lands on the header
+   * whatever the safe-area inset is.
+   */
+  eq('  it fills the space under the mobile header',
+    /h-\[calc\(100dvh-var\(--mobile-header-h\)\)\]/.test(field), true);
+  eq('  and is a sized dialog again from sm',
+    /sm:h-auto sm:max-h-\[85vh\]/.test(field), true);
+  // An inline maxHeight would beat both the class above and the global cap.
+  eq('  with no inline height to override either',
+    /Search Master[\s\S]{0,400}style=\{\{ maxHeight/.test(field), false);
+
+  /*
    * There is no Save button here, so every Update writes.
    *
    * And it writes the WHOLE record: PUT /api/companies/[id] sets every column
