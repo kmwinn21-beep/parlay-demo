@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import type { UserOption } from '@/lib/useUserOptions';
-import { resolveRepNames } from '@/lib/useUserOptions';
+import { resolveRepNames, useUserOptions } from '@/lib/useUserOptions';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { masterSearchSeed } from '@/lib/masterAccountMatch';
 
 interface MasterAccountRecord {
   id: number;
@@ -426,6 +429,256 @@ export function MatchMasterAccountField({
           onClose={() => setSelectedRecord(null)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * The company as the PUT route reads and writes it.
+ *
+ * Every field that route names, because it writes them all: a PUT carrying
+ * only the patch would null out everything it left out. The company record's
+ * own edit form works the same way — it loads the record, applies the patch to
+ * its copy and saves the lot — and this is that, without the form.
+ */
+interface CompanyRecord extends CurrentValues {
+  name: string;
+  notes: string | null;
+  icp: string | null;
+  industry: string | null;
+  sub_types: string[];
+}
+
+/**
+ * Match a company against the master account list, from anywhere.
+ *
+ * The same search and the same side-by-side modal the company record's edit
+ * form offers, as a dialog of its own — so a rep who spots an unmatched
+ * company in a table does not have to open the record and switch it into edit
+ * mode to link it.
+ *
+ * It saves as it goes. In the edit form, applying a field is a change to a
+ * form somebody will press Save on; here there is no form and no Save, so each
+ * Update and the Link checkbox write immediately. Done just closes.
+ */
+export function MasterAccountSearchModal({
+  companyId,
+  companyName,
+  onClose,
+  onApplied,
+}: {
+  companyId: number;
+  companyName: string;
+  onClose: () => void;
+  /** Something was written — let whatever opened this refresh its row. */
+  onApplied?: () => void;
+}) {
+  const userOptions = useUserOptions();
+  const unitTypeLabel = useUnitTypeLabel();
+  const [territoryOptions, setTerritoryOptions] = useState<{ id: number; name: string }[]>([]);
+  const [company, setCompany] = useState<CompanyRecord | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  // Seeded from the company's name, which is the first thing a reader would
+  // have typed.
+  const [query, setQuery] = useState(() => masterSearchSeed(companyName));
+  const [results, setResults] = useState<MasterAccountRecord[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<MasterAccountRecord | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    Promise.all([
+      fetch(`/api/companies/${companyId}`, { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)),
+      fetch('/api/admin/territories').then(r => (r.ok ? r.json() : { territories: [] })).catch(() => ({ territories: [] })),
+    ])
+      .then(([data, terr]: [Record<string, unknown> | null, { territories?: { id: number; name: string }[] }]) => {
+        if (!live) return;
+        setTerritoryOptions((terr.territories ?? []).map(t => ({ id: t.id, name: t.name })));
+        if (!data) { setLoadError(true); return; }
+        setCompany({
+          name: String(data.name ?? companyName),
+          website: (data.website as string) ?? null,
+          assigned_user: (data.assigned_user as string) ?? null,
+          hq_state: (data.hq_state as string) ?? null,
+          territory_id: (data.territory_id as number) ?? null,
+          entity_structure: (data.entity_structure as string) ?? null,
+          services: Array.isArray(data.services) ? (data.services as string[]) : [],
+          wse: (data.wse as number) ?? null,
+          crm_link: (data.crm_link as string) ?? null,
+          company_type: (data.company_type as string) ?? null,
+          profit_type: (data.profit_type as string) ?? null,
+          master_account_key: (data.master_account_key as string) ?? null,
+          master_account_name: (data.master_account_name as string) ?? null,
+          notes: (data.notes as string) ?? null,
+          icp: (data.icp as string) ?? null,
+          industry: (data.industry as string) ?? null,
+          sub_types: Array.isArray(data.sub_types) ? (data.sub_types as string[]) : [],
+        });
+      })
+      .catch(() => { if (live) setLoadError(true); });
+    return () => { live = false; };
+  }, [companyId, companyName]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.trim().length < 2) {
+      setResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    debounceRef.current = setTimeout(() => {
+      fetch(`/api/master-accounts/search?q=${encodeURIComponent(query.trim())}`)
+        .then(r => (r.ok ? r.json() : { records: [] }))
+        .then((data: { records: MasterAccountRecord[] }) => setResults(data.records ?? []))
+        .catch(() => setResults([]))
+        .finally(() => setIsSearching(false));
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [query]);
+
+  /**
+   * Write the patch straight to the company.
+   *
+   * The whole record, merged — see CompanyRecord. The local copy is updated
+   * first so the modal's "Current" column and its Link checkbox read back what
+   * was just applied without a reload.
+   */
+  const applyPatch = async (patch: MasterAccountApplyPatch) => {
+    if (!company) return;
+    const next: CompanyRecord = { ...company, ...patch };
+    setCompany(next);
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/companies/${companyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: next.name,
+          website: next.website,
+          profit_type: next.profit_type,
+          company_type: next.company_type,
+          notes: next.notes,
+          assigned_user: next.assigned_user,
+          wse: next.wse,
+          services: next.services,
+          icp: next.icp,
+          industry: next.industry,
+          territory_id: next.territory_id,
+          hq_state: next.hq_state,
+          crm_link: next.crm_link,
+          master_account_key: next.master_account_key,
+          master_account_name: next.master_account_name,
+          sub_types: next.sub_types,
+        }),
+      });
+      if (!res.ok) throw new Error('save failed');
+      onApplied?.();
+    } catch {
+      // Put the copy back, so the modal does not show a value the record does
+      // not have.
+      setCompany(company);
+      toast.error('Could not save that change.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // The match modal is the same one the edit form opens, over this one.
+  if (selectedRecord && company) {
+    return (
+      <MatchModal
+        record={selectedRecord}
+        current={company}
+        userOptions={userOptions}
+        territoryOptions={territoryOptions}
+        unitTypeLabel={unitTypeLabel}
+        onApply={patch => { void applyPatch(patch); }}
+        onClose={() => setSelectedRecord(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center sm:p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="bg-white w-full sm:max-w-lg flex flex-col rounded-t-2xl sm:rounded-2xl shadow-2xl" style={{ maxHeight: '85vh' }}>
+        <div className="flex items-start justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-lg font-bold text-brand-primary font-serif">Search Master</h2>
+            <p className="text-sm text-gray-500 mt-0.5 truncate">{companyName}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 ml-4 flex-shrink-0">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="px-4 sm:px-6 py-3 flex-shrink-0">
+          <input
+            value={query}
+            autoFocus
+            onChange={e => setQuery(e.target.value)}
+            className="input-field"
+            placeholder="Search master account list…"
+          />
+          {/* Already pinned, and to what. Without this the only way to find
+              out is to re-find the record and open the match modal. */}
+          {company?.master_account_key && (
+            <p className="flex items-center gap-1.5 text-xs text-gray-500 mt-2">
+              <svg className="w-3.5 h-3.5 text-brand-secondary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              <span className="truncate">
+                Linked to <span className="font-medium text-gray-700">{company.master_account_name || company.master_account_key}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => void applyPatch({ master_account_key: null, master_account_name: null })}
+                className="text-brand-secondary hover:underline flex-shrink-0"
+              >
+                Unlink
+              </button>
+            </p>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-3 min-h-0">
+          {loadError ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Could not load this company.</p>
+          ) : query.trim().length < 2 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Type at least two characters.</p>
+          ) : isSearching ? (
+            <p className="text-sm text-gray-400 py-4 text-center">Searching…</p>
+          ) : results.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">No master accounts match &quot;{query.trim()}&quot;.</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {results.map(record => (
+                <button
+                  key={record.id}
+                  type="button"
+                  // Nothing to match against until the company has loaded —
+                  // the modal's Current column would read as all blanks.
+                  disabled={!company}
+                  onClick={() => setSelectedRecord(record)}
+                  className="w-full text-left py-2.5 text-sm hover:bg-gray-50 flex items-center justify-between gap-2 disabled:opacity-40"
+                >
+                  <span className="truncate font-medium text-gray-800">{record.companyName}</span>
+                  {record.hqState && <span className="text-xs text-gray-400 flex-shrink-0">{record.hqState}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-gray-200 flex-shrink-0">
+          <span className="text-xs text-gray-400">{isSaving ? 'Saving…' : ''}</span>
+          <button type="button" onClick={onClose} className="btn-secondary text-sm">Done</button>
+        </div>
+      </div>
     </div>
   );
 }

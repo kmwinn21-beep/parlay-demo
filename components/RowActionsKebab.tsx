@@ -10,6 +10,7 @@ import { TouchpointQuickModal } from '@/components/DashboardActionCard';
 import { InternalRelationshipModal } from '@/components/InternalRelationshipsSection';
 import { OutreachAssignModal } from '@/components/OutreachAssignModal';
 import { BulkVendorRelationshipModal } from '@/components/BulkVendorRelationshipModal';
+import { MasterAccountSearchModal } from '@/components/MatchMasterAccountField';
 import { useClosedDealDraft } from '@/lib/ClosedDealDraftContext';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useUserOptions } from '@/lib/useUserOptions';
@@ -54,7 +55,7 @@ export function RowActionsKebab({
   const { user: currentUser } = useUser();
 
   const [action, setAction] = useState<
-    null | 'outreach' | 'note' | 'relationship' | 'meeting' | 'followup' | 'touchpoint' | 'vendor-relationship'
+    null | 'outreach' | 'note' | 'relationship' | 'meeting' | 'followup' | 'touchpoint' | 'vendor-relationship' | 'master'
   >(null);
   // Company rows can add either kind of relationship, so they get a chooser
   // rather than a menu row that silently picks one.
@@ -94,6 +95,17 @@ export function RowActionsKebab({
       : []),
     { label: '+ Follow Up', onClick: () => setAction('followup') },
     { label: '+ Touchpoint', onClick: () => setAction('touchpoint') },
+    // Not a "+ something" like the rest — it links this company to a row that
+    // already exists rather than creating anything, so it is worded as the
+    // lookup it is and sits last, apart from the additions.
+    ...(entityType === 'company'
+      ? [{
+          label: 'Search Master',
+          onClick: () => setAction('master'),
+          disabled: companyId == null,
+          title: companyId == null ? 'Matching needs the record to have a company' : undefined,
+        }]
+      : []),
   ];
 
   return (
@@ -177,6 +189,17 @@ export function RowActionsKebab({
           title={vendorLabel}
           userOptions={userOptions}
           currentUserConfigId={currentUser?.configId ?? null}
+        />
+      )}
+
+      {action === 'master' && companyId != null && (
+        <MasterAccountSearchModal
+          companyId={companyId}
+          companyName={companyName ?? ''}
+          onClose={close}
+          // It saves as it goes, so the row behind is already stale by the
+          // time this closes.
+          onApplied={() => onDone?.()}
         />
       )}
 
