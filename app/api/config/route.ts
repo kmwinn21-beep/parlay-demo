@@ -11,17 +11,56 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
+    /**
+     * Several categories in one request.
+     *
+     * A page that needs six lists was making six round trips to one table —
+     * the conference page alone fired six of these inside a fourteen-way
+     * Promise.all on mount. That volume is what gets a client challenged by
+     * the host's bot protection, and the answer is the same query with an IN.
+     *
+     * The response stays a flat array of the same rows: each one carries its
+     * own `category`, so the caller groups what it asked for and nothing about
+     * the row shape or the visibility filtering below has to know which form
+     * of the request produced it.
+     */
+    const categoriesParam = searchParams.get('categories');
+    const categories = (categoriesParam ?? '')
+      .split(',').map(c => c.trim()).filter(Boolean);
     const form = searchParams.get('form');
     const includeVisibility = searchParams.get('include_visibility') === '1';
 
+    const COLUMNS = 'id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary, category_id, description, metadata, inverse_value';
+
     let result;
-    if (category) {
+    if (categoriesParam !== null) {
+      /*
+       * Present but empty means none, not all.
+       *
+       * Falling through to the no-parameter branch would ship the account's
+       * entire options table to a caller that asked for nothing — which is
+       * what a caller does when it builds the list from a variable and the
+       * variable is empty.
+       */
+      if (categories.length === 0) {
+        return NextResponse.json([], { headers: { 'Cache-Control': 'no-store' } });
+      }
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary, category_id, description, metadata, inverse_value FROM config_options WHERE category = ? ORDER BY sort_order, value',
+        sql: `SELECT ${COLUMNS} FROM config_options
+              WHERE category IN (${categories.map(() => '?').join(',')})
+              ORDER BY category, sort_order, value`,
+        args: categories,
+      });
+    } else if (category) {
+      result = await db.execute({
+        sql: `SELECT ${COLUMNS} FROM config_options WHERE category = ? ORDER BY sort_order, value`,
         args: [category],
       });
 
-      // Auto-seed unit_type with default 'WSE' if it has never been configured
+      // Auto-seed unit_type with default 'WSE' if it has never been configured.
+      // Single-category only: the seed exists for the one reader that asks for
+      // unit_type by itself, and a multi-category read is a page assembling
+      // lists, not the place to be writing rows.
       if (category === 'unit_type' && result.rows.length === 0) {
         const inserted = await db.execute({
           sql: 'INSERT INTO config_options (category, value, sort_order) VALUES (?, ?, ?) RETURNING id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up',
@@ -42,7 +81,7 @@ export async function GET(request: NextRequest) {
     } else {
       // Return all options (used for color lookups across the app)
       result = await db.execute({
-        sql: 'SELECT id, category, value, sort_order, color, action_key, status_key, scope, auto_follow_up, is_system, is_primary, category_id, description, metadata, inverse_value FROM config_options ORDER BY category, sort_order, value',
+        sql: `SELECT ${COLUMNS} FROM config_options ORDER BY category, sort_order, value`,
         args: [],
       });
     }

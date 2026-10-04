@@ -7,7 +7,7 @@ import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
-import { invalidateConfsCache } from '@/components/Header';
+import { invalidateConferenceNav } from '@/lib/conferenceNav';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
@@ -141,6 +141,17 @@ function fmtDate(dateStr?: string): string {
 }
 
 const ATTENDEE_PAGE_SIZE = 100;
+
+/**
+ * The config lists this page needs, fetched as one request.
+ *
+ * Declared together because that is what they are now — a single read, not six
+ * that happen to run side by side. The order is the order they are unpacked
+ * in fetchConference.
+ */
+const CONFIG_CATEGORIES = [
+  'action', 'user', 'event_type', 'company_type', 'seniority', 'conference_strategy_type',
+] as const;
 /** Stable identity, so an account with no configured seniority list does not
  *  hand the grouping memo a fresh empty array on every render. */
 const EMPTY_SENIORITY_ORDER: string[] = [];
@@ -819,19 +830,18 @@ export default function ConferenceDetailPage() {
 
   const fetchConference = useCallback(async () => {
     try {
-      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, actionRes, userRes, socialRes, eventTypeRes, companyTypeRes, seniorityRes, conferenceStrategyRes, allSeriesRes, budgetRes] = await Promise.all([
+      const [confRes, detailsRes, followUpsRes, notesRes, meetingsRes, configRes, socialRes, allSeriesRes, budgetRes] = await Promise.all([
         fetch(`/api/conferences/${id}`),
         fetch(`/api/conference-details?conference_id=${id}`),
         fetch(`/api/follow-ups?conference_id=${id}`),
         fetch(`/api/notes?entity_type=conference&entity_id=${id}`),
         fetch(`/api/meetings?conference_id=${id}`),
-        fetch('/api/config?category=action&form=conference_detail'),
-        fetch('/api/config?category=user&form=conference_detail'),
+        // Six lists, one request. They were six separate calls to the same
+        // table inside this Promise.all, and that volume is what gets a client
+        // challenged by the host's bot protection on a quick run of
+        // navigations — see lib/conferenceNav.ts for what that looked like.
+        fetch(`/api/config?categories=${CONFIG_CATEGORIES.join(',')}&form=conference_detail`),
         fetch(`/api/social-events?conference_id=${id}`),
-        fetch('/api/config?category=event_type&form=conference_detail'),
-        fetch('/api/config?category=company_type&form=conference_detail'),
-        fetch('/api/config?category=seniority&form=conference_detail'),
-        fetch('/api/config?category=conference_strategy_type&form=conference_detail'),
         fetch('/api/conference-series'),
         fetch(`/api/conferences/${id}/budget`),
       ]);
@@ -847,12 +857,17 @@ export default function ConferenceDetailPage() {
       const notesData = notesRes.ok ? await notesRes.json() : [];
       const meetingsData = meetingsRes.ok ? await meetingsRes.json() : [];
       const socialData = socialRes.ok ? await socialRes.json() : [];
-      const eventTypeData = eventTypeRes.ok ? await eventTypeRes.json() : [];
-      const actionData = actionRes.ok ? await actionRes.json() : [];
-      const userData = userRes.ok ? await userRes.json() : [];
-      const companyTypeData = companyTypeRes.ok ? await companyTypeRes.json() : [];
-      const seniorityData = seniorityRes.ok ? await seniorityRes.json() : [];
-      const conferenceStrategyData = conferenceStrategyRes.ok ? await conferenceStrategyRes.json() : [];
+      // One payload, split back into the six lists. Each row carries its own
+      // category, which is what lets the route answer for several at once.
+      const configRows: { id: number; category: string; value: string; color?: string | null }[] =
+        configRes.ok ? await configRes.json() : [];
+      const byCategory = (name: string) => configRows.filter(r => r.category === name);
+      const eventTypeData = byCategory('event_type');
+      const actionData = byCategory('action');
+      const userData = byCategory('user');
+      const companyTypeData = byCategory('company_type');
+      const seniorityData = byCategory('seniority');
+      const conferenceStrategyData = byCategory('conference_strategy_type');
       const allSeriesData: SeriesOption[] = allSeriesRes.ok ? await allSeriesRes.json() : [];
       const budgetData = budgetRes.ok ? await budgetRes.json() : null;
       setConferenceBudgetTotal(budgetData?.budget_total ?? null);
@@ -1170,7 +1185,7 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Conference deleted.');
-      invalidateConfsCache();
+      invalidateConferenceNav();
       // Use a full-page navigation instead of router.push() + router.refresh() —
       // combining the two causes a race condition that corrupts the router state
       // and silently breaks all subsequent Link navigations until a page reload.
@@ -1679,13 +1694,16 @@ export default function ConferenceDetailPage() {
 
   // Fetch function and seniority option records once for the classify modal
   useEffect(() => {
-    Promise.all([
-      fetch('/api/config?category=function').then(r => r.json()),
-      fetch('/api/config?category=seniority').then(r => r.json()),
-    ]).then(([fnData, snData]) => {
-      setClassifyFunctionOptions(fnData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-      setClassifySeniorityOptions(snData.map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
-    }).catch(() => {});
+    // Both in one request, for the same reason the six above are.
+    fetch('/api/config?categories=function,seniority')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: { id: number; category: string; value: string }[]) => {
+        const of = (category: string) => rows
+          .filter(o => o.category === category)
+          .map(o => ({ id: Number(o.id), value: String(o.value) }));
+        setClassifyFunctionOptions(of('function'));
+        setClassifySeniorityOptions(of('seniority'));
+      }).catch(() => {});
   }, []);
 
   // Batch-fetch title metadata when conference attendees change
