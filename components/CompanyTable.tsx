@@ -795,6 +795,40 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
     setShowRepModal(true);
   };
 
+  /**
+   * Setting a company's type from the mobile card.
+   *
+   * The card shows the type as a pill, and a company with none showed nothing
+   * at all — so the one thing a reader could not do from the list was fill in
+   * the field whose absence they were looking at. The desktop table has had an
+   * inline editor for this since it had cells to put one in.
+   *
+   * Written optimistically: the pill appears the moment a type is picked
+   * rather than after the round trip, because the sheet closes on the same tap
+   * and a card that still reads "+ Type" afterwards reads as the tap having
+   * missed.
+   */
+  const [typePickerCompany, setTypePickerCompany] = useState<Company | null>(null);
+
+  const chooseCompanyType = async (company: Company, type: string) => {
+    setTypePickerCompany(null);
+    const previous = company.company_type;
+    setLocalCompanies(prev => prev.map(c => (c.id === company.id ? { ...c, company_type: type } : c)));
+    try {
+      const res = await fetch(`/api/companies/${company.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_type: type }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      // Put the pill back the way it was rather than reloading the list: a
+      // refresh here would also throw away whatever else is on screen.
+      setLocalCompanies(prev => prev.map(c => (c.id === company.id ? { ...c, company_type: previous } : c)));
+      toast.error('Failed to set the company type.');
+    }
+  };
+
   const closeRepModal = (save: boolean) => {
     setShowRepModal(false);
     if (save && editingRepCompanyId !== null) {
@@ -1582,7 +1616,7 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           pills pass behind it rather than pushing it off the edge. */}
       <div className="mt-2 ml-6 flex items-center gap-2">
       <ScrollRow className="flex-1 min-w-0" gapClass="gap-2">
-        {company.company_type && (
+        {company.company_type ? (
           <span className="flex-shrink-0 whitespace-nowrap">
             {/* The glyph says "this one is a child" — under a family header
                 that is the one thing already beyond doubt. */}
@@ -1591,6 +1625,19 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
               : <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>{!inFamily && <EntityStructureIcon structure={company.entity_structure} />}{company.company_type}</span>
             }
           </span>
+        ) : (
+          /* The empty seat, drawn like the "+ Rep" one above it: dotted and
+             drained, because it is the absence of a fact rather than one. It
+             holds the place the pill will take, so a card whose type is set
+             from here does not reflow around the reader's thumb. */
+          <button
+            type="button"
+            onClick={e => { e.preventDefault(); e.stopPropagation(); setTypePickerCompany(company); }}
+            title="Set the company type"
+            className="flex-shrink-0 whitespace-nowrap inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-gray-300 text-gray-400 bg-white hover:border-gray-400 hover:text-gray-600 transition-colors"
+          >
+            + Type
+          </button>
         )}
         {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
           <span key={s} className={`${getBadgeClass(s, colorMaps.status || {})} flex-shrink-0 whitespace-nowrap`}>{formatStatusLabel(s)}</span>
@@ -2117,6 +2164,57 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
             <div className="px-4 py-8 text-center text-gray-400 text-sm">No companies found.</div>
           ) : <MobileCardList>{grouped ? renderGroupedCards() : rowsToRender.map(company => renderCompanyCard(company))}</MobileCardList>}
         </div>
+
+        {/* Mobile company type bottom sheet.
+            One tap, no Done button: this sets a single value, and a sheet that
+            closes on the choice is the same gesture as picking from a native
+            select. The rep sheet below keeps its Done because it is a
+            multi-select and the reader is not finished after the first tap. */}
+        {typePickerCompany && (
+          <div
+            className="fixed inset-0 z-50 flex items-end lg:hidden"
+            style={{ background: 'rgba(0,0,0,0.4)' }}
+            onClick={() => setTypePickerCompany(null)}
+          >
+            <div
+              className="modal-sheet-mobile bg-white rounded-t-2xl shadow-2xl w-full flex flex-col"
+              style={{ maxHeight: '70vh' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-sm text-brand-primary">Company Type</h3>
+                  <p className="text-xs text-gray-500 truncate">{typePickerCompany.name}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTypePickerCompany(null)}
+                  className="text-xs text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 flex-shrink-0"
+                >
+                  Cancel
+                </button>
+              </div>
+              <div className="overflow-y-auto">
+                {companyTypeOptions.length === 0 ? (
+                  <p className="px-4 py-6 text-sm text-gray-400 text-center">
+                    No company types configured. Add options in the Admin panel.
+                  </p>
+                ) : companyTypeOptions.map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => chooseCompanyType(typePickerCompany, t)}
+                    className="w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    {/* The pill itself rather than its words, so the choice
+                        looks like what it is about to put on the card. */}
+                    <span className={getBadgeClass(t, colorMaps.company_type || {})}>{t}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mobile rep selection bottom sheet */}
         {showRepModal && editingRepCompanyId !== null && (
