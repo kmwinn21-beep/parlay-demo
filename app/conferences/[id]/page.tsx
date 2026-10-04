@@ -7,7 +7,7 @@ import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { AnalyticsCharts } from '@/components/AnalyticsCharts';
-import { invalidateConfsCache } from '@/components/Header';
+import { invalidateConferenceNav } from '@/lib/conferenceNav';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
@@ -1170,7 +1170,7 @@ export default function ConferenceDetailPage() {
       const res = await fetch(`/api/conferences/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Delete failed');
       toast.success('Conference deleted.');
-      invalidateConfsCache();
+      invalidateConferenceNav();
       // Use a full-page navigation instead of router.push() + router.refresh() —
       // combining the two causes a race condition that corrupts the router state
       // and silently breaks all subsequent Link navigations until a page reload.

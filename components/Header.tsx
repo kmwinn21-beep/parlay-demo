@@ -2,7 +2,11 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  loadConferenceNav, invalidateConferenceNav,
+  type ConferenceOption, type ConferenceLoad,
+} from '@/lib/conferenceNav';
 import toast from 'react-hot-toast';
 import { NewMeetingModal } from './NewMeetingModal';
 import { NewNoteModal } from './NewNoteModal';
@@ -44,14 +48,6 @@ function getPageTitle(pathname: string): string {
   return process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 }
 
-interface ConferenceOption {
-  id: number;
-  name: string;
-  start_date: string;
-  end_date: string;
-  internal_attendees?: string | null;
-}
-
 function formatDateShort(d: string) {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
@@ -59,30 +55,10 @@ function formatDateShort(d: string) {
 
 // ─── Module-level conference pre-fetcher ────────────────────────────────────
 // Starts the network request the instant this module is imported — before React
-// mounts the Header component and before any useEffect can fire. The result is
-// cached so every render and re-mount reads from memory.
-let _confsCache: ConferenceOption[] | null = null;
-let _confsPromise: Promise<ConferenceOption[]> | null = null;
-
-function loadConferences(): Promise<ConferenceOption[]> {
-  if (_confsCache) return Promise.resolve(_confsCache);
-  if (_confsPromise) return _confsPromise;
-  _confsPromise = fetch('/api/conferences?nav=1')
-    .then(r => (r.ok ? r.json() : []))
-    .then((data: ConferenceOption[]) => { _confsCache = data; return data; })
-    .catch((): ConferenceOption[] => []);
-  return _confsPromise;
-}
-
-/** Call this after any action that creates or deletes a conference so the
- *  nav dropdown reflects the change on the next render. */
-export function invalidateConfsCache() {
-  _confsCache = null;
-  _confsPromise = null;
-}
-
-// Kick off the request immediately at module evaluation time.
-loadConferences();
+// mounts the Header component and before any useEffect can fire. The caching,
+// and the rules for when a failed read is tried again, live in
+// lib/conferenceNav.ts.
+loadConferenceNav();
 // ────────────────────────────────────────────────────────────────────────────
 
 export function Header() {
@@ -97,8 +73,15 @@ export function Header() {
   const [showConferences, setShowConferences] = useState(false);
   // Initialise directly from cache — if the fetch already completed the
   // dropdown renders with data on the very first paint with no loading state.
-  const [conferences, setConferences] = useState<ConferenceOption[]>(_confsCache ?? []);
-  const [isLoadingConfs, setIsLoadingConfs] = useState(_confsCache === null);
+  const [conferences, setConferences] = useState<ConferenceOption[]>([]);
+  /**
+   * The last load did not come back with a list.
+   *
+   * Kept apart from the list itself so the menu can say which of the two
+   * empties it is looking at, and offer a retry for the one that has a point.
+   */
+  const [confsFailed, setConfsFailed] = useState(false);
+  const [isLoadingConfs, setIsLoadingConfs] = useState(true);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
@@ -112,16 +95,33 @@ export function Header() {
   const messagingRef = useRef<HTMLDivElement>(null);
   const [uploadJob, setUploadJob] = useState<{ jobId: string; total: number; processed: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  /** One place the three callers put a load's result, so they cannot differ. */
+  const applyConferences = useCallback(({ conferences: list, failed }: ConferenceLoad) => {
+    setConferences(list);
+    setConfsFailed(failed);
+    setIsLoadingConfs(false);
+  }, []);
+
+  /**
+   * Throw the cache away and load again.
+   *
+   * What opening the menu does, and what the retry in it does. A fresh read is
+   * the point of opening it — a conference created on another tab should be
+   * there — and after a failure there is nothing cached to throw away anyway.
+   */
+  const refreshConferences = useCallback(() => {
+    invalidateConferenceNav();
+    setIsLoadingConfs(true);
+    loadConferenceNav().then(applyConferences);
+  }, [applyConferences]);
   const addNewRef = useRef<HTMLDivElement>(null);
 
   // Re-fetch the conference list on every route change so that after a
   // conference is created or deleted the nav dropdown stays accurate.
   useEffect(() => {
-    loadConferences().then(data => {
-      setConferences(data);
-      setIsLoadingConfs(false);
-    });
-  }, [pathname]);
+    loadConferenceNav().then(applyConferences);
+  }, [pathname, applyConferences]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -372,14 +372,7 @@ export function Header() {
             onClick={() => {
               const opening = !showConferences;
               setShowConferences(opening);
-              if (opening) {
-                invalidateConfsCache();
-                setIsLoadingConfs(true);
-                loadConferences().then(data => {
-                  setConferences(data);
-                  setIsLoadingConfs(false);
-                });
-              }
+              if (opening) refreshConferences();
             }}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors ${showConferences ? 'header-bar-btn-active' : ''}`}
             title="Go to conference"
@@ -401,6 +394,21 @@ export function Header() {
                 {isLoadingConfs ? (
                   <div className="flex justify-center py-6">
                     <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
+                  </div>
+                ) : confsFailed ? (
+                  /* Said out loud rather than shown as an empty list. The
+                     request not arriving and the account having nothing in it
+                     are different facts, and only one of them is worth a
+                     retry button. */
+                  <div className="px-4 py-5 text-center">
+                    <p className="text-sm text-gray-500">Couldn&rsquo;t load conferences.</p>
+                    <button
+                      type="button"
+                      onClick={refreshConferences}
+                      className="mt-2 text-sm font-semibold text-brand-secondary hover:underline"
+                    >
+                      Try again
+                    </button>
                   </div>
                 ) : conferences.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">No conferences found.</p>
