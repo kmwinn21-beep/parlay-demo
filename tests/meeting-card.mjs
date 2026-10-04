@@ -513,5 +513,47 @@ console.log('\n— the outcome menu stays on the screen —');
   eq('the margin is declared once', /const MENU_MARGIN = \d+;/.test(table), true);
 }
 
+console.log('\n— and on a phone it is a sheet instead —');
+{
+  const from = table.indexOf('function OutcomeButton');
+  const btn = table.slice(from, table.indexOf('\nfunction ', from + 1));
+
+  /*
+   * The same sheet the company card's type picker opens.
+   *
+   * An anchored menu on a 390px screen has to be clamped back inside the
+   * viewport, lands under the thumb that opened it, and puts seven colour
+   * dots in a 160px box. A sheet has the room to show each outcome as the
+   * pill it will become, which is what the type picker already does.
+   */
+  eq('a phone gets a sheet', /\{open && isPhone && createPortal\(/.test(btn), true);
+  eq('  rising from the bottom edge', /fixed inset-0 z-\[9999\] flex items-end sm:hidden/.test(btn), true);
+  eq('  with the heading and a Cancel',
+    /Outcome<\/h3>[\s\S]{0,400}Cancel/.test(btn), true);
+  // The sheet covers the card it came from, so it has to say whose meeting.
+  eq('  naming the meeting it is about', /\{subject && <p/.test(btn), true);
+  eq('  and the card passes one',
+    /subject=\{m\.company_name \|\| `\$\{m\.first_name\} \$\{m\.last_name\}`\.trim\(\)\}/.test(table), true);
+  // Each row is the pill, not a dot beside a word.
+  eq('  each option drawn as its pill',
+    /\$\{p\.pillClass\} px-2\.5 py-1 rounded-full/.test(btn), true);
+  eq('  with the current one marked', /opt === value \? 'ring-2/.test(btn), true);
+  // Clear stays first, as in the anchored menu.
+  eq('  and Clear still leads', btn.indexOf('— Clear —') < btn.indexOf('{options.map('), true);
+
+  /*
+   * The two are alternatives, not a sheet drawn over a menu.
+   *
+   * Each piece of the anchored menu's machinery is off on a phone: measuring
+   * a menu that is not rendered reads zero and would move the one that is,
+   * and the document-level close would shut the sheet on the tap that opened
+   * it, since the sheet is portalled outside the button's own ref.
+   */
+  eq('the anchored menu is pointers only', /\{open && !isPhone && dropdownPos && \(/.test(btn), true);
+  eq('  no clamping on a phone', /if \(isPhone \|\| !open \|\| !dropdownPos\) return;/.test(btn), true);
+  eq('  no outside-click handler', /if \(!open \|\| isPhone\) return;/.test(btn), true);
+  eq('  and no position measured for it', /if \(!open && !isPhone && btnRef\.current\)/.test(btn), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
