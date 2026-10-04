@@ -6,6 +6,7 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { getPreset, getHex, type ColorMap } from '@/lib/colors';
+import { useIsPhone } from '@/lib/useIsPhone';
 import { MEETING_TIME_OPTIONS, formatMeetingTime, formatCardDate } from '@/lib/meetingTime';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -507,6 +508,7 @@ function OutcomeButton({
   colorMap,
   onChange,
   compact = false,
+  subject,
 }: {
   value: string | null;
   options: string[];
@@ -520,7 +522,17 @@ function OutcomeButton({
    * nobody asked for that to change.
    */
   compact?: boolean;
+  /**
+   * What the sheet names under its heading, on a phone.
+   *
+   * A sheet covers the row it was opened from, so without this it is a list
+   * of outcomes with nothing to say which meeting they would be set on. The
+   * anchored menu on a pointer needs none of it — it is attached to the pill
+   * it belongs to.
+   */
+  subject?: string;
 }) {
+  const isPhone = useIsPhone();
   const [open, setOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; above: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -540,25 +552,30 @@ function OutcomeButton({
    * effect stops setting it.
    */
   useLayoutEffect(() => {
-    if (!open || !dropdownPos) return;
+    // The sheet is full width and needs no clamping; this is the anchored
+    // menu's problem only, and measuring a menu that is not rendered would
+    // read zero and move the one that is.
+    if (isPhone || !open || !dropdownPos) return;
     const el = menuRef.current;
     if (!el) return;
     const width = el.getBoundingClientRect().width;
     const clamped = Math.max(MENU_MARGIN, Math.min(dropdownPos.left, window.innerWidth - width - MENU_MARGIN));
     if (clamped !== dropdownPos.left) setDropdownPos(p => (p ? { ...p, left: clamped } : p));
-  }, [open, dropdownPos]);
+  }, [isPhone, open, dropdownPos]);
 
   useEffect(() => {
-    if (!open) return;
+    // The sheet has a backdrop of its own to close on, and closing it from
+    // here as well would shut it on the tap that opened it.
+    if (!open || isPhone) return;
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [open, isPhone]);
 
   const handleToggle = () => {
-    if (!open && btnRef.current) {
+    if (!open && !isPhone && btnRef.current) {
       const rect = btnRef.current.getBoundingClientRect();
       const spaceBelow = window.innerHeight - rect.bottom;
       const above = spaceBelow < 200 && rect.top > 200;
@@ -600,7 +617,69 @@ function OutcomeButton({
           </svg>
         </span>
       </button>
-      {open && dropdownPos && (
+      {/* On a phone: a sheet, the same one the company card's type picker
+          opens. An anchored menu has to be clamped back inside a 390px
+          screen, ends up under the thumb that opened it, and puts seven
+          colour dots in a 160px box; a sheet has the room to show each
+          outcome as the pill it will become. */}
+      {open && isPhone && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-end sm:hidden"
+          style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="modal-sheet-mobile bg-white rounded-t-2xl shadow-2xl w-full flex flex-col"
+            style={{ maxHeight: '70vh' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="font-semibold text-sm text-brand-primary">Outcome</h3>
+                {subject && <p className="text-xs text-gray-500 truncate">{subject}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-xs text-gray-500 px-3 py-1.5 rounded-lg border border-gray-200 flex-shrink-0"
+              >
+                Cancel
+              </button>
+            </div>
+            <div className="overflow-y-auto">
+              {/* First, as it is in the anchored menu: it is the one row that
+                  takes something away rather than setting it. */}
+              <button
+                type="button"
+                onClick={() => { onChange(''); setOpen(false); }}
+                className="w-full text-left px-4 py-3 text-sm text-gray-400 border-b border-gray-100 hover:bg-gray-50 active:bg-gray-100"
+              >
+                — Clear —
+              </button>
+              {options.map(opt => {
+                const p = getPreset(colorMap[opt]);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => { onChange(opt); setOpen(false); }}
+                    className="w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 active:bg-gray-100"
+                  >
+                    {/* The pill itself rather than a dot beside a word, so the
+                        choice looks like what it is about to put on the card. */}
+                    <span className={`${p.pillClass} px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${
+                      opt === value ? 'ring-2 ring-offset-1 ring-brand-secondary' : ''}`}>
+                      {opt}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+      {open && !isPhone && dropdownPos && (
         <div
           ref={menuRef}
           style={{
@@ -1748,6 +1827,9 @@ export function MeetingsTable({
                   colorMap={colorMap}
                   onChange={(val) => changeOutcome(m, val)}
                   compact
+                  // The sheet covers the card it was opened from, so it has to
+                  // say whose meeting it is about.
+                  subject={m.company_name || `${m.first_name} ${m.last_name}`.trim()}
                 />
               </span>
             </div>
