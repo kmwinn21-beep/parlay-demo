@@ -68,6 +68,17 @@ console.log('\n— the row offers it —');
   eq('  on company rows only',
     /entityType === 'company'[\s\S]{0,200}label: 'Search Master'/.test(kebab), true);
   eq('  and it opens the modal', /onClick: \(\) => setAction\('master'\)/.test(kebab), true);
+  /*
+   * With a magnifier beside it.
+   *
+   * The only row in this menu carrying a mark, which is the distinction worth
+   * drawing: every other one creates something and is worded "+ …", and this
+   * one goes looking. KebabMenuItem already takes an icon, so nothing in the
+   * menu had to change to hold it.
+   */
+  eq('  with a magnifier on the row',
+    /label: 'Search Master',[\s\S]{0,500}d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/.test(kebab), true);
+  eq('  and it is the only row with one', (kebab.match(/<svg/g) ?? []).length, 1);
   eq('  with the row’s company',
     /<MasterAccountSearchModal[\s\S]{0,200}companyId=\{companyId\}[\s\S]{0,80}companyName=\{companyName \?\? ''\}/.test(kebab), true);
   // The row's counts and pills change when a match is applied.
