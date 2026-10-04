@@ -39,7 +39,26 @@ const CONFS = [{ id: 1, name: 'NIC Fall', start_date: '2026-09-01', end_date: '2
 
 /** Responses the loader has to tell apart, and a count of what it asked for. */
 let calls = 0;
-let reply = () => ({ ok: true, json: async () => CONFS });
+/**
+ * Responses shaped like real ones, headers included.
+ *
+ * The reader classifies by content type — an HTML body is something in front
+ * of the app answering instead of it — so a stub without headers would not be
+ * exercising the thing under test.
+ */
+const json = (body, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  headers: new Headers({ 'content-type': 'application/json' }),
+  json: async () => body,
+});
+const html = (status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+  json: async () => { throw new Error('not json'); },
+});
+let reply = () => json(CONFS);
 globalThis.fetch = async (url) => {
   if (!String(url).includes('/api/conferences?nav=1')) throw new Error(`unexpected fetch: ${url}`);
   calls++;
@@ -52,14 +71,15 @@ __setConferenceNavClock(() => clock);
 const reset = () => { invalidateConferenceNav(); calls = 0; };
 
 // What a challenge actually looks like on the wire.
-const CHALLENGE_403 = () => ({ ok: false, status: 403, json: async () => { throw new Error('html'); } });
-const CHALLENGE_200 = () => ({ ok: true, status: 200, json: async () => { throw new Error('not json'); } });
-const HTML_THAT_PARSES = () => ({ ok: true, status: 200, json: async () => ({ error: 'challenge' }) });
+const CHALLENGE_403 = () => html(403);
+const CHALLENGE_200 = () => html(200);
+// Says JSON, is not a list — a wall that answers in our own content type.
+const NOT_A_LIST = () => json({ error: 'challenge' });
 
 console.log('\n— a list is a list —');
 {
   reset();
-  reply = () => ({ ok: true, json: async () => CONFS });
+  reply = () => json(CONFS);
   eq('the conferences come back', (await loadConferenceNav()).conferences.length, 1);
   eq('  and are not a failure', (await loadConferenceNav()).failed, false);
   eq('  the second read is from cache', calls, 1);
@@ -68,7 +88,7 @@ console.log('\n— a list is a list —');
 console.log('\n— an empty account is not a failure —');
 {
   reset();
-  reply = () => ({ ok: true, json: async () => [] });
+  reply = () => json([]);
   const r = await loadConferenceNav();
   eq('nothing in it', r.conferences, []);
   // The distinction the dropdown needs: this says "No conferences found.",
@@ -82,7 +102,7 @@ console.log('\n— a challenge is a failure, whatever it arrives as —');
   for (const [label, response] of [
     ['a 403 with an HTML body', CHALLENGE_403],
     ['a 200 with an HTML body', CHALLENGE_200],
-    ['a 200 whose JSON is not a list', HTML_THAT_PARSES],
+    ['a 200 whose JSON is not a list', NOT_A_LIST],
   ]) {
     reset();
     reply = response;
@@ -96,7 +116,7 @@ console.log('\n— a challenge is a failure, whatever it arrives as —');
      * Asking again after the pause has to go back to the network. Under the
      * old loader this returned a cached [] forever.
      */
-    reply = () => ({ ok: true, json: async () => CONFS });
+    reply = () => json(CONFS);
     clock += CONFS_RETRY_AFTER_MS;
     const again = await loadConferenceNav();
     eq('  the next read tries again', again.conferences.length, 1);
@@ -133,7 +153,7 @@ console.log('\n— and the reader is never made to wait —');
   // Opening the menu and pressing Try again both go through this, and must
   // not be answered out of the pause.
   invalidateConferenceNav();
-  reply = () => ({ ok: true, json: async () => CONFS });
+  reply = () => json(CONFS);
   const r = await loadConferenceNav();
   eq('  an explicit retry goes straight out', calls, 2);
   eq('  and gets the list', r.conferences.length, 1);

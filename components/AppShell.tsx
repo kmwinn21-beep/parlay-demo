@@ -20,6 +20,7 @@ import { PlanSelectionModal } from './PlanSelectionModal';
 import { useUpgradeModal } from '@/lib/UpgradeModalContext';
 import { UpgradeQueryTrigger } from './UpgradeQueryTrigger';
 import { ActiveConferenceProvider } from '@/components/ActiveConferenceContext';
+import { ChallengeNotice } from '@/components/ChallengeNotice';
 import { SuggestionPrompt } from '@/components/SuggestionPrompt';
 import { ActivityDetectedPrompt } from '@/components/ActivityDetectedPrompt';
 import { MeetingNotesDrawerProvider, useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
@@ -260,6 +261,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             itself with an event, so none of them has to know this exists. */}
         <SuggestionPrompt />
         <ActivityDetectedPrompt />
+        {/* Every read through lib/apiFetch announces a challenge here, so no
+            screen has to notice it was turned away at the edge. */}
+        <ChallengeNotice />
       </SidebarCollapseProvider>
       </ConferenceReviewModalsProvider>
       </ClosedDealDraftProvider>

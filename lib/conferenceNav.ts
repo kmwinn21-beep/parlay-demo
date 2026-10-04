@@ -1,5 +1,7 @@
 'use client';
 
+import { fetchList } from '@/lib/apiFetch';
+
 /**
  * The conference list behind the header's Go To menu, and the rules for when
  * it is re-read.
@@ -72,16 +74,10 @@ export function loadConferenceNav(): Promise<ConferenceLoad> {
     return Promise.resolve({ conferences: [], failed: true });
   }
 
-  _inFlight = fetch('/api/conferences?nav=1')
-    .then(r => {
-      // Thrown rather than turned into [], so it cannot be cached as an answer.
-      if (!r.ok) throw new Error(`conferences: ${r.status}`);
-      return r.json();
-    })
-    .then((data: unknown): ConferenceLoad => {
-      // A challenge page that happens to parse would not be an array either.
-      if (!Array.isArray(data)) throw new Error('conferences: not a list');
-      _cache = data as ConferenceOption[];
+  _inFlight = fetchList<ConferenceOption>('/api/conferences?nav=1')
+    .then(({ items, failed }): ConferenceLoad => {
+      if (failed) throw new Error('conferences: not a list');
+      _cache = items;
       _inFlight = null;
       _failedAt = null;
       return { conferences: _cache, failed: false };
