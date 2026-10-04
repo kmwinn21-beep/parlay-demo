@@ -253,10 +253,14 @@ console.log('\n— the counterpart has to reach the browser —');
   // reader saw undefined: the dropdown that offers both halves only ever
   // offered one, and no counterpart could be paired with its own colour.
   eq('/api/config selects inverse_value',
-    (route.match(/description, metadata, inverse_value FROM config_options/g) || []).length, 2);
-  eq('  on the single-category read and the all-categories read',
-    /WHERE category = \? ORDER BY[\s\S]{0,40}/.test(route)
-      && route.split('inverse_value FROM config_options').length - 1, 2);
+    /const COLUMNS = '[^']*\binverse_value\b/.test(route), true);
+  // Three reads now — one category, several categories, all of them — and all
+  // three share that one column list, so the column cannot be selected by two
+  // of them and forgotten by the third. The count is of reads using COLUMNS,
+  // not of a repeated string, because repeating the string is the thing the
+  // constant exists to stop.
+  eq('  on every read, by sharing one column list',
+    (route.match(/SELECT \$\{COLUMNS\} FROM config_options/g) || []).length, 3);
   eq('  and returns it',
     /inverse_value: r\.inverse_value \? String\(r\.inverse_value\) : null,/.test(route), true);
   // Without it the hook's map is empty and the feature is a no-op.
