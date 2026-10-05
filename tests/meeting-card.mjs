@@ -513,6 +513,20 @@ console.log('\n— the outcome menu stays on the screen —');
   eq('the margin is declared once', /const MENU_MARGIN = \d+;/.test(table), true);
 }
 
+console.log('\n— the Rep column is drawn like every other rep pill —');
+{
+  // Initials with nothing to say they are a person's was the one place in the
+  // app that did it that way. RepPills already took the flag; this column was
+  // simply not passing it.
+  eq('the Rep column asks for the glyph',
+    /case 'rep': return <td key="rep"[\s\S]{0,200}<RepPills[^/]*withIcon \/>/.test(table), true);
+  eq('  and the mobile card still has it',
+    /<RepPills scheduledBy=\{splitInternalIds\(m\)\.repIds\} userOptions=\{userOptions\} size="md" withIcon \/>/.test(table), true);
+  // Support is a different column with its own treatment; this is not it.
+  eq('  the support column is untouched',
+    /<OverlappingRepPills repIds=\{splitInternalIds\(m\)\.supportIds\}/.test(table), true);
+}
+
 console.log('\n— and on a phone it is a sheet instead —');
 {
   const from = table.indexOf('function OutcomeButton');

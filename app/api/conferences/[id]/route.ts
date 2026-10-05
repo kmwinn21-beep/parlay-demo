@@ -12,9 +12,16 @@ export async function GET(
   const db = await getDb(authResult?.accountId);
   try {
     const confResult = await db.execute({
-      sql: `SELECT c.*, co.value AS conference_strategy_type_display_name, co.action_key AS conference_strategy_type_key
+      /* The floor plan comes back as a URL rather than an id: every reader of
+         it — the kebab's Floor Plan button, the viewer — wants somewhere to
+         point an <img>, and none of them wants to learn where files live.
+         A LEFT JOIN, so a plan that was deleted from the Files tab reads as
+         no plan at all rather than a broken link. */
+      sql: `SELECT c.*, co.value AS conference_strategy_type_display_name, co.action_key AS conference_strategy_type_key,
+                   fp.file_name AS floor_plan_name, fp.storage_key AS floor_plan_key
             FROM conferences c
             LEFT JOIN config_options co ON co.id = c.conference_strategy_type_id
+            LEFT JOIN conference_plan_files fp ON fp.id = c.floor_plan_file_id
             WHERE c.id = ?`,
       args: [params.id],
     });
@@ -72,7 +79,15 @@ export async function GET(
 
     const attendees = attendeesResult.rows.map((r) => ({ ...r }));
 
-    return NextResponse.json({ ...conference, attendees }, {
+    return NextResponse.json({
+      ...conference,
+      // Built here rather than stored, so the bucket can move without a
+      // rewrite of every row that names a file in it.
+      floor_plan_url: conference.floor_plan_key
+        ? `${process.env.R2_PUBLIC_URL ?? ''}/${String(conference.floor_plan_key)}`
+        : null,
+      attendees,
+    }, {
       headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
     });
   } catch (error) {

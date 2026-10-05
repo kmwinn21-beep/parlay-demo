@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { formatMeetingTime, isBoothHours } from '@/lib/meetingTime';
+import { formatMeetingTime, hasNoStartTime } from '@/lib/meetingTime';
 import { loadAdditionalAttendees } from '@/lib/additionalAttendees';
 import type { CrmPromptContact, CrmPromptMeeting, CrmPromptNote, CrmPromptTask } from '@/lib/crmPrompt';
 
@@ -256,7 +256,7 @@ export async function GET(
         companyDomain: rootDomain(r.website != null ? String(r.website) : null),
         status: toStatus(r.outcome != null ? String(r.outcome) : '', r.action_key != null ? String(r.action_key) : null),
         date: r.meeting_date != null ? formatDay(String(r.meeting_date)) : '',
-        startTime: isBoothHours(time) ? '12:00 PM' : formatMeetingTime(time),
+        startTime: hasNoStartTime(time) ? '12:00 PM' : formatMeetingTime(time),
         notes: (attendeeNotes.get(Number(r.attendee_id)) ?? []).join('\n\n'),
         assignedRep: resolveReps(r.assigned_user),
       };

@@ -78,6 +78,8 @@ import { ConferenceEffectivenessModal } from '@/components/ConferenceEffectivene
 import { getCached } from '@/lib/configCache';
 import { AgendaTab } from '@/components/AgendaTab';
 import { UploadAgendaButton } from '@/components/UploadAgendaButton';
+import { FloorPlanUpload, type FloorPlanRef } from '@/components/FloorPlanUpload';
+import { FloorPlanViewer } from '@/components/FloorPlanViewer';
 import { ConferenceDetailsTargetsTab } from '@/components/ConferenceDetailsTargetsTab';
 import { ConferenceStageBadge } from '@/components/ConferenceStageBadge';
 import { computeConferenceStage, postConferenceDaysRemaining } from '@/lib/conference-stage';
@@ -371,6 +373,10 @@ export default function ConferenceDetailPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Conference>>({});
   const [editTerritoryIds, setEditTerritoryIds] = useState<Set<number>>(new Set());
+  /** The conference's floor plan, kept here so the edit form and the menu
+   *  button agree without a reload between them. */
+  const [floorPlan, setFloorPlan] = useState<FloorPlanRef>({ url: null, name: null });
+  const [floorPlanOpen, setFloorPlanOpen] = useState(false);
   const [territoryOptions, setTerritoryOptions] = useState<Array<{ id: number; name: string; color: string }>>([]);
   const [territoryDropdownOpen, setTerritoryDropdownOpen] = useState(false);
   const territoryDropdownRef = useRef<HTMLDivElement>(null);
@@ -919,6 +925,7 @@ export default function ConferenceDetailPage() {
         booth_hall: data.booth_hall ?? null,
         territory_scope: data.territory_scope ?? null,
       });
+      setFloorPlan({ url: data.floor_plan_url ?? null, name: data.floor_plan_name ?? null });
       try {
         const parsedTerritoryIds = data.territory_ids ? JSON.parse(data.territory_ids) : [];
         setEditTerritoryIds(new Set(Array.isArray(parsedTerritoryIds) ? parsedTerritoryIds.map(Number) : []));
@@ -3092,6 +3099,33 @@ export default function ConferenceDetailPage() {
                   <option value="regional">Regional</option>
                 </select>
               </div>
+              <div>
+                <label className="label">Start Date *</label>
+                <input
+                  type="date"
+                  value={editData.start_date || ''}
+                  onChange={(e) => {
+                    const newStart = e.target.value;
+                    setEditData((p) => {
+                      if (!newStart) return { ...p, start_date: newStart };
+                      const d = new Date(newStart + 'T00:00:00');
+                      d.setDate(d.getDate() + 3);
+                      const newEnd = d.toISOString().slice(0, 10);
+                      return { ...p, start_date: newStart, end_date: newEnd };
+                    });
+                  }}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">End Date *</label>
+                <input
+                  type="date"
+                  value={editData.end_date || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, end_date: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
               <div ref={territoryDropdownRef}>
                 <label className="label">Select Territories {editData.territory_scope === 'regional' ? '*' : ''}</label>
                 <div className="relative">
@@ -3139,33 +3173,6 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
               <div>
-                <label className="label">Start Date *</label>
-                <input
-                  type="date"
-                  value={editData.start_date || ''}
-                  onChange={(e) => {
-                    const newStart = e.target.value;
-                    setEditData((p) => {
-                      if (!newStart) return { ...p, start_date: newStart };
-                      const d = new Date(newStart + 'T00:00:00');
-                      d.setDate(d.getDate() + 3);
-                      const newEnd = d.toISOString().slice(0, 10);
-                      return { ...p, start_date: newStart, end_date: newEnd };
-                    });
-                  }}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="label">End Date *</label>
-                <input
-                  type="date"
-                  value={editData.end_date || ''}
-                  onChange={(e) => setEditData((p) => ({ ...p, end_date: e.target.value }))}
-                  className="input-field"
-                />
-              </div>
-              <div className="md:col-span-2">
                 <label className="label">Conference Strategy</label>
                 <select
                   value={editData.conference_strategy_type_id ? String(editData.conference_strategy_type_id) : ''}
@@ -3375,7 +3382,10 @@ export default function ConferenceDetailPage() {
                 )}
               </div>
 
-              <div className="md:col-span-2">
+              {/* The agenda and the floor plan share a row: both are a document
+                  somebody uploads once for the whole show, and they were the
+                  two things a rep went looking for in different places. */}
+              <div>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <label className="label">Conference Agenda <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -3406,6 +3416,17 @@ export default function ConferenceDetailPage() {
                     );
                   })()}
                 </div>
+              </div>
+
+              <div>
+                <label className="label">Floor Plan <span className="text-gray-400 font-normal">(optional)</span></label>
+                <p className="text-xs text-gray-500 mb-2">Shown under Floor Plan in the conference menu, and filed with the conference&rsquo;s documents.</p>
+                <FloorPlanUpload
+                  conferenceId={Number(id)}
+                  name={floorPlan.name}
+                  url={floorPlan.url}
+                  onChange={setFloorPlan}
+                />
               </div>
 
               <div className="md:col-span-2" ref={internalDropdownRef}>
@@ -3595,6 +3616,23 @@ export default function ConferenceDetailPage() {
                             not only the reps listed as internal attendees —
                             reading what happened at a conference is not the
                             same as having been sent to it. */}
+                        {/* Above Field Report, and dead when there is nothing
+                            to show: a menu row that opens an empty window is
+                            worse than one you can see is unavailable. The
+                            title says why. */}
+                        <button
+                          type="button"
+                          disabled={!floorPlan.url}
+                          title={floorPlan.url ? undefined : 'No floor plan uploaded for this conference yet'}
+                          onClick={() => { setFloorPlanOpen(true); setReportMenuOpen(false); }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors disabled:text-gray-300 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                        >
+                          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 10h16M10 4v16" />
+                          </svg>
+                          Floor Plan
+                        </button>
                         <button
                           type="button"
                           onClick={() => { setShowDebrief(true); setReportMenuOpen(false); }}
@@ -5450,6 +5488,14 @@ export default function ConferenceDetailPage() {
 
       {timelineAttendee && (
         <ConferenceTimelineDialog attendee={timelineAttendee} onClose={() => setTimelineAttendee(null)} />
+      )}
+
+      {floorPlanOpen && floorPlan.url && (
+        <FloorPlanViewer
+          url={floorPlan.url}
+          name={floorPlan.name}
+          onClose={() => setFloorPlanOpen(false)}
+        />
       )}
 
       <MyDebriefDrawer
