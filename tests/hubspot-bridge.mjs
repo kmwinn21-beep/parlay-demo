@@ -275,9 +275,28 @@ console.log('\n— the migration is appended —');
    * skips the inserted rows and re-runs the ones that took their place. The
    * new columns would simply never exist.
    */
-  const tail = mig.slice(mig.lastIndexOf('ALTER TABLE attendees ADD COLUMN hubspot_contact_id'));
-  eq('the bridge columns are at the end of the list',
-    /^[\s\S]*ALTER TABLE conferences ADD COLUMN event_code TEXT`,\s*\n\];\s*$/.test(tail), true);
+  /*
+   * Checked as "nothing was inserted before them", not as "they are last".
+   *
+   * They WERE last when this was written, and asserting that made the test
+   * fail the next time anybody appended a migration correctly — which is the
+   * opposite of what it is for. The invariant is that the list only grows at
+   * the end, so the guard is a hash of everything up to and including these
+   * three: appending leaves it untouched, inserting anywhere changes it.
+   *
+   * If this fails, do not update the hash until you have checked that a
+   * migration was not moved, reworded or removed. Only ever adding to the end
+   * is what keeps databases that are part-way through the list able to catch
+   * up.
+   */
+  const { createHash } = await import('node:crypto');
+  const { migrations } = await import('@/lib/db-migrations');
+  const PREFIX_COUNT = 732;
+  const PREFIX_SHA = '0a0e44ff23a657fd3ce940e1c65c62fd';
+  eq('the list has not shrunk', migrations.length >= PREFIX_COUNT, true);
+  eq('  and nothing before the bridge columns has moved',
+    createHash('sha256').update(migrations.slice(0, PREFIX_COUNT).join('\u0000')).digest('hex').slice(0, 32),
+    PREFIX_SHA);
   for (const col of [
     'ALTER TABLE attendees ADD COLUMN hubspot_contact_id TEXT',
     'ALTER TABLE companies ADD COLUMN hubspot_company_id TEXT',

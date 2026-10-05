@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { isBoothHours, BOOTH_HOURS_LABEL } from '@/lib/meetingTime';
+import { hasNoStartTime, unscheduledLabel } from '@/lib/meetingTime';
 import { AgendaDescription } from '@/components/AgendaDescription';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
@@ -149,7 +149,8 @@ interface DisplayItem {
 
 function formatTime12h(time: string | null): string {
   if (!time) return '';
-  if (isBoothHours(time)) return BOOTH_HOURS_LABEL;
+  const unscheduled = unscheduledLabel(time);
+  if (unscheduled) return unscheduled;
   const t = time.trim().toUpperCase();
   if (t.includes('AM') || t.includes('PM')) return t; // already 12h
   const parts = time.trim().split(':').map(Number);
@@ -163,7 +164,7 @@ function formatTime12h(time: string | null): string {
 function parseMinutes(time: string | null): number {
   if (!time) return 9999;
   // Booth-hours meetings have no slot — park them at the end of the day.
-  if (isBoothHours(time)) return 9998;
+  if (hasNoStartTime(time)) return 9998;
   const t = time.trim().toUpperCase();
   const pm = t.includes('PM'); const am = t.includes('AM');
   const clean = t.replace(/[AP]M/, '').trim();

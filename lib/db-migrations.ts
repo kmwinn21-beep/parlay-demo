@@ -2838,4 +2838,12 @@ export const migrations: string[] = [
      US`. It arrives in the file in and is sent back unchanged on export, so
      both systems name the same conference the same way. */
   `ALTER TABLE conferences ADD COLUMN event_code TEXT`,
+
+  /* Which uploaded file is this conference's floor plan.
+     A reference into conference_plan_files rather than a URL of its own, so
+     the plan is one of the conference's files — it appears in the Logistics
+     drawer's Files tab like any other, and deleting it there leaves this
+     pointing at nothing, which is what greys the Floor Plan button out again.
+     A copied URL would have outlived the file it named. */
+  `ALTER TABLE conferences ADD COLUMN floor_plan_file_id INTEGER`,
 ];

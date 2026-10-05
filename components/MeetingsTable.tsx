@@ -2006,7 +2006,11 @@ export function MeetingsTable({
               </span>
             ))}
           </td>;
-          case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} /></td>;
+          // withIcon, as every other rep pill in the app is drawn — the
+          // mobile card above, the company table, the relationship map. This
+          // column was the one place initials appeared with nothing to say
+          // they were a person's.
+          case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} withIcon /></td>;
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">

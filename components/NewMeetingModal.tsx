@@ -12,7 +12,7 @@ import { parseRepIds, type UserOption } from '@/lib/useUserOptions';
 import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
-import { MEETING_TIME_OPTIONS, formatMeetingTime, timeToMinutes, isBoothHours } from '@/lib/meetingTime';
+import { MEETING_TIME_OPTIONS, formatMeetingTime, timeToMinutes, hasNoStartTime } from '@/lib/meetingTime';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
@@ -723,9 +723,9 @@ export function NewMeetingModal({
 
         // Offer to draft a calendar invite instead of closing immediately — the modal stays
         // mounted (isOpen is still true) and swaps to the SendCalendarInvitePrompt below.
-        // Booth-hours bookings have no start time, so there is no invite to build.
+        // Booth-hours and TBD bookings have no start time, so there is no invite to build.
         // Nothing to invite anyone to when the meeting has already happened.
-        if (!isLog && contact && !isBoothHours(meetingTime)) {
+        if (!isLog && contact && !hasNoStartTime(meetingTime)) {
           const attendeeFirst = contact.first_name || 'Attendee';
           const repFirst = user?.firstName || 'Rep';
           setInviteContext({
