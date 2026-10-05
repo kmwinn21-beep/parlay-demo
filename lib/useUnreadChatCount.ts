@@ -1,40 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { startPolling, stopPolling } from '@/lib/pollingManager';
+import { useChatPanel } from '@/components/ChatPanelContext';
 
+/**
+ * Unread chat messages, for the floating nav's badge.
+ *
+ * Read from the chat panel's own state rather than fetched.
+ *
+ * This hook used to poll /api/chat/conversations and /api/chat/groups every
+ * fifteen seconds to add up a number — the same two endpoints, on the same
+ * schedule, that ChatPanelProvider was already polling, and whose totals it
+ * already exposes as totalUnread. Every chat request in the production logs
+ * was therefore being made twice: 168 calls to each endpoint over six hours
+ * where 84 would have done.
+ *
+ * Its one caller sits inside that provider, so there was never anything to
+ * fetch here.
+ */
 export function useUnreadChatCount(): number {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchCount() {
-      try {
-        const [dmRes, groupRes] = await Promise.all([
-          fetch('/api/chat/conversations', { credentials: 'include' }),
-          fetch('/api/chat/groups',         { credentials: 'include' }),
-        ]);
-        if (cancelled) return;
-        let total = 0;
-        if (dmRes.ok) {
-          const dmData = await dmRes.json() as { unreadCount: number }[];
-          total += Array.isArray(dmData) ? dmData.reduce((s, c) => s + (c.unreadCount ?? 0), 0) : 0;
-        }
-        if (groupRes.ok) {
-          const groupData = await groupRes.json() as { unreadCount: number }[];
-          total += Array.isArray(groupData) ? groupData.reduce((s, g) => s + (g.unreadCount ?? 0), 0) : 0;
-        }
-        if (!cancelled) setCount(total);
-      } catch {
-        // non-fatal
-      }
-    }
-
-    fetchCount();
-    startPolling('chat-unread', fetchCount, 15_000, 30_000);
-    return () => { cancelled = true; stopPolling('chat-unread'); };
-  }, []);
-
-  return count;
+  return useChatPanel().totalUnread;
 }
