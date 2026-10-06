@@ -59,6 +59,24 @@ console.log('\n— the drawer stops at the header —');
     /drawer-mobile-responsive/.test(drawer), false);
 }
 
+console.log('\n— and so does the attendee photo card —');
+{
+  const photo = strip('components/AttendeePhoto.tsx');
+  /*
+   * The same fault, one component over. It opened 40px from the top of the
+   * viewport — above the header on every phone, and behind the clock on one
+   * with a notch, which put the attendee's name under the status bar.
+   *
+   * Measured at 390x844: the card started at 40px before and starts at 85px
+   * now, which is the header's bottom edge.
+   */
+  eq('the card starts at the header on a phone',
+    /pt-\[var\(--mobile-header-h\)\]/.test(photo), true);
+  // From sm it is a centred modal and the padding goes back to normal.
+  eq('  and is a centred modal from sm', /sm:pt-4/.test(photo), true);
+  eq('  with the old nudge gone', /mt-6 sm:mt-0/.test(photo), false);
+}
+
 console.log('\n— and the variable it anchors to is the shared one —');
 {
   const css = readFileSync('app/globals.css', 'utf8');
