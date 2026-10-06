@@ -111,13 +111,19 @@ export function ConferenceTabStrip({ tabs, activeKey, onPick }: {
   if (tabs.length === 0) return null;
 
   return (
-    <div className="lg:hidden">
+    /* The card the dashboard's Quick Views wears, with the padding a
+       scroller needs: the sides come off so the tiles run to the card's own
+       edge and scroll under it, rather than stopping short of a 24px gutter
+       and leaving the row looking cut off. Everything else about the card —
+       the white, the radius, the border, the shadow — stays with `.card`, so
+       this one does not drift from the panels around it. */
+    <div className="lg:hidden card !px-0 !py-3">
       {/* scrollbar-hide, because the dots below are the indicator — two of
           them saying the same thing in different units is worse than one. */}
       <div
         ref={rowRef}
         onScroll={measure}
-        className="flex gap-1 overflow-x-auto scrollbar-hide px-1"
+        className="flex gap-1 overflow-x-auto scrollbar-hide px-3"
       >
         {tabs.map(tab => {
           const style = TILE_STYLE[tab.key] ?? FALLBACK;

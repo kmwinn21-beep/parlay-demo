@@ -110,9 +110,26 @@ console.log('\n— the tiles —');
   eq('the row hides its scrollbar', /overflow-x-auto scrollbar-hide/.test(strip_), true);
   eq('  and offers no chevrons', /Scroll (left|right)/.test(strip_), false);
 
+  /*
+   * In a card, like the dashboard's Quick Views.
+   *
+   * It takes `.card` rather than copying the white, the radius, the border
+   * and the shadow, so it cannot drift from the panels around it — measured
+   * against the conference card above it: same background, same 12px radius,
+   * same 1px gray-100 border, same 358px width.
+   *
+   * Only the padding differs. A scroller inside a 24px gutter stops short of
+   * the card's own edge and reads as cut off, so the sides come off and the
+   * row carries its own inset instead.
+   */
+  eq('the strip sits in a card', /lg:hidden card !px-0 !py-3/.test(strip_), true);
+  eq('  with the row holding the inset', /overflow-x-auto scrollbar-hide px-3/.test(strip_), true);
+
   // An account can add a tab this file has never heard of.
   eq('an unknown tab still gets a tile', /const FALLBACK = \{/.test(strip_), true);
-  eq('  and the strip is mobile only', /<div className="lg:hidden">/.test(strip_), true);
+  // lg:hidden on the card itself, so the whole section goes on a pointer —
+  // where the tab row is the row of words it always was.
+  eq('  and the strip is mobile only', /lg:hidden card/.test(strip_), true);
 }
 
 console.log('\n— and it is what the page shows at rest —');
