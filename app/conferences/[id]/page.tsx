@@ -14,6 +14,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
+import { ConferenceTabStrip } from '@/components/ConferenceTabStrip';
 import { nextRevealed, dragAtTop } from '@/lib/pullToReveal';
 import { KebabMenu } from '@/components/KebabMenu';
 import { RowActionsKebab } from '@/components/RowActionsKebab';
@@ -930,24 +931,30 @@ export default function ConferenceDetailPage() {
    * reads as the same row having moved. Two copies of the markup would be two
    * rows to keep in step, which is the thing that actually drifts.
    */
+  /**
+   * A tab's name and its count.
+   *
+   * Shared by the drawer's row and the tile strip below the card, so a count
+   * can never show in one and not the other.
+   *
+   * Defined above the guard that narrows `conference`, so it can be asked for
+   * before the conference has loaded: no count until there is one to show,
+   * rather than a confident "(0)".
+   */
+  const tabLabel = (tabKey: ConferenceTabKey) => {
+    const baseLabel = conferenceTabConfig.getLabel(tabKey);
+    if (tabKey === 'attendees' && conference) return `${baseLabel} (${conference.attendees.length})`;
+    if (tabKey === 'meetings' && confMeetings.length > 0) return `${baseLabel} (${confMeetings.length})`;
+    if (tabKey === 'follow-ups' && confFollowUps.length > 0) return `${baseLabel} (${confFollowUps.length})`;
+    if (tabKey === 'social' && confSocialEvents.length > 0) return `${baseLabel} (${confSocialEvents.length})`;
+    if (tabKey === 'notes' && confNotes.length > 0) return `${baseLabel} (${confNotes.length})`;
+    return baseLabel;
+  };
+
   const tabNav = (
           <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
           {visibleConferenceTabs.map((tabKey) => {
-            const baseLabel = conferenceTabConfig.getLabel(tabKey);
-            // The row is defined above the guard that narrows `conference`,
-            // so it can be built before the conference has loaded. No count
-            // until there is one to show, rather than a confident "(0)".
-            const labelWithCount = tabKey === 'attendees' && conference
-              ? `${baseLabel} (${conference.attendees.length})`
-              : tabKey === 'meetings' && confMeetings.length > 0
-                ? `${baseLabel} (${confMeetings.length})`
-                : tabKey === 'follow-ups' && confFollowUps.length > 0
-                  ? `${baseLabel} (${confFollowUps.length})`
-                  : tabKey === 'social' && confSocialEvents.length > 0
-                    ? `${baseLabel} (${confSocialEvents.length})`
-                    : tabKey === 'notes' && confNotes.length > 0
-                      ? `${baseLabel} (${confNotes.length})`
-                      : baseLabel;
+            const labelWithCount = tabLabel(tabKey);
 
             return (
               <button
@@ -4139,19 +4146,26 @@ export default function ConferenceDetailPage() {
           `contents` from sm: the wrapper disappears from layout entirely and
           the tab row and panels lay out exactly as they did, so nothing about
           the desktop page changes. */}
-      {/* The resting row, on a phone, while the drawer is down.
+      {/* At rest on a phone the tabs are a strip of tiles, not a row of
+          words. Eleven tabs show four at a time as text and give no sign that
+          there are seven more; as tiles each one is a glyph you recognise
+          rather than a word you read, and the dots underneath say how much
+          more there is.
 
           Hidden rather than removed the instant the drawer comes up, so what
-          the reader sees is one row travelling to the header rather than one
-          disappearing and another appearing. It is the same `tabNav` either
-          way — the markup is defined once. */}
+          the reader sees is the strip giving way to the drawer's own row
+          rather than two things fighting over the space. */}
       {tabDrawerOpen !== null && (
         <div
           aria-hidden={tabDrawerOpen}
-          className={`border-b border-gray-200 overflow-x-auto bg-gray-50 px-3 transition-opacity duration-150 ${
+          className={`transition-opacity duration-150 ${
             tabDrawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
         >
-          {tabNav}
+          <ConferenceTabStrip
+            tabs={visibleConferenceTabs.map(tabKey => ({ key: tabKey, label: tabLabel(tabKey) }))}
+            activeKey={activeTab}
+            onPick={key => handleTabChange(key as ConferenceTabKey)}
+          />
         </div>
       )}
 

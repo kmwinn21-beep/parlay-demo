@@ -85,19 +85,23 @@ console.log('\n— one tab row, in two places —');
    * step, which is the thing that actually drifts.
    */
   eq('the buttons are defined once', (page.match(/const tabNav = \(/g) ?? []).length, 1);
-  /* Three render sites, never more than two in the DOM: the desktop row OR
-     the phone's pair — the resting one and the drawer's. The desktop row is
-     its own site because it keeps the sticky positioning the drawer's does
-     not need, and sticky can only travel inside its own parent. */
-  eq('  and rendered from three places', (page.match(/\{tabNav\}/g) ?? []).length, 3);
+  /* Two render sites, one of them live at a time: the desktop row OR the
+     drawer's. They are separate sites because the desktop row keeps sticky
+     positioning the drawer's does not need, and sticky can only travel
+     inside its own parent.
+
+     At rest on a phone there is no row of words at all now — the tabs are
+     the tile strip below the card. See conference-tab-strip.mjs. */
+  eq('  and rendered from two places', (page.match(/\{tabNav\}/g) ?? []).length, 2);
 
   // Hidden rather than unmounted, so the handoff is a fade and not a jump.
   eq('the resting row fades as the drawer rises',
     /tabDrawerOpen \? 'opacity-0 pointer-events-none' : 'opacity-100'/.test(page), true);
   eq('  and is hidden from a screen reader with it',
     /aria-hidden=\{tabDrawerOpen\}/.test(page), true);
-  // Both rows carry the same inset, or the tabs shift sideways on the handoff.
-  eq('  both rows are inset the same', (page.match(/overflow-x-auto[^`"]*px-3/g) ?? []).length >= 1, true);
+  // What fades is the tile strip, which is what the phone shows at rest.
+  eq('  and what fades is the strip',
+    /tabDrawerOpen \? 'opacity-0 pointer-events-none'[\s\S]{0,200}<ConferenceTabStrip/.test(page), true);
 }
 
 console.log('\n— opening and closing it —');
