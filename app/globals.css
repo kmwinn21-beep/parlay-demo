@@ -450,6 +450,26 @@ h1, h2, h3 {
 }
 
 /**
+ * A phone sheet that SPANS the space below the header, rather than capping at it.
+ *
+ * The cap above lands the top edge on the header only when the content is tall
+ * enough to reach it. A guest list with nothing in it is not: the sheet sized
+ * itself to "No attendees to show" and floated partway down the screen, while
+ * its backdrop covered everything. Setting the height makes the top edge the
+ * same whatever is inside.
+ *
+ * Below sm only. From 640px these are right-hand drawers or centred dialogs
+ * with their own sm: heights, which this must not override — hence a class
+ * applied deliberately rather than a rule over every sheet.
+ */
+@media (max-width: 639px) {
+  .sheet-below-header {
+    height: calc(100vh - var(--mobile-header-h));
+    height: calc(100dvh - var(--mobile-header-h));
+  }
+}
+
+/**
  * A bulk action bar follows the list it acts on.
  *
  * Selecting rows at the bottom of a 2,645-attendee or 1,101-company list meant
