@@ -194,9 +194,11 @@ export function OverlappingRepPills({
  * same way is the point — a reader who has learned to tap the support badges
  * should not have to learn these separately.
  */
-export function OverlappingStatusBadges({ status, max = 4, emptyLabel = '\u2014' }: {
+export function OverlappingStatusBadges({ status, size = 'sm', max = 4, emptyLabel = '\u2014' }: {
   /** companies.status, comma-separated. */
   status: string | null | undefined;
+  /** Passed straight through, so a caller can match the stack beside it. */
+  size?: 'sm' | 'xs';
   max?: number;
   emptyLabel?: string | null;
 }) {
@@ -216,6 +218,7 @@ export function OverlappingStatusBadges({ status, max = 4, emptyLabel = '\u2014'
         label: value,
         badgeClass: getPreset(colorMaps.status?.[value]).badgeClass,
       }))}
+      size={size}
       max={max}
       emptyLabel={emptyLabel}
     />

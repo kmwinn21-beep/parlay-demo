@@ -2063,17 +2063,23 @@ export function MeetingsTable({
              * card carries, in the same place relative to the same company, so
              * a reader moving between the two is reading one thing twice rather
              * than learning it twice. A letter in a circle, spreading into the
-             * full words when tapped.
+             * full words when clicked.
              *
-             * inline-flex, so the block is only as wide as the eyebrow and the
-             * badges centre under the word rather than under the column. Absent
-             * entirely when there is nothing to show: an eyebrow over an empty
-             * space is worse than no eyebrow.
+             * On one line with its label rather than stacked under an eyebrow:
+             * measured at 1200px, the stacked version made the row 81px tall
+             * against 57px for this, which on a table of thirty meetings is
+             * most of a screen. INLINE_LABEL is the style the card's own
+             * "Rep:" and "Mtg. Status:" already use.
+             *
+             * xs, so the badges match the Support stack in the same row — one
+             * size reading as one kind of thing across the row. Absent
+             * entirely when there is nothing to show: a label with no value
+             * after it is worse than no label.
              */}
             {accountStatuses(m).length > 0 && (
-              <div className="mt-1 inline-flex flex-col items-center">
-                <p className={EYEBROW}>Acct Status</p>
-                <OverlappingStatusBadges status={m.company_status} emptyLabel={null} />
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className={INLINE_LABEL}>Acct Status:</span>
+                <OverlappingStatusBadges status={m.company_status} size="xs" emptyLabel={null} />
               </div>
             )}
           </td> : null;

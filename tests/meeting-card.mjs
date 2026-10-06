@@ -667,26 +667,39 @@ console.log('\n— and the table says it too, under the company name —');
      the slice came out empty and a whole block passed reading nothing. */
   const cell = table.slice(cellStart, table.indexOf("case 'datetime':", cellStart));
   eq('there is a company cell to read', cellStart !== -1 && cell.length > 200, true);
-  eq('the company cell carries the eyebrow', cell.includes('>Acct Status</p>'), true);
+  eq('the company cell carries the label', cell.includes('Acct Status:</span>'), true);
   eq('  under the company name',
-    cell.indexOf('companyNameNode(m,') < cell.indexOf('>Acct Status</p>'), true);
+    cell.indexOf('companyNameNode(m,') < cell.indexOf('Acct Status:</span>'), true);
   eq('  drawn as the same overlapping stack',
-    /<OverlappingStatusBadges status=\{m\.company_status\} emptyLabel=\{null\} \/>/.test(cell), true);
+    /<OverlappingStatusBadges status=\{m\.company_status\} size="xs" emptyLabel=\{null\} \/>/.test(cell), true);
 
   /*
-   * Centred under the eyebrow, not under the column.
+   * On one line with its label, not stacked under an eyebrow.
    *
-   * inline-flex is what makes that true: the block shrinks to the eyebrow's
-   * width, so centring inside it puts the badges under the word. A plain flex
-   * would stretch to the cell and centre them in a column that is as wide as
-   * the longest company name. Measured in Chromium at 1200px, four rows
-   * carrying one, two, three and five statuses: the badge stack's centre
-   * matched the eyebrow's to 0.0px in every one.
+   * Measured in Chromium at 1200px: the stacked version made the row 81px
+   * tall against 57px for this, which on a table of thirty meetings is most
+   * of a screen. The label is the style the card's own "Rep:" and "Mtg.
+   * Status:" already use, so there is one way a label inside a cell looks.
    */
-  eq('  centred under the eyebrow', /className="mt-1 inline-flex flex-col items-center"/.test(cell), true);
+  eq('  on one line with the badges', /className="mt-1 flex items-center gap-1\.5"/.test(cell), true);
+  eq('  and no eyebrow left over', /EYEBROW\}>Acct Status</.test(cell), false);
+  eq('  labelled the way the card labels a field',
+    /<span className=\{INLINE_LABEL\}>Acct Status:<\/span>/.test(cell), true);
 
-  // An eyebrow over an empty space is worse than no eyebrow — and the test
-  // fixture's one company with no status rendered no eyebrow at all.
+  /*
+   * The same size as the Support stack in the same row, so one size reads as
+   * one kind of thing across the row. Measured: 20x20 for both, against the
+   * 24x24 the status badges were.
+   */
+  const pills_ = strip('components/OverlappingRepPills.tsx');
+  eq('  at the Support stack’s size', /size="xs"/.test(cell), true);
+  eq('    which the status stack now takes', /size = 'sm', max = 4, emptyLabel/.test(pills_), true);
+  eq('    and passes straight through', /items=\{values\.map[\s\S]{0,400}size=\{size\}/.test(pills_), true);
+  eq('    the same prop the Support column passes',
+    /<OverlappingRepPills repIds=\{splitInternalIds\(m\)\.supportIds\} userOptions=\{userOptions\} size="xs"/.test(table), true);
+
+  // A label with no value after it is worse than no label — and the probe's
+  // one company with no status rendered nothing at all.
   eq('  and absent when the company has no status',
     /\{accountStatuses\(m\)\.length > 0 && \(/.test(cell), true);
 
