@@ -139,13 +139,18 @@ export function ConferenceTabStrip({ tabs, activeKey, onPick }: {
         bottom was shaved off. Measured at 390px: the clip box runs 49.5-141.5
         and the ring paints 54.5-136.5, so there is 5px to spare either side.
 
+        The gap is 8px rather than 4: each tile is a solid block of colour now
+        that the tint fills it, so at 4px two tiles read as one two-tone shape
+        and the badge sat close enough to its neighbour to look as if it
+        belonged to it.
+
         scrollbar-hide, because the dots below are the indicator — two of them
         saying the same thing in different units is worse than one.
       */}
       <div
         ref={rowRef}
         onScroll={measure}
-        className="flex gap-1 overflow-x-auto scrollbar-hide px-3 pt-2 pb-2"
+        className="flex gap-2 overflow-x-auto scrollbar-hide px-3 pt-2 pb-2"
       >
         {tabs.map(tab => {
           const style = TILE_STYLE[tab.key] ?? FALLBACK;

@@ -123,6 +123,11 @@ console.log('\n— the tiles —');
   eq('the scroller leaves room for the ring it would otherwise clip',
     /overflow-x-auto scrollbar-hide px-3 pt-2 pb-2/.test(strip_), true);
 
+  // Now that the tint fills the tile, 4px between two solid blocks of colour
+  // read as one two-tone shape, and a badge sat close enough to its neighbour
+  // to look as though it belonged to it.
+  eq('  and the tiles are set 8px apart, not 4', /flex gap-2 overflow-x-auto/.test(strip_), true);
+
   /*
    * The count is a badge in the tab's own colour, not a parenthesis.
    *
