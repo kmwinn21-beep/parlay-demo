@@ -66,11 +66,15 @@ console.log('\n— every value is under a word saying what it is —');
   const labels = [...card.matchAll(/<p className=\{EYEBROW\}>([^<]+)<\/p>/g)].map(m => m[1]);
   eq('the first row answers when and where',
     labels.slice(0, 2), ['When', 'Where']);
-  // Type leads, under When: the two read as one sentence about the meeting,
-  // and a reader going down the left edge gets both without crossing the card.
-  // The unit count is labelled with whatever the account calls a unit.
-  eq('  and the second, what it was and what it is worth',
-    labels.slice(2), ['Type', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
+  /*
+   * Status leads, then Type, under When. The company's status is the frame
+   * for everything after it — what this company IS, before what the meeting
+   * was — and a reader going down the left edge gets both without crossing
+   * the card. The unit count is labelled with whatever the account calls a
+   * unit.
+   */
+  eq('  and the second, what the company is and what the meeting was worth',
+    labels.slice(2), ['Status', 'Type', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
   /*
    * The labels are read out of the source, so a block switched off still
    * shows its label here. Each one is gated on the thing it displays, and
@@ -131,7 +135,7 @@ console.log('\n— every value is under a word saying what it is —');
   eq('each label and its value is a flex column',
     /const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';/.test(table), true);
   const fields = (card.match(/CARD_FIELD/g) ?? []).length;
-  eq('  worn by every field on both rows', fields, 8);
+  eq('  worn by every field on both rows', fields, 9);
   eq('  with none left as a plain block',
     /<div className="flex-shrink-0">\s*\n\s*<p className=\{EYEBROW\}>/.test(card), false);
 
@@ -284,10 +288,13 @@ console.log('\n— who owns it and how it went, under a rule —');
   // line, at opposite ends, and a label stacked above each would read as the
   // start of another row of facts.
   eq('  Rep is labelled beside its pill', /<span className=\{INLINE_LABEL\}>Rep:<\/span>/.test(tail), true);
-  eq('  and Status beside its own', /<span className=\{INLINE_LABEL\}>Status:<\/span>/.test(tail), true);
+  // "Mtg. Status", not "Status": the row above carries the COMPANY's status
+  // now, and two things called Status on one card is one too many.
+  eq('  and the meeting\u2019s status beside its own',
+    /<span className=\{INLINE_LABEL\}>Mtg\. Status:<\/span>/.test(tail), true);
   eq('  with neither taking an eyebrow', /EYEBROW/.test(tail), false);
-  eq('  Rep at the left and Status at the right',
-    tail.indexOf('Rep:') < tail.indexOf('Status:'), true);
+  eq('  Rep at the left and the meeting\u2019s status at the right',
+    tail.indexOf('Rep:') < tail.indexOf('Mtg. Status:'), true);
 
   // The two ends of that line read as a pair, so they are the same height,
   // text and weight — which is what the rep pill's 'md' size is for.
@@ -511,6 +518,62 @@ console.log('\n— the outcome menu stays on the screen —');
   // A menu wider than the screen has nowhere to be clamped to.
   eq('  never wider than the screen', /max-w-\[calc\(100vw-1rem\)\]/.test(btn), true);
   eq('the margin is declared once', /const MENU_MARGIN = \d+;/.test(table), true);
+}
+
+console.log('\n— the card says whose status is whose —');
+{
+  // "Status" alone sat opposite the outcome pill, which is the MEETING's
+  // status, while the row above now carries the COMPANY's.
+  eq('the outcome pill is labelled Mtg. Status',
+    /<span className=\{INLINE_LABEL\}>Mtg\. Status:<\/span>/.test(table), true);
+  eq('  and not just Status', /<span className=\{INLINE_LABEL\}>Status:<\/span>/.test(table), false);
+}
+
+console.log('\n— the company status leads the card\u2019s badge row —');
+{
+  const row = table.slice(table.indexOf('<ScrollRow className="mt-3"'), table.indexOf('<p className={EYEBROW}>Support</p>'));
+  eq('Status comes before Type', row.indexOf('>Status</p>') < row.indexOf('>Type</p>'), true);
+  eq('  drawn as the overlapping stack',
+    /<OverlappingStatusBadges status=\{m\.company_status\}/.test(row), true);
+
+  // An eyebrow over an empty space is worse than no eyebrow, so the cell is
+  // left out when there is nothing to show.
+  eq('  and left out when there is none', /\{mobileStatuses\(m\)\.length > 0 && \(/.test(row), true);
+  eq('  which the row itself also tests for',
+    /\{\(mobileStatuses\(m\)\.length > 0 \|\| m\.meeting_type/.test(table), true);
+
+  // 'Unknown' is the column's default rather than anybody's choice.
+  eq('Unknown does not count as a status',
+    /\.filter\(v => v && v !== 'Unknown'\)/.test(table), true);
+
+  // It has to reach the card to be drawn.
+  eq('the meetings API sends it',
+    /co\.status AS company_status/.test(strip('app/api/meetings/route.ts')), true);
+  eq('  and the row carries it', /company_status\?: string \| null;/.test(table), true);
+}
+
+console.log('\n— and both stacks are the same stack —');
+{
+  const pills = strip('components/OverlappingRepPills.tsx');
+  /*
+   * The overlap, the spread, the five-second fold-back and the chevrons live
+   * in one component. A second copy for statuses is how two stacks that are
+   * supposed to behave identically stop doing so.
+   */
+  eq('the behaviour is written once', /export function OverlappingBadges\(/.test(pills), true);
+  eq('  reps go through it', /export function OverlappingRepPills\([\s\S]{0,900}<OverlappingBadges/.test(pills), true);
+  eq('  statuses too', /export function OverlappingStatusBadges\([\s\S]{0,900}<OverlappingBadges/.test(pills), true);
+  // One expand timer, one set of overlap classes.
+  eq('  with one timer between them', (pills.match(/EXPAND_MS\)/g) ?? []).length, 2);
+  eq('  and one overlap rule', (pills.match(/-ml-1\.5/g) ?? []).length, 2);
+
+  // A letter per circle for a status, initials for a rep — the only thing
+  // that differs between them.
+  eq('a status collapses to its first letter',
+    /short: value\.charAt\(0\)\.toUpperCase\(\)/.test(pills), true);
+  eq('  and a rep to their initials', /short: getRepInitials\(name\)/.test(pills), true);
+  eq('  and each expands to the full text',
+    /\{expanded \? item\.label : item\.short\}/.test(pills), true);
 }
 
 console.log('\n— the Rep column is drawn like every other rep pill —');

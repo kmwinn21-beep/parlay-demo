@@ -12,7 +12,7 @@ import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
-import { OverlappingRepPills } from '@/components/OverlappingRepPills';
+import { OverlappingRepPills, OverlappingStatusBadges } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
@@ -62,6 +62,8 @@ export interface Meeting {
   company_id: number | null;
   company_name: string | null;
   company_wse: number | null;
+  /** companies.status, comma-separated. Drawn as the card's Status stack. */
+  company_status?: string | null;
   conference_name: string;
   has_notes?: boolean;
   /** Notes logged against this attendee for this meeting's conference. */
@@ -243,7 +245,7 @@ const ROW_PILL = `inline-flex items-center ${ROW_PILL_H} px-2 rounded-xl border 
  */
 const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';
 
-/** "Rep:" and "Status:", beside the pill rather than stacked above it. */
+/** "Rep:" and "Mtg. Status:", beside the pill rather than stacked above it. */
 const INLINE_LABEL = 'text-[10px] font-medium text-gray-400 flex-shrink-0';
 
 /**
@@ -1565,6 +1567,17 @@ export function MeetingsTable({
   const [peopleTip, setPeopleTip] = useState<{ id: number; pos: TooltipPos } | null>(null);
   const nameCellRefs = useRef<Record<number, HTMLElement | null>>({});
 
+  /**
+   * The company's statuses, as the card draws them.
+   *
+   * Read here as well as inside the badge stack so the cell can be left out
+   * entirely when there is nothing to show — an eyebrow over an empty space
+   * is worse than no eyebrow. 'Unknown' is the column's default rather than
+   * anybody's choice, which is why it does not count.
+   */
+  const mobileStatuses = (m: Meeting) => String(m.company_status ?? '')
+    .split(',').map(v => v.trim()).filter(v => v && v !== 'Unknown');
+
   const mobileValue = (m: Meeting) =>
     m.company_wse != null && avgCostPerUnit > 0
       ? abbreviateValue(Math.round(m.company_wse * avgCostPerUnit))
@@ -1744,9 +1757,21 @@ export function MeetingsTable({
              * the row reads as one band rather than as four things of different
              * sizes; the support stack is square so it stays a circle.
              */}
-            {(m.meeting_type || splitInternalIds(m).supportIds || m.company_wse != null
+            {(mobileStatuses(m).length > 0 || m.meeting_type || splitInternalIds(m).supportIds
+              || m.company_wse != null
               || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0) && (
               <ScrollRow className="mt-3" gapClass="gap-3" step={120}>
+                {/* Leads the row: it says what the company IS, which is the
+                    frame for everything after it. The same stack the support
+                    badges use, so a reader who has learned to tap one has
+                    learned to tap the other — a letter to a circle, spreading
+                    into the full words. */}
+                {mobileStatuses(m).length > 0 && (
+                  <div className={CARD_FIELD}>
+                    <p className={EYEBROW}>Status</p>
+                    <OverlappingStatusBadges status={m.company_status} emptyLabel={null} />
+                  </div>
+                )}
                 {m.meeting_type && (
                   <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Type</p>
@@ -1820,7 +1845,7 @@ export function MeetingsTable({
                 <RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} size="md" withIcon />
               </span>
               <span className="inline-flex items-center gap-1.5 flex-shrink-0">
-                <span className={INLINE_LABEL}>Status:</span>
+                <span className={INLINE_LABEL}>Mtg. Status:</span>
                 <OutcomeButton
                   value={m.outcome}
                   options={actionOptions}
