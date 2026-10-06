@@ -13,6 +13,7 @@ import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
+import { useIsPhone } from '@/lib/useIsPhone';
 import { KebabMenu } from '@/components/KebabMenu';
 import { RowActionsKebab } from '@/components/RowActionsKebab';
 import { ScrollRow } from '@/components/ScrollRow';
@@ -143,6 +144,23 @@ function fmtDate(dateStr?: string): string {
 }
 
 const ATTENDEE_PAGE_SIZE = 100;
+
+/**
+ * The tabs-as-a-drawer shell, on a phone.
+ *
+ * Anchored to --mobile-header-h rather than to a fraction of the viewport —
+ * the same anchor the logistics drawer and the attendee photo card use — so
+ * the top edge lands on the header's bottom edge whatever the safe-area inset
+ * turns out to be. The top itself is set inline, because a Tailwind arbitrary
+ * value and an inline transform on the same element read worse than two
+ * inline properties.
+ */
+const TAB_DRAWER_CLS =
+  // !mt-0 because the page root is a space-y-6 stack, and `top` offsets a
+  // positioned element's MARGIN edge — the inherited 24px pushed the drawer
+  // that far below the header it was supposed to meet.
+  'fixed inset-x-0 bottom-0 z-40 !mt-0 flex flex-col bg-white rounded-t-2xl '
+  + 'shadow-[0_-8px_30px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out';
 
 /**
  * The config lists this page needs, fetched as one request.
@@ -383,6 +401,15 @@ export default function ConferenceDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<ConferenceTabKey>('attendees');
+  /**
+   * Whether the tab drawer is up, or null when there is no drawer at all.
+   *
+   * Three states rather than a boolean beside a breakpoint flag: every reader
+   * of this needs to know "no drawer here" as distinct from "closed", and
+   * keeping them apart is what lets the wrapper fall back to display:contents
+   * on a pointer without a second condition at each use.
+   */
+  const [tabDrawerOpen, setTabDrawerOpen] = useState<boolean | null>(null);
   // The targets tab writes targets through its own kanban, which knows nothing
   // about these buttons. Re-reading on the way back into a tab that shows them
   // is cheaper than making that tab report every change.
@@ -762,6 +789,22 @@ export default function ConferenceDetailPage() {
     }
   }, [activeTab, visibleConferenceTabs]);
 
+  /**
+   * The drawer exists below sm and nowhere else.
+   *
+   * Starts closed rather than open: landing on the page should show the
+   * conference itself, which is what the tabs used to push off the screen.
+   * A tab named in the URL is the one exception — somebody who followed a
+   * link to a tab asked for that tab.
+   */
+  const isPhone = useIsPhone();
+  useEffect(() => {
+    setTabDrawerOpen(prev => {
+      if (!isPhone) return null;
+      return prev ?? searchParams.get('tab') != null;
+    });
+  }, [isPhone, searchParams]);
+
   const tabBarRef = useRef<HTMLDivElement>(null);
   const pageRootRef = useRef<HTMLDivElement>(null);
 
@@ -810,6 +853,10 @@ export default function ConferenceDetailPage() {
   };
 
   const handleTabChange = (tabKey: ConferenceTabKey) => {
+    // Picking a tab on a phone is what opens the drawer — including picking
+    // the one already active, which is how a reader gets back to contents
+    // they closed.
+    if (tabDrawerOpen !== null) setTabDrawerOpen(true);
     // Switching tab from a pinned row should leave the row pinned, with the
     // new tab starting underneath it. Without this the incoming tab renders
     // short, the scroll collapses to the top, and the conference card comes
@@ -824,6 +871,48 @@ export default function ConferenceDetailPage() {
       repinTabs();
     }
   };
+
+  /**
+   * The tab row's buttons, defined once and rendered twice on a phone.
+   *
+   * Twice because the row has two homes there: one at rest on the page, and
+   * one at the top of the drawer. Only ever one is on screen — the resting
+   * row hides the moment the drawer carries its own up to the header — so it
+   * reads as the same row having moved. Two copies of the markup would be two
+   * rows to keep in step, which is the thing that actually drifts.
+   */
+  const tabNav = (
+          <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
+          {visibleConferenceTabs.map((tabKey) => {
+            const baseLabel = conferenceTabConfig.getLabel(tabKey);
+            // The row is defined above the guard that narrows `conference`,
+            // so it can be built before the conference has loaded. No count
+            // until there is one to show, rather than a confident "(0)".
+            const labelWithCount = tabKey === 'attendees' && conference
+              ? `${baseLabel} (${conference.attendees.length})`
+              : tabKey === 'meetings' && confMeetings.length > 0
+                ? `${baseLabel} (${confMeetings.length})`
+                : tabKey === 'follow-ups' && confFollowUps.length > 0
+                  ? `${baseLabel} (${confFollowUps.length})`
+                  : tabKey === 'social' && confSocialEvents.length > 0
+                    ? `${baseLabel} (${confSocialEvents.length})`
+                    : tabKey === 'notes' && confNotes.length > 0
+                      ? `${baseLabel} (${confNotes.length})`
+                      : baseLabel;
+
+            return (
+              <button
+                key={tabKey}
+                onClick={() => handleTabChange(tabKey)}
+                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === tabKey ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {labelWithCount}
+              </button>
+            );
+          })}
+        </nav>
+  );
+
 
   // The height changes again when the real content replaces the placeholder,
   // so the row is put back once more after that.
@@ -3984,34 +4073,74 @@ export default function ConferenceDetailPage() {
           horizontal overflow. Its size follows that padding, 16px and then
           24px from lg, so it covers the strip exactly without reaching past
           the gap above the row when it is sitting at rest. */}
-      <div ref={tabBarRef} className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]">
-        <nav className="flex gap-1 sm:gap-6 whitespace-nowrap">
-          {visibleConferenceTabs.map((tabKey) => {
-            const baseLabel = conferenceTabConfig.getLabel(tabKey);
-            const labelWithCount = tabKey === 'attendees'
-              ? `${baseLabel} (${conference.attendees.length})`
-              : tabKey === 'meetings' && confMeetings.length > 0
-                ? `${baseLabel} (${confMeetings.length})`
-                : tabKey === 'follow-ups' && confFollowUps.length > 0
-                  ? `${baseLabel} (${confFollowUps.length})`
-                  : tabKey === 'social' && confSocialEvents.length > 0
-                    ? `${baseLabel} (${confSocialEvents.length})`
-                    : tabKey === 'notes' && confNotes.length > 0
-                      ? `${baseLabel} (${confNotes.length})`
-                      : baseLabel;
+      {/* On a phone the tabs and their contents are a drawer.
 
-            return (
-              <button
-                key={tabKey}
-                onClick={() => handleTabChange(tabKey)}
-                className={`py-3 px-2 sm:px-1 text-xs sm:text-sm font-medium border-b-2 transition-colors ${activeTab === tabKey ? 'border-brand-secondary text-brand-secondary' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-              >
-                {labelWithCount}
-              </button>
-            );
-          })}
-        </nav>
+          Reviewing a table meant scrolling back up past it to reach another
+          tab; the drawer puts the tab row against the header and gives the
+          contents the whole screen beneath, so switching tabs costs nothing.
+
+          `contents` from sm: the wrapper disappears from layout entirely and
+          the tab row and panels lay out exactly as they did, so nothing about
+          the desktop page changes. */}
+      {/* The resting row, on a phone, while the drawer is down.
+
+          Hidden rather than removed the instant the drawer comes up, so what
+          the reader sees is one row travelling to the header rather than one
+          disappearing and another appearing. It is the same `tabNav` either
+          way — the markup is defined once. */}
+      {tabDrawerOpen !== null && (
+        <div
+          aria-hidden={tabDrawerOpen}
+          className={`border-b border-gray-200 overflow-x-auto bg-gray-50 px-3 transition-opacity duration-150 ${
+            tabDrawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        >
+          {tabNav}
+        </div>
+      )}
+
+      <div
+        className={tabDrawerOpen === null ? 'contents' : TAB_DRAWER_CLS}
+        style={tabDrawerOpen === null ? undefined : {
+          top: 'var(--mobile-header-h)',
+          transform: tabDrawerOpen ? 'translateY(0)' : 'translateY(100%)',
+          // The bulk bars pin under the tab row, which in the drawer is not in
+          // the same scroller as them — so the offset they were given is zero
+          // here rather than the row's height.
+          ['--bulk-actions-top' as string]: '0px',
+        }}
+      >
+      {/* The drawer's own grip. Tapping it, or Close, puts the drawer down
+          and leaves the conference itself on screen. */}
+      {tabDrawerOpen !== null && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-3 pt-2 pb-1 bg-gray-50 rounded-t-2xl">
+          <button
+            type="button"
+            onClick={() => setTabDrawerOpen(false)}
+            aria-label="Close the tab drawer"
+            className="flex-1 flex justify-center py-1.5 -my-1.5"
+          >
+            <span className="w-10 h-1 rounded-full bg-gray-300" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setTabDrawerOpen(false)}
+            className="flex-shrink-0 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1"
+          >
+            Close
+          </button>
+        </div>
+      )}
+      <div
+        ref={tabBarRef}
+        className={`border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)] ${
+          // Inside the drawer the row is flush to the panel edge, where the
+          // contents below it are inset — so it takes the same inset.
+          tabDrawerOpen === null ? '' : 'flex-shrink-0 px-3'}`}
+      >
+        {tabNav}
       </div>
+
+      <div className={tabDrawerOpen === null ? 'contents' : 'flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-6'}>
 
       {showAttendeeDownload && (
         <DownloadModal
@@ -5485,6 +5614,9 @@ export default function ConferenceDetailPage() {
           userEmail={currentUser?.email || ''}
         />
       )}
+
+      </div>
+      </div>
 
       {timelineAttendee && (
         <ConferenceTimelineDialog attendee={timelineAttendee} onClose={() => setTimelineAttendee(null)} />
