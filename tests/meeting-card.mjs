@@ -556,9 +556,9 @@ console.log('\n— the company status leads the card\u2019s badge row —');
 
   // An eyebrow over an empty space is worse than no eyebrow, so the cell is
   // left out when there is nothing to show.
-  eq('  and left out when there is none', /\{mobileStatuses\(m\)\.length > 0 && \(/.test(row), true);
+  eq('  and left out when there is none', /\{accountStatuses\(m\)\.length > 0 && \(/.test(row), true);
   eq('  which the row itself also tests for',
-    /\{\(m\.meeting_type \|\| mobileStatuses\(m\)\.length > 0/.test(table), true);
+    /\{\(m\.meeting_type \|\| accountStatuses\(m\)\.length > 0/.test(table), true);
 
   // 'Unknown' is the column's default rather than anybody's choice.
   eq('Unknown does not count as a status',
@@ -648,6 +648,59 @@ console.log('\n— and on a phone it is a sheet instead —');
   eq('  no clamping on a phone', /if \(isPhone \|\| !open \|\| !dropdownPos\) return;/.test(btn), true);
   eq('  no outside-click handler', /if \(!open \|\| isPhone\) return;/.test(btn), true);
   eq('  and no position measured for it', /if \(!open && !isPhone && btnRef\.current\)/.test(btn), true);
+}
+
+console.log('\n— and the table says it too, under the company name —');
+{
+  /*
+   * The same badges, under the same company, in the table a pointer sees.
+   *
+   * They were only on the phone's card, so the account's standing was
+   * something you learned on one device and not the other — on a table whose
+   * whole left edge is companies. The cell is the Company column's, below the
+   * name, so the eyebrow and the badges belong to the company they describe
+   * rather than floating in a column of their own.
+   */
+  const cellStart = table.indexOf("case 'company': return !hideCompany");
+  /* Searched FORWARD from the start, and asserted non-empty. An earlier test
+     in this file anchored on a string that also appears above its target, so
+     the slice came out empty and a whole block passed reading nothing. */
+  const cell = table.slice(cellStart, table.indexOf("case 'datetime':", cellStart));
+  eq('there is a company cell to read', cellStart !== -1 && cell.length > 200, true);
+  eq('the company cell carries the eyebrow', cell.includes('>Acct Status</p>'), true);
+  eq('  under the company name',
+    cell.indexOf('companyNameNode(m,') < cell.indexOf('>Acct Status</p>'), true);
+  eq('  drawn as the same overlapping stack',
+    /<OverlappingStatusBadges status=\{m\.company_status\} emptyLabel=\{null\} \/>/.test(cell), true);
+
+  /*
+   * Centred under the eyebrow, not under the column.
+   *
+   * inline-flex is what makes that true: the block shrinks to the eyebrow's
+   * width, so centring inside it puts the badges under the word. A plain flex
+   * would stretch to the cell and centre them in a column that is as wide as
+   * the longest company name. Measured in Chromium at 1200px, four rows
+   * carrying one, two, three and five statuses: the badge stack's centre
+   * matched the eyebrow's to 0.0px in every one.
+   */
+  eq('  centred under the eyebrow', /className="mt-1 inline-flex flex-col items-center"/.test(cell), true);
+
+  // An eyebrow over an empty space is worse than no eyebrow — and the test
+  // fixture's one company with no status rendered no eyebrow at all.
+  eq('  and absent when the company has no status',
+    /\{accountStatuses\(m\)\.length > 0 && \(/.test(cell), true);
+
+  /*
+   * One helper for both. The card and the cell decide "is there anything to
+   * show" the same way, so a status that counts in one cannot fail to count
+   * in the other — which is what a second copy of the filter would allow.
+   */
+  eq('both ask the same helper', (table.match(/const accountStatuses = \(m: Meeting\)/g) ?? []).length, 1);
+  eq('  and nothing is still called mobile-only', /mobileStatuses/.test(table), false);
+
+  // The cell tops its content now that it has two lines, so a row made tall
+  // by a second attendee does not leave the name floating in the middle.
+  eq('  the cell is top-aligned', /key="company"[^>]*align-top/.test(cell), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
