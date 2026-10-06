@@ -173,8 +173,17 @@ export function ConferencePlanLogisticsDrawer({
         onClick={onClose}
       />
 
+      {/* On a phone the panel stops at the header's bottom edge.
+          It was 92vh from the bottom, and viewport-fit:cover makes vh include
+          the status bar — so 92vh reached up past the header and put this
+          drawer's own close button under the clock, with no way to shut it.
+          Anchored to --mobile-header-h, the variable every other drawer and
+          sheet stops at, so the top lands on the header whatever the
+          safe-area inset turns out to be. See the drawer rules in globals.css
+          for the same fix on the drawers that carry that class; this one has
+          its own slide animation and takes only the height. */}
       <div
-        className="logistics-panel relative w-full sm:w-[900px] h-[92vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className="logistics-panel relative w-full sm:w-[900px] h-[calc(100dvh-var(--mobile-header-h))] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
         style={panelStyle}
       >
         <div className="hidden sm:block absolute left-0 inset-y-0 w-1 cursor-col-resize z-10 group/rh" onMouseDown={handleResizeStart}>
