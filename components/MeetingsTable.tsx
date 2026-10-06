@@ -1579,14 +1579,14 @@ export function MeetingsTable({
   const nameCellRefs = useRef<Record<number, HTMLElement | null>>({});
 
   /**
-   * The company's statuses, as the card draws them.
+   * The company's statuses, as the card and the table both draw them.
    *
    * Read here as well as inside the badge stack so the cell can be left out
    * entirely when there is nothing to show — an eyebrow over an empty space
    * is worse than no eyebrow. 'Unknown' is the column's default rather than
    * anybody's choice, which is why it does not count.
    */
-  const mobileStatuses = (m: Meeting) => String(m.company_status ?? '')
+  const accountStatuses = (m: Meeting) => String(m.company_status ?? '')
     .split(',').map(v => v.trim()).filter(v => v && v !== 'Unknown');
 
   const mobileValue = (m: Meeting) =>
@@ -1768,7 +1768,7 @@ export function MeetingsTable({
              * the row reads as one band rather than as four things of different
              * sizes; the support stack is square so it stays a circle.
              */}
-            {(m.meeting_type || mobileStatuses(m).length > 0 || splitInternalIds(m).supportIds
+            {(m.meeting_type || accountStatuses(m).length > 0 || splitInternalIds(m).supportIds
               || m.company_wse != null
               || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0) && (
               <ScrollRow className="mt-3" gapClass="gap-3" step={120}>
@@ -1785,7 +1785,7 @@ export function MeetingsTable({
                     use, so a reader who has learned to tap one has learned to
                     tap the other — a letter to a circle, spreading into the
                     full words. */}
-                {mobileStatuses(m).length > 0 && (
+                {accountStatuses(m).length > 0 && (
                   <div className={CARD_FIELD_CENTERED}>
                     <p className={EYEBROW}>Acct Status</p>
                     <OverlappingStatusBadges status={m.company_status} emptyLabel={null} />
@@ -2052,12 +2052,36 @@ export function MeetingsTable({
           // column was the one place initials appeared with nothing to say
           // they were a person's.
           case 'rep': return <td key="rep" className="px-3 py-2 leading-snug"><RepPills scheduledBy={splitInternalIds(m).repIds} userOptions={userOptions} withIcon /></td>;
-          case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug">
+          case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug align-top">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
                 {companyNameNode(m, 'text-xs font-semibold text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
               </div>
             ) : (<span className="text-gray-300">—</span>)}
+            {/*
+             * What the account is, under its name — the same badges the phone's
+             * card carries, in the same place relative to the same company, so
+             * a reader moving between the two is reading one thing twice rather
+             * than learning it twice. A letter in a circle, spreading into the
+             * full words when clicked.
+             *
+             * On one line with its label rather than stacked under an eyebrow:
+             * measured at 1200px, the stacked version made the row 81px tall
+             * against 57px for this, which on a table of thirty meetings is
+             * most of a screen. INLINE_LABEL is the style the card's own
+             * "Rep:" and "Mtg. Status:" already use.
+             *
+             * xs, so the badges match the Support stack in the same row — one
+             * size reading as one kind of thing across the row. Absent
+             * entirely when there is nothing to show: a label with no value
+             * after it is worse than no label.
+             */}
+            {accountStatuses(m).length > 0 && (
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className={INLINE_LABEL}>Acct Status:</span>
+                <OverlappingStatusBadges status={m.company_status} size="xs" emptyLabel={null} />
+              </div>
+            )}
           </td> : null;
           case 'datetime': return <td key="datetime" className="px-3 py-2 text-gray-600 leading-snug align-top">
             <div className="font-medium">{formatMeetingDate(m.meeting_date)}</div>

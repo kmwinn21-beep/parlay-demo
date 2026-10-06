@@ -16,6 +16,7 @@ import { isBoothHours } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { ConferenceTabStrip } from '@/components/ConferenceTabStrip';
 import { ConferenceTabChips } from '@/components/ConferenceTabChips';
+import { conferenceCompanyCount } from '@/lib/conferenceCompanyCount';
 import { nextRevealed, dragAtTop } from '@/lib/pullToReveal';
 import { KebabMenu } from '@/components/KebabMenu';
 import { RowActionsKebab } from '@/components/RowActionsKebab';
@@ -944,6 +945,14 @@ export default function ConferenceDetailPage() {
    */
   const tabCount = (tabKey: ConferenceTabKey): number | null => {
     if (tabKey === 'attendees' && conference) return conference.attendees.length;
+    if (tabKey === 'companies') {
+      // Derived from the attendees until the list itself is fetched, which
+      // only happens once somebody opens a tab that needs it — a count that
+      // waited for that would be missing while deciding whether to go there.
+      const companies = conferenceCompanyCount(
+        conference?.attendees, companiesLoaded ? conferenceCompanies : null);
+      return companies > 0 ? companies : null;
+    }
     if (tabKey === 'meetings' && confMeetings.length > 0) return confMeetings.length;
     if (tabKey === 'follow-ups' && confFollowUps.length > 0) return confFollowUps.length;
     if (tabKey === 'social' && confSocialEvents.length > 0) return confSocialEvents.length;
