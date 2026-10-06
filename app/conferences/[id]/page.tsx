@@ -14,6 +14,7 @@ import { MeetingsTable, type Meeting, type EditFormData } from '@/components/Mee
 import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
+import { nextRevealed, dragAtTop } from '@/lib/pullToReveal';
 import { KebabMenu } from '@/components/KebabMenu';
 import { RowActionsKebab } from '@/components/RowActionsKebab';
 import { ScrollRow } from '@/components/ScrollRow';
@@ -804,6 +805,54 @@ export default function ConferenceDetailPage() {
       return prev ?? searchParams.get('tab') != null;
     });
   }, [isPhone, searchParams]);
+
+  /**
+   * Whether the Back button is on screen, on a phone.
+   *
+   * Hidden until the page is pulled down. It costs a row of screen to
+   * something nobody needs until they are leaving, and the gesture that
+   * reveals it — dragging the page down — is the one somebody already makes
+   * to get back to the top. See lib/pullToReveal for the rule.
+   */
+  const [backRevealed, setBackRevealed] = useState(false);
+  useEffect(() => {
+    if (!isPhone) { setBackRevealed(true); return; }
+    const scroller = pageRootRef.current?.closest('main');
+    if (!scroller) return;
+    setBackRevealed(false);
+
+    let lastY = scroller.scrollTop;
+    const onScroll = () => {
+      const y = scroller.scrollTop;
+      setBackRevealed(prev => nextRevealed(prev, lastY, y));
+      lastY = y;
+    };
+
+    /* The gesture scrolling cannot see.
+       With the tabs in a drawer the page is usually shorter than the screen,
+       so a finger dragging down moves nothing and fires no scroll event — and
+       the button would never be reachable. */
+    let touchStart: number | null = null;
+    const onTouchStart = (e: TouchEvent) => { touchStart = e.touches[0]?.clientY ?? null; };
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY;
+      if (touchStart == null || y == null) return;
+      const meant = dragAtTop(scroller.scrollTop, touchStart, y);
+      if (meant !== null) setBackRevealed(meant);
+    };
+    const onTouchEnd = () => { touchStart = null; };
+
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true });
+    scroller.addEventListener('touchmove', onTouchMove, { passive: true });
+    scroller.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      scroller.removeEventListener('touchstart', onTouchStart);
+      scroller.removeEventListener('touchmove', onTouchMove);
+      scroller.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [isPhone, conference?.id]);
 
   const tabBarRef = useRef<HTMLDivElement>(null);
   const pageRootRef = useRef<HTMLDivElement>(null);
@@ -3103,7 +3152,15 @@ export default function ConferenceDetailPage() {
        about 1200px; at max-w-6xl the last one fell off the right edge here and
        nowhere else, which read as a broken table rather than a narrow page. */
     <div ref={pageRootRef} className="max-w-7xl mx-auto space-y-6">
-      <BackButton />
+      {/* Collapsed to nothing rather than unmounted: the page below it would
+          otherwise jump by a row every time it came and went. */}
+      <div
+        aria-hidden={!backRevealed}
+        className={`overflow-hidden transition-all duration-200 ${
+          backRevealed ? 'max-h-10 opacity-100' : 'max-h-0 opacity-0 !mt-0'}`}
+      >
+        <BackButton />
+      </div>
       {/* Column mapping modal */}
       {columnMappingData && pendingUploadFile && (
         <ColumnMappingModal
@@ -4109,36 +4166,44 @@ export default function ConferenceDetailPage() {
           ['--bulk-actions-top' as string]: '0px',
         }}
       >
-      {/* The drawer's own grip. Tapping it, or Close, puts the drawer down
-          and leaves the conference itself on screen. */}
-      {tabDrawerOpen !== null && (
-        <div className="flex-shrink-0 flex items-center gap-2 px-3 pt-2 pb-1 bg-gray-50 rounded-t-2xl">
-          <button
-            type="button"
-            onClick={() => setTabDrawerOpen(false)}
-            aria-label="Close the tab drawer"
-            className="flex-1 flex justify-center py-1.5 -my-1.5"
+      {tabDrawerOpen === null ? (
+        <div
+          ref={tabBarRef}
+          className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]"
+        >
+          {tabNav}
+        </div>
+      ) : (
+        /* The drawer's tab row, with the close pinned at its right.
+
+           The same arrangement as the report row above: the tabs scroll
+           underneath an opaque block that holds the control, so the row can
+           run as long as it likes and the way out never moves. pr-10 reserves
+           the width the block covers, so the last tab can still be reached.
+
+           No grab handle and no Close button beneath it — one way out, in the
+           place the eye already goes for one. */
+        <div className="relative flex items-stretch flex-shrink-0 border-b border-gray-200 bg-gray-50">
+          <div
+            ref={tabBarRef}
+            className="overflow-x-auto hide-scrollbar flex-1 min-w-0 pl-3 pr-10"
           >
-            <span className="w-10 h-1 rounded-full bg-gray-300" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setTabDrawerOpen(false)}
-            className="flex-shrink-0 text-xs font-semibold text-gray-500 border border-gray-200 rounded-lg px-2.5 py-1"
-          >
-            Close
-          </button>
+            {tabNav}
+          </div>
+          <div className="absolute top-0 right-0 bottom-0 w-10 flex items-center justify-end pr-2 bg-gray-50">
+            <button
+              type="button"
+              onClick={() => setTabDrawerOpen(false)}
+              aria-label="Close"
+              className="p-1.5 rounded-full text-gray-500 hover:text-brand-primary hover:bg-gray-200/70 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
-      <div
-        ref={tabBarRef}
-        className={`border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)] ${
-          // Inside the drawer the row is flush to the panel edge, where the
-          // contents below it are inset — so it takes the same inset.
-          tabDrawerOpen === null ? '' : 'flex-shrink-0 px-3'}`}
-      >
-        {tabNav}
-      </div>
 
       <div className={tabDrawerOpen === null ? 'contents' : 'flex-1 min-h-0 overflow-y-auto px-3 pt-3 pb-6'}>
 

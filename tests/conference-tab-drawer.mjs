@@ -85,7 +85,11 @@ console.log('\n— one tab row, in two places —');
    * step, which is the thing that actually drifts.
    */
   eq('the buttons are defined once', (page.match(/const tabNav = \(/g) ?? []).length, 1);
-  eq('  and rendered twice', (page.match(/\{tabNav\}/g) ?? []).length, 2);
+  /* Three render sites, never more than two in the DOM: the desktop row OR
+     the phone's pair — the resting one and the drawer's. The desktop row is
+     its own site because it keeps the sticky positioning the drawer's does
+     not need, and sticky can only travel inside its own parent. */
+  eq('  and rendered from three places', (page.match(/\{tabNav\}/g) ?? []).length, 3);
 
   // Hidden rather than unmounted, so the handoff is a fade and not a jump.
   eq('the resting row fades as the drawer rises',
@@ -102,8 +106,11 @@ console.log('\n— opening and closing it —');
   // contents they closed.
   eq('picking any tab opens it',
     /const handleTabChange = \(tabKey: ConferenceTabKey\) => \{[\s\S]{0,320}if \(tabDrawerOpen !== null\) setTabDrawerOpen\(true\);/.test(page), true);
-  eq('  the grip closes it', /aria-label="Close the tab drawer"/.test(page), true);
-  eq('  and so does Close', (page.match(/setTabDrawerOpen\(false\)/g) ?? []).length, 2);
+  /* One way out, pinned at the right of the tab row — see
+     tab-drawer-chrome.mjs. The grab handle and the Close button that used to
+     sit above the row are gone. */
+  eq('  an X closes it', /aria-label="Close"/.test(page), true);
+  eq('  and it is the only way out', (page.match(/setTabDrawerOpen\(false\)/g) ?? []).length, 1);
 
   /*
    * A tab named in the URL opens the drawer on arrival. The page already
