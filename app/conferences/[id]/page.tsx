@@ -15,6 +15,7 @@ import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { ConferenceTabStrip } from '@/components/ConferenceTabStrip';
+import { ConferenceTabChips } from '@/components/ConferenceTabChips';
 import { nextRevealed, dragAtTop } from '@/lib/pullToReveal';
 import { KebabMenu } from '@/components/KebabMenu';
 import { RowActionsKebab } from '@/components/RowActionsKebab';
@@ -4208,15 +4209,22 @@ export default function ConferenceDetailPage() {
            run as long as it likes and the way out never moves. pr-10 reserves
            the width the block covers, so the last tab can still be reached.
 
+           Chips rather than the row of words: eleven names run to about four
+           screens in here, which makes the pinned row something to scroll
+           rather than something to use. The chips are the tiles condensed —
+           same glyph, same colour — with only the open one named.
+
            No grab handle and no Close button beneath it — one way out, in the
            place the eye already goes for one. */
         <div className="relative flex items-stretch flex-shrink-0 border-b border-gray-200 bg-gray-50">
-          <div
-            ref={tabBarRef}
-            className="overflow-x-auto hide-scrollbar flex-1 min-w-0 pl-3 pr-10"
-          >
-            {tabNav}
-          </div>
+          <ConferenceTabChips
+            tabs={visibleConferenceTabs.map(tabKey => ({
+              key: tabKey,
+              label: conferenceTabConfig.getLabel(tabKey),
+            }))}
+            activeKey={activeTab}
+            onPick={key => handleTabChange(key as ConferenceTabKey)}
+          />
           <div className="absolute top-0 right-0 bottom-0 w-10 flex items-center justify-end pr-2 bg-gray-50">
             <button
               type="button"

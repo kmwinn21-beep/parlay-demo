@@ -45,12 +45,17 @@ console.log('\n— one way out of the drawer, pinned —');
 
   /*
    * The same arrangement as the report row: an opaque block pinned over the
-   * right of a scrolling row, with padding reserving the width it covers so
-   * the last item can still be reached.
+   * right of a scrolling row, with the width it covers reserved so the last
+   * item can still be reached.
+   *
+   * The row itself is now the chip row, and it reserves that width with a
+   * spacer rather than with padding — Chromium does not lay the padding out
+   * past content that overflows, so the last tab ended up under the X and
+   * could not be tapped. See conference-tab-chips.mjs.
    */
   eq('  pinned over the row', /absolute top-0 right-0 bottom-0 w-10[\s\S]{0,120}bg-gray-50/.test(page), true);
   eq('  with the tabs scrolling under it',
-    /overflow-x-auto hide-scrollbar flex-1 min-w-0 pl-3 pr-10/.test(page), true);
+    /overflow-x-auto hide-scrollbar flex-1 min-w-0 pl-3/.test(strip('components/ConferenceTabChips.tsx')), true);
   // The report row this copies, so the two can be compared.
   eq('  which is what the report row does',
     /overflow-x-auto flex-nowrap hide-scrollbar flex-1 min-w-0 pr-10/.test(page), true);

@@ -106,10 +106,21 @@ console.log('\n— the tiles —');
   eq('the open tab is marked by a ring, not a second background',
     /isActive \? `ring-2 ring-offset-1 \$\{style\.ring\}` : ''/.test(strip_), true);
   eq('  and never derives a colour by rewriting a class', /\.replace\(/.test(strip_), false);
+
+  /*
+   * The colours live in one table, read by both of the places a tab is drawn
+   * as a shape rather than a word: this strip and the drawer's chip row. A
+   * tab that is rose in one and amber in the other would undo the only thing
+   * the colour is there to do.
+   */
+  const style = strip('lib/conferenceTabStyle.ts');
+  eq('the colours come from the shared table',
+    /conferenceTabStyle\(tab\.key\)/.test(strip_), true);
+  eq('  and the strip keeps no table of its own', /TILE_STYLE/.test(strip_), false);
   // Every tab names its own colours, so none can fall back to a guess.
-  eq('  every tab has a tint', (strip_.match(/tint: 'bg-/g) ?? []).length, 12);
-  eq('  a badge fill', (strip_.match(/badge: 'bg-/g) ?? []).length, 12);
-  eq('  and a ring', (strip_.match(/ring: 'ring-/g) ?? []).length, 12);
+  eq('  every tab has a tint', (style.match(/tint: 'bg-/g) ?? []).length, 12);
+  eq('  a badge fill', (style.match(/badge: 'bg-/g) ?? []).length, 12);
+  eq('  and a ring', (style.match(/ring: 'ring-/g) ?? []).length, 12);
 
   /*
    * Room below the tiles as well as above, and it is not decoration.
@@ -161,8 +172,9 @@ console.log('\n— the tiles —');
   eq('the strip sits in a card', /lg:hidden card !px-0 !py-2/.test(strip_), true);
   eq('  with the row holding the inset', /overflow-x-auto scrollbar-hide px-3/.test(strip_), true);
 
-  // An account can add a tab this file has never heard of.
-  eq('an unknown tab still gets a tile', /const FALLBACK = \{/.test(strip_), true);
+  // An account can add a tab the table has never heard of.
+  eq('an unknown tab still gets a tile',
+    /CONFERENCE_TAB_STYLE\[key\] \?\? CONFERENCE_TAB_FALLBACK/.test(style), true);
   // lg:hidden on the card itself, so the whole section goes on a pointer —
   // where the tab row is the row of words it always was.
   eq('  and the strip is mobile only', /lg:hidden card/.test(strip_), true);

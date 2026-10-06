@@ -85,14 +85,16 @@ console.log('\n— one tab row, in two places —');
    * step, which is the thing that actually drifts.
    */
   eq('the buttons are defined once', (page.match(/const tabNav = \(/g) ?? []).length, 1);
-  /* Two render sites, one of them live at a time: the desktop row OR the
-     drawer's. They are separate sites because the desktop row keeps sticky
-     positioning the drawer's does not need, and sticky can only travel
-     inside its own parent.
-
-     At rest on a phone there is no row of words at all now — the tabs are
-     the tile strip below the card. See conference-tab-strip.mjs. */
-  eq('  and rendered from two places', (page.match(/\{tabNav\}/g) ?? []).length, 2);
+  /*
+   * The row of words is now the POINTER's row, and the only one. The two
+   * sites were a phone-or-pointer pair while both drew the same words; the
+   * drawer's is chips (see conference-tab-chips.mjs) and the strip is tiles
+   * (conference-tab-strip.mjs), so a phone meets no row of words at all.
+   */
+  eq('  and rendered from one place', (page.match(/\{tabNav\}/g) ?? []).length, 1);
+  eq('  the drawer’s row is the chips', /<ConferenceTabChips/.test(page), true);
+  eq('  and they are the tabs the page is showing',
+    /tabs=\{visibleConferenceTabs\.map\(tabKey => \(\{[\s\S]{0,160}\}\)\)\}[\s\S]{0,80}activeKey=\{activeTab\}[\s\S]{0,120}ConferenceTabKey\)\}/.test(page), true);
 
   // Hidden rather than unmounted, so the handoff is a fade and not a jump.
   eq('the resting row fades as the drawer rises',
