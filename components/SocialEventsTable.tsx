@@ -548,6 +548,17 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
   );
 }
 
+/**
+ * A phone sheet that starts at the site header's bottom edge.
+ *
+ * `.sheet-below-header` is in globals.css rather than written here as two
+ * `h-[calc(...)]` classes, because both of those emit `height` and nothing
+ * declares which wins — the winner would be whichever Tailwind happened to
+ * write second. The rule needs two declarations (vh, then dvh over it) and a
+ * stylesheet is where a pair like that can be stated.
+ */
+const SHEET_BELOW_HEADER = 'sheet-below-header';
+
 /* ─── Guest list: bottom sheet on a phone, a 500px right drawer on desktop ─── */
 function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemoveGuest, onClose, colorMaps, companies, userOptionsFull, icpCompanyTypes, allAttendees, onSaveGuestList, rankOf, onRankChange }: {
   event: SocialEvent;
@@ -571,6 +582,9 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   rankOf: (attendeeId: number) => GuestRank;
   onRankChange: (attendeeId: number, next: GuestRank) => void;
 }) {
+  // document only exists once mounted, and the portal needs it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const toggleType = (t: string) => setSelectedTypes(prev => {
     const next = new Set(prev);
@@ -601,12 +615,23 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
       Add/Edit
     </button>
   );
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     // Dimmed backdrop plus the shared animation — slide-up on a phone, slide-in
     // from the right at sm+, where it becomes a 500px-wide drawer.
+    //
+    // Through a portal to the body, because `fixed` is only relative to the
+    // viewport while nothing above it is transformed — and on a phone this is
+    // rendered inside the conference tab drawer, which carries a
+    // translateY to slide. That makes the drawer the containing block, so
+    // `inset-0` here meant the drawer's box rather than the screen and the
+    // sheet opened somewhere below the header. Measured: with a transformed
+    // ancestor whose top is 300, the sheet's top went to 300 rather than to
+    // the header's 144.
     <div className="fixed inset-0 z-[60] flex flex-col justify-end sm:flex-row sm:justify-end bg-black/40" onClick={onClose}>
       <div
-        className="drawer-mobile-responsive relative bg-white rounded-t-2xl sm:rounded-tr-none sm:rounded-br-none sm:rounded-bl-2xl shadow-2xl border border-brand-highlight flex flex-col h-[90vh] sm:h-full sm:w-[500px] sm:max-w-full overflow-hidden"
+        className={`drawer-mobile-responsive relative bg-white rounded-t-2xl sm:rounded-tr-none sm:rounded-br-none sm:rounded-bl-2xl shadow-2xl border border-brand-highlight flex flex-col ${SHEET_BELOW_HEADER} sm:h-full sm:w-[500px] sm:max-w-full overflow-hidden`}
         onClick={e => e.stopPropagation()}
       >
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -644,7 +669,8 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
         />
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -668,6 +694,9 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
   onRankChange?: (attendeeId: number, next: GuestRank) => void;
 }) {
   const { user } = useUser();
+  // document only exists once mounted, and the portal needs it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [draft, setDraft] = useState<string[]>(selected);
   const [search, setSearch] = useState('');
   const [myAccountsOnly, setMyAccountsOnly] = useState(false);
@@ -742,9 +771,25 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="relative bg-white rounded-2xl shadow-2xl border border-brand-highlight flex flex-col w-full max-w-2xl max-h-[80vh]" onClick={e => e.stopPropagation()}>
+  if (!mounted) return null;
+
+  return createPortal(
+    <div
+      /* A sheet rising from the bottom on a phone, a centred dialog from sm.
+         items-end with no padding below sm, so the panel meets the bottom
+         edge; p-4 and centred from there, as it always was. */
+      className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center p-0 sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        /* sheet-below-header rather than max-h-[80vh]: the pool is long enough
+           to fill the screen, but a filtered-down one is not, and a cap only
+           puts the top edge on the header when the content reaches it.
+           sm:h-auto hands the height back to the cap above sm, where this is a
+           centred dialog again. */
+        className={`modal-sheet-mobile relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl border border-brand-highlight flex flex-col w-full max-w-2xl ${SHEET_BELOW_HEADER} sm:h-auto sm:max-h-[80vh]`}
+        onClick={e => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-3">
@@ -864,7 +909,8 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
