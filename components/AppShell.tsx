@@ -172,7 +172,20 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <ImpersonationBanner />
             <TrialBanner />
             <Header />
-            <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
+            {/* The bottom padding is a gutter plus the home indicator, not a
+                bar's worth of space.
+
+                It was pb-20 — 80px held back on every mobile page for a bottom
+                navigation bar. That bar is gone; the nav is a floating menu
+                anchored to the header's mark, and nothing has sat in that strip
+                since. Measured on a phone: the bottom 90px of the viewport
+                contained nothing but <main> itself.
+
+                Not zero, though. The last row of a long list should not finish
+                flush against the edge, and on a phone with a home indicator the
+                viewport includes the strip it lives in — so the gutter is 1rem
+                plus whatever that inset turns out to be. */}
+            <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:pb-6">
               {children}
             </main>
           </div>
