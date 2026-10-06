@@ -74,7 +74,7 @@ console.log('\n— every value is under a word saying what it is —');
    * unit.
    */
   eq('  and the second, what the company is and what the meeting was worth',
-    labels.slice(2), ['Status', 'Type', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
+    labels.slice(2), ['Acct Status', 'Type', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
   /*
    * The labels are read out of the source, so a block switched off still
    * shows its label here. Each one is gated on the thing it displays, and
@@ -134,8 +134,17 @@ console.log('\n— every value is under a word saying what it is —');
    */
   eq('each label and its value is a flex column',
     /const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';/.test(table), true);
-  const fields = (card.match(/CARD_FIELD/g) ?? []).length;
-  eq('  worn by every field on both rows', fields, 9);
+  /* Counted on a word boundary. CARD_FIELD_CENTERED contains CARD_FIELD, so
+     a bare substring count happened to give the right answer here and would
+     not for a field class that was not also a field. */
+  const fields = (card.match(/CARD_FIELD\b(?!_)/g) ?? []).length;
+  const centered = (card.match(/CARD_FIELD_CENTERED\b/g) ?? []).length;
+  eq('  worn by every field on both rows', fields + centered, 9);
+  /* The account status is one to three small circles under a two-word label;
+     ranged left they hang off the start of a much wider eyebrow. Every other
+     value is a pill at least as wide as its label and stays ranged left. */
+  eq('  with the account status centred under its own',
+    centered === 1 && /const CARD_FIELD_CENTERED = 'flex-shrink-0 flex flex-col items-center';/.test(table), true);
   eq('  with none left as a plain block',
     /<div className="flex-shrink-0">\s*\n\s*<p className=\{EYEBROW\}>/.test(card), false);
 
@@ -532,7 +541,14 @@ console.log('\n— the card says whose status is whose —');
 console.log('\n— the company status leads the card\u2019s badge row —');
 {
   const row = table.slice(table.indexOf('<ScrollRow className="mt-3"'), table.indexOf('<p className={EYEBROW}>Support</p>'));
-  eq('Status comes before Type', row.indexOf('>Status</p>') < row.indexOf('>Type</p>'), true);
+  /* Both ends found before they are compared: the first version of this
+     looked for '>Status</p>', which stopped matching when the label became
+     'Acct Status' — indexOf returned -1 and the comparison passed for the
+     wrong reason. */
+  const statusAt = row.indexOf('>Acct Status</p>');
+  const typeAt = row.indexOf('>Type</p>');
+  eq('both labels are there', statusAt !== -1 && typeAt !== -1, true);
+  eq('  and Acct Status comes before Type', statusAt < typeAt, true);
   eq('  drawn as the overlapping stack',
     /<OverlappingStatusBadges status=\{m\.company_status\}/.test(row), true);
 

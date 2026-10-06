@@ -245,6 +245,17 @@ const ROW_PILL = `inline-flex items-center ${ROW_PILL_H} px-2 rounded-xl border 
  */
 const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';
 
+/**
+ * The same column, with its value centred under the label rather than ranged
+ * left with it.
+ *
+ * For the account status, whose value is one to three small circles under a
+ * two-word label — left-ranged they hang off the start of a much wider
+ * eyebrow and read as having come loose from it. Every other field's value is
+ * a pill at least as wide as its label, so they stay as they are.
+ */
+const CARD_FIELD_CENTERED = 'flex-shrink-0 flex flex-col items-center';
+
 /** "Rep:" and "Mtg. Status:", beside the pill rather than stacked above it. */
 const INLINE_LABEL = 'text-[10px] font-medium text-gray-400 flex-shrink-0';
 
@@ -1767,8 +1778,8 @@ export function MeetingsTable({
                     learned to tap the other — a letter to a circle, spreading
                     into the full words. */}
                 {mobileStatuses(m).length > 0 && (
-                  <div className={CARD_FIELD}>
-                    <p className={EYEBROW}>Status</p>
+                  <div className={CARD_FIELD_CENTERED}>
+                    <p className={EYEBROW}>Acct Status</p>
                     <OverlappingStatusBadges status={m.company_status} emptyLabel={null} />
                   </div>
                 )}
