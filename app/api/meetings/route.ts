@@ -74,6 +74,8 @@ export async function GET(request: NextRequest) {
           co.id AS company_id,
           co.name AS company_name,
           co.wse AS company_wse,
+          -- The company's status, for the badge stack on the mobile meeting card.
+          co.status AS company_status,
           c.name AS conference_name,
           CASE WHEN mn.id IS NOT NULL THEN 1 ELSE 0 END as has_notes,
           -- Notes logged against this attendee for this meeting's conference:
@@ -125,6 +127,7 @@ export async function GET(request: NextRequest) {
         company_id: r.company_id != null ? Number(r.company_id) : null,
         company_name: r.company_name != null ? String(r.company_name) : null,
         company_wse: r.company_wse != null ? Number(r.company_wse) : null,
+        company_status: r.company_status != null ? String(r.company_status) : null,
         conference_name: String(r.conference_name ?? ''),
         has_notes: Number(r.has_notes) === 1,
         conference_note_count: Number(r.conference_note_count ?? 0),

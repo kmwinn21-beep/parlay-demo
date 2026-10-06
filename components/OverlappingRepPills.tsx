@@ -8,33 +8,49 @@ import { parseRepIds, getRepInitials, type UserOption } from '@/lib/useUserOptio
 /** How long the expanded names stay up before folding back. */
 const EXPAND_MS = 5000;
 
+/** One badge in a stack: its short form, its full form, and its colour. */
+export interface OverlapItem {
+  key: string;
+  /** What the circle shows while collapsed — initials, or a single letter. */
+  short: string;
+  /** What it reads as once the stack is spread open. */
+  label: string;
+  badgeClass: string;
+}
+
 /**
- * Internal people on a record as a stack of circular initial pills, each
- * overlapping the one before it. Used where several reps share a row and a
- * wrapping list of pills would cost too much width.
+ * A stack of circular badges, each overlapping the one before it, that spreads
+ * into full labels when tapped.
  *
- * Clicking the stack spreads it into full-name pills for a few seconds.
+ * The shape, the overlap, the timing and the scroll chevrons live here once.
+ * Reps were the first use and for a while the only one, so this logic was
+ * written in terms of them; a second stack of a different kind of thing would
+ * otherwise have meant a second copy of all of it, which is how two stacks
+ * that are supposed to behave identically stop doing so.
+ *
+ * The caller decides what a badge says and what colour it is. This decides
+ * how a stack behaves.
  */
-export function OverlappingRepPills({
-  repIds, userOptions, size = 'sm', max = 4, emptyLabel = '—',
+export function OverlappingBadges({
+  items, size = 'sm', max = 4, emptyLabel = '\u2014', collapsedTitle,
 }: {
-  /** Comma-separated config_options ids, as stored on scheduled_by. */
-  repIds: string | null | undefined;
-  userOptions: UserOption[];
+  items: OverlapItem[];
   size?: 'sm' | 'xs';
-  /** Extra people collapse into a +N pill. */
+  /** Extra badges collapse into a +N pill. */
   max?: number;
   emptyLabel?: string | null;
+  /** The hover title while collapsed. Defaults to the labels, comma-joined. */
+  collapsedTitle?: string;
 }) {
-  const colorMaps = useConfigColors();
-  // Click to read the names, which the initials and a hover title can't give
-  // you on a touch screen. It folds itself back rather than needing a second
-  // tap — the expanded row is wide enough to disturb the column it sits in.
+  // Click to read the labels, which the short forms and a hover title can't
+  // give you on a touch screen. It folds itself back rather than needing a
+  // second tap — the expanded row is wide enough to disturb the column it
+  // sits in.
   const [expanded, setExpanded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
-  // Expanded, the names can outrun the space they're in — so the row scrolls
+  // Expanded, the labels can outrun the space they're in — so the row scrolls
   // rather than wrapping, and grows chevrons once there's somewhere to go.
   const rowRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
@@ -46,10 +62,6 @@ export function OverlappingRepPills({
     setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
   }, []);
 
-  const names = parseRepIds(repIds)
-    .map(id => userOptions.find(u => u.id === id)?.value)
-    .filter((v): v is string => !!v);
-
   useEffect(() => {
     updateArrows();
     const el = rowRef.current;
@@ -57,18 +69,18 @@ export function OverlappingRepPills({
     const ro = new ResizeObserver(updateArrows);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [updateArrows, expanded, names.length]);
+  }, [updateArrows, expanded, items.length]);
 
-  if (names.length === 0) {
+  if (items.length === 0) {
     return emptyLabel ? <span className="text-gray-300">{emptyLabel}</span> : null;
   }
 
   const dim = size === 'xs' ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]';
-  const shown = expanded ? names : names.slice(0, max);
-  const extra = names.length - shown.length;
+  const shown = expanded ? items : items.slice(0, max);
+  const extra = items.length - shown.length;
 
   const toggle = (e: React.MouseEvent) => {
-    // The row underneath usually opens something; reading the names shouldn't.
+    // The row underneath usually opens something; reading the labels shouldn't.
     e.stopPropagation();
     if (timerRef.current) clearTimeout(timerRef.current);
     if (expanded) { setExpanded(false); return; }
@@ -76,7 +88,7 @@ export function OverlappingRepPills({
     timerRef.current = setTimeout(() => setExpanded(false), EXPAND_MS);
   };
 
-  // Scrolling shouldn't count as reading the names, so the timer restarts.
+  // Scrolling shouldn't count as reading the labels, so the timer restarts.
   const nudge = (dir: -1 | 1) => (e: React.MouseEvent) => {
     e.stopPropagation();
     rowRef.current?.scrollBy({ left: dir * 110, behavior: 'smooth' });
@@ -92,7 +104,7 @@ export function OverlappingRepPills({
           <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 19l-7-7 7-7" /></svg>
         </button>
       )}
-      {/* A div rather than a button: the chevrons beside it are buttons, and a
+      {/* A span rather than a button: the chevrons beside it are buttons, and a
           button inside a button is invalid markup. */}
       <span
         ref={rowRef}
@@ -101,24 +113,24 @@ export function OverlappingRepPills({
         onClick={toggle}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e as unknown as React.MouseEvent); } }}
         onScroll={updateArrows}
-        title={expanded ? 'Hide names' : names.join(', ')}
+        title={expanded ? 'Hide' : (collapsedTitle ?? items.map(i => i.label).join(', '))}
         aria-expanded={expanded}
         className="inline-flex items-center text-left align-middle cursor-pointer min-w-0 overflow-x-auto scrollbar-hide"
       >
-        {shown.map((name, i) => (
+        {shown.map((item, i) => (
           <span
-            key={`${name}-${i}`}
+            key={item.key}
             style={{ zIndex: shown.length - i }}
             // Same element in both states: the width, padding and overlap
-            // transition, so the stack spreads out and the names appear in place
-            // rather than one row being swapped for another.
+            // transition, so the stack spreads out and the labels appear in
+            // place rather than one row being swapped for another.
             className={`relative inline-flex items-center justify-center rounded-full font-semibold ring-2 ring-white flex-shrink-0 overflow-hidden whitespace-nowrap transition-all duration-300 ease-out ${
               expanded
                 ? `h-6 max-w-[9rem] px-2 text-[10px] ${i > 0 ? 'ml-1' : ''}`
                 : `${dim} max-w-[1.5rem] px-0 ${i > 0 ? '-ml-1.5' : ''}`
-            } ${getPreset(colorMaps.user?.[name]).badgeClass}`}
+            } ${item.badgeClass}`}
           >
-            {expanded ? name : getRepInitials(name)}
+            {expanded ? item.label : item.short}
           </span>
         ))}
         {extra > 0 && (
@@ -138,6 +150,77 @@ export function OverlappingRepPills({
   );
 }
 
+/**
+ * Internal people on a record as a stack of circular initial pills. Used where
+ * several reps share a row and a wrapping list of pills would cost too much
+ * width.
+ */
+export function OverlappingRepPills({
+  repIds, userOptions, size = 'sm', max = 4, emptyLabel = '\u2014',
+}: {
+  /** Comma-separated config_options ids, as stored on scheduled_by. */
+  repIds: string | null | undefined;
+  userOptions: UserOption[];
+  size?: 'sm' | 'xs';
+  max?: number;
+  emptyLabel?: string | null;
+}) {
+  const colorMaps = useConfigColors();
+  const names = parseRepIds(repIds)
+    .map(id => userOptions.find(u => u.id === id)?.value)
+    .filter((v): v is string => !!v);
+
+  return (
+    <OverlappingBadges
+      items={names.map((name, i) => ({
+        key: `${name}-${i}`,
+        short: getRepInitials(name),
+        label: name,
+        badgeClass: getPreset(colorMaps.user?.[name]).badgeClass,
+      }))}
+      size={size}
+      max={max}
+      emptyLabel={emptyLabel}
+    />
+  );
+}
+
+/**
+ * A company's statuses as the same stack, a letter to a circle.
+ *
+ * Statuses are stored comma-separated and a company often carries more than
+ * one, so on a card they have exactly the problem the rep stack was built
+ * for: several short things that must not cost a row of width. Behaving the
+ * same way is the point — a reader who has learned to tap the support badges
+ * should not have to learn these separately.
+ */
+export function OverlappingStatusBadges({ status, max = 4, emptyLabel = '\u2014' }: {
+  /** companies.status, comma-separated. */
+  status: string | null | undefined;
+  max?: number;
+  emptyLabel?: string | null;
+}) {
+  const colorMaps = useConfigColors();
+  const values = String(status ?? '')
+    .split(',')
+    .map(v => v.trim())
+    // 'Unknown' is the column's default rather than something anybody chose,
+    // and the company table already declines to draw it.
+    .filter(v => v && v !== 'Unknown');
+
+  return (
+    <OverlappingBadges
+      items={values.map((value, i) => ({
+        key: `${value}-${i}`,
+        short: value.charAt(0).toUpperCase(),
+        label: value,
+        badgeClass: getPreset(colorMaps.status?.[value]).badgeClass,
+      }))}
+      max={max}
+      emptyLabel={emptyLabel}
+    />
+  );
+}
 
 /**
  * The same people as full-name pills on a single line. The row scrolls

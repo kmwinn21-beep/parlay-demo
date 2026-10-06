@@ -264,11 +264,18 @@ export function AttendeePhotoModal({ name, title, companyName, photoUrl, onClose
   const subtitle = [title, companyName].filter(Boolean).join(' | ');
 
   return createPortal(
-    // Below sm the card drops in from the top; from sm it is a centred modal.
-    <div className="fixed inset-0 z-[600] flex items-start sm:items-center justify-center bg-black/60 p-4" onClick={onClose}>
+    /* Below sm the card drops in from the top, starting at the site header's
+       bottom edge; from sm it is a centred modal.
+
+       The top padding is the header's own height rather than a few spacing
+       steps: it used to open 40px down, which is above the header on every
+       phone and under the clock on one with a notch, so the card's title sat
+       behind the status bar. --mobile-header-h carries the safe-area inset,
+       which is the part a fixed offset cannot know. */
+    <div className="fixed inset-0 z-[600] flex items-start sm:items-center justify-center bg-black/60 p-4 pt-[var(--mobile-header-h)] sm:pt-4" onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
-        className="attendee-photo-card bg-white rounded-2xl shadow-2xl w-full max-w-sm px-6 py-6 text-center mt-6 sm:mt-0"
+        className="attendee-photo-card bg-white rounded-2xl shadow-2xl w-full max-w-sm px-6 py-6 text-center"
       >
         <h3 className="text-lg font-bold text-brand-primary font-serif">{name}</h3>
         {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
