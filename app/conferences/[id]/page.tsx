@@ -941,14 +941,19 @@ export default function ConferenceDetailPage() {
    * before the conference has loaded: no count until there is one to show,
    * rather than a confident "(0)".
    */
+  const tabCount = (tabKey: ConferenceTabKey): number | null => {
+    if (tabKey === 'attendees' && conference) return conference.attendees.length;
+    if (tabKey === 'meetings' && confMeetings.length > 0) return confMeetings.length;
+    if (tabKey === 'follow-ups' && confFollowUps.length > 0) return confFollowUps.length;
+    if (tabKey === 'social' && confSocialEvents.length > 0) return confSocialEvents.length;
+    if (tabKey === 'notes' && confNotes.length > 0) return confNotes.length;
+    return null;
+  };
+
   const tabLabel = (tabKey: ConferenceTabKey) => {
     const baseLabel = conferenceTabConfig.getLabel(tabKey);
-    if (tabKey === 'attendees' && conference) return `${baseLabel} (${conference.attendees.length})`;
-    if (tabKey === 'meetings' && confMeetings.length > 0) return `${baseLabel} (${confMeetings.length})`;
-    if (tabKey === 'follow-ups' && confFollowUps.length > 0) return `${baseLabel} (${confFollowUps.length})`;
-    if (tabKey === 'social' && confSocialEvents.length > 0) return `${baseLabel} (${confSocialEvents.length})`;
-    if (tabKey === 'notes' && confNotes.length > 0) return `${baseLabel} (${confNotes.length})`;
-    return baseLabel;
+    const count = tabCount(tabKey);
+    return count == null ? baseLabel : `${baseLabel} (${count})`;
   };
 
   const tabNav = (
@@ -4161,8 +4166,16 @@ export default function ConferenceDetailPage() {
           className={`transition-opacity duration-150 ${
             tabDrawerOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
         >
+          {/* The name and the count travel separately, because the tile shows
+              the count as a badge rather than in the label. Both come from the
+              same tabCount the drawer's row parenthesises, so a count can
+              never show in one and not the other. */}
           <ConferenceTabStrip
-            tabs={visibleConferenceTabs.map(tabKey => ({ key: tabKey, label: tabLabel(tabKey) }))}
+            tabs={visibleConferenceTabs.map(tabKey => ({
+              key: tabKey,
+              label: conferenceTabConfig.getLabel(tabKey),
+              count: tabCount(tabKey),
+            }))}
             activeKey={activeTab}
             onPick={key => handleTabChange(key as ConferenceTabKey)}
           />
