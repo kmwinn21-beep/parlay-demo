@@ -73,8 +73,8 @@ console.log('\n— every value is under a word saying what it is —');
    * the card. The unit count is labelled with whatever the account calls a
    * unit.
    */
-  eq('  and the second, what the company is and what the meeting was worth',
-    labels.slice(2), ['Acct Status', 'Type', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
+  eq('  and the second, what the meeting was and who the company is',
+    labels.slice(2), ['Type', 'Acct Status', 'Support', '{unitTypeLabel}', 'Value', 'Conference', 'Guests']);
   /*
    * The labels are read out of the source, so a block switched off still
    * shows its label here. Each one is gated on the thing it displays, and
@@ -140,11 +140,13 @@ console.log('\n— every value is under a word saying what it is —');
   const fields = (card.match(/CARD_FIELD\b(?!_)/g) ?? []).length;
   const centered = (card.match(/CARD_FIELD_CENTERED\b/g) ?? []).length;
   eq('  worn by every field on both rows', fields + centered, 9);
-  /* The account status is one to three small circles under a two-word label;
-     ranged left they hang off the start of a much wider eyebrow. Every other
-     value is a pill at least as wide as its label and stays ranged left. */
-  eq('  with the account status centred under its own',
-    centered === 1 && /const CARD_FIELD_CENTERED = 'flex-shrink-0 flex flex-col items-center';/.test(table), true);
+  /* The two badge stacks are centred under their labels. Each is a few small
+     circles beneath a word wider than they are, and ranged left they hang off
+     the start of it and read as having come loose. Every other value is a
+     pill at least as wide as its own label and stays ranged left. */
+  eq('  with the two badge stacks centred under theirs', centered, 2);
+  eq('  by a class that says so',
+    /const CARD_FIELD_CENTERED = 'flex-shrink-0 flex flex-col items-center';/.test(table), true);
   eq('  with none left as a plain block',
     /<div className="flex-shrink-0">\s*\n\s*<p className=\{EYEBROW\}>/.test(card), false);
 
@@ -541,14 +543,14 @@ console.log('\n— the card says whose status is whose —');
 console.log('\n— the company status leads the card\u2019s badge row —');
 {
   const row = table.slice(table.indexOf('<ScrollRow className="mt-3"'), table.indexOf('<p className={EYEBROW}>Support</p>'));
-  /* Both ends found before they are compared: the first version of this
-     looked for '>Status</p>', which stopped matching when the label became
-     'Acct Status' — indexOf returned -1 and the comparison passed for the
-     wrong reason. */
+  /* Both ends found before they are compared: an earlier version of this
+     looked for a label that had been renamed, so indexOf returned -1 and the
+     comparison passed by not finding what it was looking for. */
   const statusAt = row.indexOf('>Acct Status</p>');
   const typeAt = row.indexOf('>Type</p>');
   eq('both labels are there', statusAt !== -1 && typeAt !== -1, true);
-  eq('  and Acct Status comes before Type', statusAt < typeAt, true);
+  // Type leads, under When: the two read as one sentence about the meeting.
+  eq('  and Type comes before Acct Status', typeAt < statusAt, true);
   eq('  drawn as the overlapping stack',
     /<OverlappingStatusBadges status=\{m\.company_status\}/.test(row), true);
 
@@ -556,7 +558,7 @@ console.log('\n— the company status leads the card\u2019s badge row —');
   // left out when there is nothing to show.
   eq('  and left out when there is none', /\{mobileStatuses\(m\)\.length > 0 && \(/.test(row), true);
   eq('  which the row itself also tests for',
-    /\{\(mobileStatuses\(m\)\.length > 0 \|\| m\.meeting_type/.test(table), true);
+    /\{\(m\.meeting_type \|\| mobileStatuses\(m\)\.length > 0/.test(table), true);
 
   // 'Unknown' is the column's default rather than anybody's choice.
   eq('Unknown does not count as a status',

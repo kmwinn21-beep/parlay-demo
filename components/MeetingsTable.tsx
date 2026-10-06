@@ -1768,29 +1768,34 @@ export function MeetingsTable({
              * the row reads as one band rather than as four things of different
              * sizes; the support stack is square so it stays a circle.
              */}
-            {(mobileStatuses(m).length > 0 || m.meeting_type || splitInternalIds(m).supportIds
+            {(m.meeting_type || mobileStatuses(m).length > 0 || splitInternalIds(m).supportIds
               || m.company_wse != null
               || mobileValue(m) || mobileConference(m) || mobileGuests(m).length > 0) && (
               <ScrollRow className="mt-3" gapClass="gap-3" step={120}>
-                {/* Leads the row: it says what the company IS, which is the
-                    frame for everything after it. The same stack the support
-                    badges use, so a reader who has learned to tap one has
-                    learned to tap the other — a letter to a circle, spreading
-                    into the full words. */}
-                {mobileStatuses(m).length > 0 && (
-                  <div className={CARD_FIELD_CENTERED}>
-                    <p className={EYEBROW}>Acct Status</p>
-                    <OverlappingStatusBadges status={m.company_status} emptyLabel={null} />
-                  </div>
-                )}
+                {/* Type leads, under When: the two read as one sentence about
+                    the meeting, and a reader going down the left edge gets
+                    both without crossing the card. */}
                 {m.meeting_type && (
                   <div className={CARD_FIELD}>
                     <p className={EYEBROW}>Type</p>
                     <span className={`${ROW_PILL} text-gray-500 bg-gray-100 border-gray-200`}>{m.meeting_type}</span>
                   </div>
                 )}
+                {/* Then what the company is. The same stack the support badges
+                    use, so a reader who has learned to tap one has learned to
+                    tap the other — a letter to a circle, spreading into the
+                    full words. */}
+                {mobileStatuses(m).length > 0 && (
+                  <div className={CARD_FIELD_CENTERED}>
+                    <p className={EYEBROW}>Acct Status</p>
+                    <OverlappingStatusBadges status={m.company_status} emptyLabel={null} />
+                  </div>
+                )}
+                {/* Centred for the same reason Acct Status is: a stack of
+                    small circles under a word wider than they are reads as
+                    having come loose from it when ranged left. */}
                 {splitInternalIds(m).supportIds && (
-                  <div className={CARD_FIELD}>
+                  <div className={CARD_FIELD_CENTERED}>
                     <p className={EYEBROW}>Support</p>
                     <OverlappingRepPills
                       repIds={splitInternalIds(m).supportIds}
