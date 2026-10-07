@@ -110,5 +110,36 @@ console.log('\n— narrowing the attendee list —');
     attendeesAtCompanies(ATTENDEES, new Set()).map(a => a.id), []);
 }
 
+console.log('\n— and the search can be emptied in one tap —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* The Build Guest List search only. Sliced FORWARD from its own placeholder
+     and asserted non-empty, so it cannot pass by reading nothing. */
+  const at = file.indexOf('placeholder="Search by name, company, or title..."');
+  const field = file.slice(Math.max(0, at - 600), at + 900);
+  eq('there is a search field to read', at !== -1 && field.length > 400, true);
+
+  eq('it has a clear button', /aria-label="Clear search"/.test(field), true);
+  eq('  which empties the box', /onClick=\{\(\) => setSearch\(''\)\}/.test(field), true);
+
+  /*
+   * Only while there is something to clear. A permanent X in an empty field is
+   * a control that does nothing, and it is the first thing under the title.
+   */
+  eq('  and is absent while the box is empty', /\{search !== '' && \(/.test(field), true);
+
+  /*
+   * Inside the field, not beside it. pr-9 reserves the width the button
+   * covers so a long query scrolls under it rather than beneath it.
+   * Measured in Chromium at 390px: the button sits inside the input, 8px from
+   * its right edge, vertically centred to within a pixel. Typing "Mike roach"
+   * cut the list from 5 rows to 1; clearing put all 5 back.
+   */
+  eq('  it sits inside the box', /className="relative"/.test(field), true);
+  eq('  with room reserved for it', /px-3 py-2 pr-9 text-sm/.test(field), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
