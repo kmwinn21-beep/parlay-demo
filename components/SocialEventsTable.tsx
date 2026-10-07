@@ -11,6 +11,7 @@ import { getConfig } from '@/lib/configCache';
 import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { sameIdSet } from '@/lib/guestListIds';
 import { filterGuests } from '@/lib/guestSearch';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
 import { useUser } from '@/components/UserContext';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { companiesAssignedTo, attendeesAtCompanies, type RepRef } from '@/lib/guestFilters';
@@ -459,7 +460,7 @@ function RankFields({ rank, onChange }: {
   );
 }
 
-function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull, rank, onRankChange }: {
+function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull, rank, onRankChange, onOpenCompany }: {
   attendee: Attendee;
   statuses: RsvpStatus[];
   onToggleRsvp: (s: RsvpStatus) => void;
@@ -469,6 +470,8 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
   userOptionsFull: Array<{ id: number; value: string }>;
   rank: GuestRank;
   onRankChange: (next: GuestRank) => void;
+  /** Open the company beside the list rather than leaving for its record. */
+  onOpenCompany: (target: QuickViewTarget) => void;
 }) {
   const [open, setOpen] = useState(false);
   const company = companies.find(c => c.id === attendee.company_id);
@@ -497,7 +500,19 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
             {attendee.title && <p className="text-xs text-gray-500 mt-0.5">{attendee.title}</p>}
             {attendee.company_name && (
               attendee.company_id
-                ? <a href={`/companies/${attendee.company_id}`} onClick={e => e.stopPropagation()} className="text-xs text-brand-primary hover:underline mt-0.5 block">{attendee.company_name}</a>
+                /* The quick view rather than the record. Leaving the drawer
+                   for a full page means losing the guest list, the filters and
+                   the search, and coming back by the back button — for a look
+                   at who the company is. The drawer closes onto the list
+                   exactly as it was. */
+                ? <button
+                    type="button"
+                    onClick={e => {
+                      e.stopPropagation();
+                      onOpenCompany({ type: 'company', id: attendee.company_id!, name: attendee.company_name! });
+                    }}
+                    className="text-xs text-brand-primary hover:underline mt-0.5 block text-left"
+                  >{attendee.company_name}</button>
                 : <p className="text-xs text-gray-600 mt-0.5">{attendee.company_name}</p>
             )}
           </div>
@@ -606,6 +621,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const [myAccountsOnly, setMyAccountsOnly] = useState(false);
   const [search, setSearch] = useState('');
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
   const { user } = useUser();
   /* The signed-in user as a rep, which is how a company records an
      assignment. Null when their login has no rep profile — there is nothing to
@@ -736,10 +752,17 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
           {visible.length === 0
             ? <p className="text-sm text-gray-400 text-center py-8">No attendees to show.</p>
             : visible.map(att => (
-              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} rank={rankOf(att.id)} onRankChange={next => onRankChange(att.id, next)} />
+              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} rank={rankOf(att.id)} onRankChange={next => onRankChange(att.id, next)} onOpenCompany={setQuickView} />
             ))}
         </div>
       </div>
+      {/* Above this drawer's own z-[60], because the quick view portals to the
+          body and would otherwise open behind the list that opened it. */}
+      {quickView && (
+        <div onClick={e => e.stopPropagation()}>
+          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} zClass="z-[80]" />
+        </div>
+      )}
       {editingGuests && (
         <div onClick={e => e.stopPropagation()}>
         <GuestListModal

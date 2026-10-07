@@ -258,5 +258,50 @@ console.log('\n— the drawer wires it up —');
   eq('  only where they are stacked under the counts', /stackOperators\s*\n?\s*\? 'flex items-center/.test(file), true);
 }
 
+console.log('\n— a company opens beside the list, not instead of it —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const at = file.indexOf('function AttendeeRSVPCard(');
+  const card = file.slice(at, file.indexOf('function ', at + 30));
+  eq('there is a guest card to read', at !== -1 && card.length > 400, true);
+
+  /*
+   * Leaving the drawer for a full record meant losing the guest list, the
+   * filters and the search, and coming back by the back button — to look at
+   * who a company is. Measured: the quick view opens, nothing navigates, and
+   * closing it leaves the search box still reading what was typed.
+   */
+  eq('the company name opens the quick view', /onOpenCompany\(\{ type: 'company'/.test(card), true);
+  eq('  and is no longer a link to the record',
+    /href=\{`\/companies\/\$\{attendee\.company_id\}`\}/.test(card), false);
+  // The card is itself clickable; the company must not also toggle it open.
+  eq('  without also toggling the card', /e\.stopPropagation\(\);/.test(card), true);
+
+  const at2 = file.indexOf('function GuestListSheet(');
+  const sheet = file.slice(at2, file.indexOf('function GuestListModal(', at2));
+  eq('the drawer renders the quick view', /<QuickViewDrawer target=\{quickView\}/.test(sheet), true);
+  /* Above this drawer's own z-[60]. The quick view portals to the body, so
+     without saying so it opens BEHIND the list that opened it. */
+  eq('  on a layer above the guest list', /zClass="z-\[80\]"/.test(sheet), true);
+  eq('  and the card is told how to open it', /onOpenCompany=\{setQuickView\}/.test(sheet), true);
+}
+
+console.log('\n— and it stops at the site header —');
+{
+  const { readFileSync } = await import('node:fs');
+  const qv = readFileSync('components/QuickViewDrawer.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* sheet-below-header SPANS the space under the header; h-[90vh] capped at
+     it, which only lands the top edge there when the content fills the cap.
+     Measured at 390px with the header at 85px plus a 59px inset: the panel
+     opens at 144 and runs to 844. */
+  eq('the quick view spans the space below the header',
+    /sheet-below-header/.test(qv), true);
+  eq('  rather than a fraction of the viewport', /h-\[90vh\]/.test(qv), false);
+  eq('  and keeps its full height on a pointer', /sm:h-full/.test(qv), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

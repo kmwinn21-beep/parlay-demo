@@ -47,7 +47,11 @@ export function QuickViewDrawer({ target, onClose, zClass = 'z-50' }: Props) {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       {/* Panel */}
       <div
-        className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[480px] h-[90vh] sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        /* sheet-below-header rather than h-[90vh]: it SPANS the space under the
+           site header instead of capping at it, so the top edge lands on the
+           header whatever is inside. See app/globals.css — a cap only puts the
+           edge there when the content is tall enough to reach it. */
+        className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[480px] sheet-below-header sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
         style={panelStyle}
       >
         {/* Resize handle */}
