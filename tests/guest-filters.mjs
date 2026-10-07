@@ -110,5 +110,79 @@ console.log('\n— narrowing the attendee list —');
     attendeesAtCompanies(ATTENDEES, new Set()).map(a => a.id), []);
 }
 
+console.log('\n— and the search can be emptied in one tap —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* The Build Guest List search only. Sliced FORWARD from its own placeholder
+     and asserted non-empty, so it cannot pass by reading nothing. */
+  const at = file.indexOf('placeholder="Search by name, company, or title..."');
+  const field = file.slice(Math.max(0, at - 600), at + 900);
+  eq('there is a search field to read', at !== -1 && field.length > 400, true);
+
+  eq('it has a clear button', /aria-label="Clear search"/.test(field), true);
+  eq('  which empties the box', /onClick=\{\(\) => setSearch\(''\)\}/.test(field), true);
+
+  /*
+   * Only while there is something to clear. A permanent X in an empty field is
+   * a control that does nothing, and it is the first thing under the title.
+   */
+  eq('  and is absent while the box is empty', /\{search !== '' && \(/.test(field), true);
+
+  /*
+   * Inside the field, not beside it. pr-9 reserves the width the button
+   * covers so a long query scrolls under it rather than beneath it.
+   * Measured in Chromium at 390px: the button sits inside the input, 8px from
+   * its right edge, vertically centred to within a pixel. Typing "Mike roach"
+   * cut the list from 5 rows to 1; clearing put all 5 back.
+   */
+  eq('  it sits inside the box', /className="relative"/.test(field), true);
+  eq('  with room reserved for it', /px-3 py-2 pr-9 text-sm/.test(field), true);
+}
+
+console.log('\n— and the drawer can narrow to my accounts —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* The drawer, not the picker: both have a My Accounts button now. Sliced
+     FORWARD from the drawer's own function and asserted non-empty. */
+  const at = file.indexOf('function GuestListSheet(');
+  const sheet = file.slice(at, file.indexOf('function GuestListModal(', at));
+  eq('there is a drawer to read', at !== -1 && sheet.length > 1000, true);
+
+  eq('it has a My Accounts button', /My Accounts\s*\n?\s*<\/button>/.test(sheet), true);
+  eq('  which says whether it is on', /aria-pressed=\{myAccountsOnly\}/.test(sheet), true);
+
+  /*
+   * Through the same two helpers the Build Guest List picker uses, so "my
+   * accounts" means one thing on both surfaces rather than two implementations
+   * that drift.
+   */
+  eq('  narrowing by the same rule as the picker',
+    /attendeesAtCompanies\(invitedAttendees, companiesAssignedTo\(companies, \[me\]\)\)/.test(sheet), true);
+  eq('  with the signed-in rep read the same way',
+    /user\?\.configId != null/.test(sheet), true);
+
+  /*
+   * Disabled when the login has no rep profile. There is nothing to match on,
+   * so filtering would empty the list and look broken. Measured in Chromium
+   * with configId null: the button renders disabled.
+   */
+  eq('  and disabled when there is no rep profile', /disabled=\{!me\}/.test(sheet), true);
+
+  /*
+   * The counts follow the filter. A summary reading 49 INVITED over four rows
+   * is worse than no summary. Measured at 390px with four guests, two of them
+   * at the signed-in rep's accounts: off 4 rows / 4 INVITED, on 2 rows /
+   * 2 INVITED, off again back to 4.
+   */
+  eq('  the summary describes the filtered list',
+    /invitedIds=\{accountScoped\.map\(a => a\.id\)\}[\s\S]{0,160}attendees=\{accountScoped\}/.test(sheet), true);
+  eq('  and the type chips narrow it further',
+    /selectedTypes\.size > 0 \? accountScoped\.filter/.test(sheet), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

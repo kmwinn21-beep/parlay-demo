@@ -9,6 +9,7 @@ import { getBadgeClass, getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getConfig } from '@/lib/configCache';
 import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
+import { sameIdSet } from '@/lib/guestListIds';
 import { useUser } from '@/components/UserContext';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { companiesAssignedTo, attendeesAtCompanies, type RepRef } from '@/lib/guestFilters';
@@ -592,12 +593,33 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     return next;
   });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
+  const [myAccountsOnly, setMyAccountsOnly] = useState(false);
+  const { user } = useUser();
+  /* The signed-in user as a rep, which is how a company records an
+     assignment. Null when their login has no rep profile — there is nothing to
+     match on, so the button is disabled rather than filtering to nothing and
+     looking broken. The Build Guest List picker reads it the same way. */
+  const me: RepRef | null = user?.configId != null
+    ? { id: user.configId, value: user.displayName ?? '' }
+    : null;
   const [editingGuests, setEditingGuests] = useState(false);
   const handleToggleFilter = (f: RsvpStatus | null) => {
     if (f === null) { setActiveFilters([]); return; }
     setActiveFilters(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
   };
-  const byPrimaryType = selectedTypes.size > 0 ? invitedAttendees.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : invitedAttendees;
+  /*
+   * My Accounts narrows the guest list to people at companies assigned to the
+   * signed-in rep, through the same two helpers the Build Guest List picker
+   * uses — so "my accounts" means one thing on both surfaces.
+   *
+   * Applied before the type and RSVP filters AND handed to the summary bar, so
+   * the counts above describe the list below rather than the one it came from.
+   * A bar reading 49 INVITED over four rows is worse than no bar.
+   */
+  const accountScoped = myAccountsOnly && me
+    ? attendeesAtCompanies(invitedAttendees, companiesAssignedTo(companies, [me]))
+    : invitedAttendees;
+  const byPrimaryType = selectedTypes.size > 0 ? accountScoped.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : accountScoped;
   const filtered = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
@@ -606,6 +628,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   // after filtering so the order of what is shown is always the full order.
   const visible = sortByRank(filtered, a => rankOf(a.id));
   const buildGuestListBtn = (
+    <>
     <button
       type="button"
       onClick={() => setEditingGuests(true)}
@@ -614,6 +637,24 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
       <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
       Add/Edit
     </button>
+    {/* Beside Add/Edit, ahead of the company-type chips: all three narrow the
+        same list, and this one answers "whose accounts" rather than "what
+        kind of company". Styled as the picker's own My Accounts button. */}
+    <button
+      type="button"
+      disabled={!me}
+      onClick={() => setMyAccountsOnly(v => !v)}
+      title={me ? undefined : 'Your login has no rep profile, so no companies are assigned to you.'}
+      aria-pressed={myAccountsOnly}
+      className={`px-3 py-1.5 text-xs font-medium rounded-lg border whitespace-nowrap transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+        myAccountsOnly
+          ? 'bg-brand-secondary border-brand-secondary text-white'
+          : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+      }`}
+    >
+      My Accounts
+    </button>
+    </>
   );
   if (!mounted) return null;
 
@@ -644,7 +685,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={invitedAttendees.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={invitedAttendees} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators leadingControl={buildGuestListBtn} />
+          <RSVPSummaryBar invitedIds={accountScoped.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={accountScoped} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators leadingControl={buildGuestListBtn} />
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
@@ -801,13 +842,32 @@ function GuestListModal({ attendees, selected, onConfirm, onClose, icpCompanyTyp
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search by name, company, or title..."
-            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
-          />
+          {/* The clear button sits inside the field, as it does on the
+              duplicate-companies search. pr-9 reserves the width it covers, so
+              a long query scrolls under it rather than beneath it. */}
+          <div className="relative">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, company, or title..."
+              className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
+            />
+            {/* Only while there is something to clear: a permanent X in an
+                empty field is a control that does nothing. */}
+            {search !== '' && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
           {/* Account filters. Both narrow the pool to attendees whose COMPANY
               is assigned to somebody, so they sit together under the search. */}
           <div className="flex items-center gap-2 mt-2">
@@ -965,6 +1025,16 @@ export function SocialEventsTable({
    * kept in step.
    */
   const [localRanks, setLocalRanks] = useState<Record<string, GuestRank>>({});
+  /**
+   * Optimistic guest lists, keyed by event id.
+   *
+   * The same read-through/write-through shape as the two above. Saving a guest
+   * list refetched the conference and waited for it, so the drawer showed the
+   * old list under a success toast and the new guests only appeared after a
+   * page reload. The list on screen is the saved one immediately now, and the
+   * refetch becomes confirmation rather than the thing being waited for.
+   */
+  const [localGuests, setLocalGuests] = useState<Record<number, number[]>>({});
   const [guestListEventId, setGuestListEventId] = useState<number | null>(null);
   // The guest list only lives in the drawer now, so a card tap opens it at
   // every width rather than expanding an inline table.
@@ -1019,6 +1089,33 @@ export function SocialEventsTable({
     const r = ev?.rsvps?.find(r => r.attendee_id === attendeeId);
     return r ? parseStatuses(r.rsvp_status) : [];
   }, [localRsvps, events]);
+
+  /** The guest list for an event: the optimistic one if there is one. */
+  const getEffectiveGuestIds = useCallback((ev: SocialEvent): number[] =>
+    ev.id in localGuests ? localGuests[ev.id] : parseRepIds(ev.prospect_attendees),
+  [localGuests]);
+
+  /*
+   * An override lives only until the server agrees with it.
+   *
+   * The RSVP and rank overrides above are never cleared, which is survivable
+   * for a single field; a whole list is not. Left in place, a guest list
+   * changed by somebody else — or by the event's own edit form, which writes
+   * prospect_attendees directly — would be masked by a local copy nothing
+   * clears, for as long as the page stays open.
+   */
+  useEffect(() => {
+    setLocalGuests(prev => {
+      const next: Record<number, number[]> = {};
+      let dropped = false;
+      for (const [key, ids] of Object.entries(prev)) {
+        const ev = events.find(e => e.id === Number(key));
+        if (ev && sameIdSet(parseRepIds(ev.prospect_attendees), ids)) { dropped = true; continue; }
+        next[Number(key)] = ids;
+      }
+      return dropped ? next : prev;
+    });
+  }, [events]);
 
   /* Rank helpers — the same read-through/write-through shape as the RSVP pair. */
   const getEffectiveRank = useCallback((eventId: number, attendeeId: number): GuestRank => {
@@ -1170,10 +1267,43 @@ export function SocialEventsTable({
      current list so each attendee's RSVP record follows them. */
   const handleSaveGuestList = useCallback(async (eventId: number, ids: number[]) => {
     const ev = events.find(e => e.id === eventId);
-    const current = parseRepIds(ev?.prospect_attendees ?? null);
+    /* The list being diffed against is the one on screen, which is the
+       optimistic one when there is an unconfirmed save. Diffing against the
+       server's copy instead would re-send every change made since. */
+    const current = ev ? getEffectiveGuestIds(ev) : [];
     const added = ids.filter(id => !current.includes(id));
     const removed = current.filter(id => !ids.includes(id));
     if (added.length === 0 && removed.length === 0) return;
+
+    /*
+     * Shown as saved before the writes go out.
+     *
+     * The RSVP seeds go with it: the route gives a new guest 'maybe', so
+     * without them the drawer would count somebody under INVITED and leave
+     * them out of MAYBE until a refetch landed — the optimistic state would
+     * differ from the confirmed one, which is the failure mode that makes
+     * optimism worse than waiting.
+     */
+    const rollbackGuests = ev && eventId in localGuests ? localGuests[eventId] : null;
+    setLocalGuests(prev => ({ ...prev, [eventId]: ids }));
+    setLocalRsvps(prev => {
+      const next = { ...prev };
+      for (const id of added) next[`${eventId}:${id}`] = ['maybe'];
+      for (const id of removed) delete next[`${eventId}:${id}`];
+      return next;
+    });
+    const undo = () => {
+      setLocalGuests(prev => {
+        const next = { ...prev };
+        if (rollbackGuests) next[eventId] = rollbackGuests; else delete next[eventId];
+        return next;
+      });
+      setLocalRsvps(prev => {
+        const next = { ...prev };
+        for (const id of added) delete next[`${eventId}:${id}`];
+        return next;
+      });
+    };
     /*
      * Every failure used to arrive as `throw new Error()`, so the toast said
      * "Failed to update the guest list." and the status was gone — a 401 from
@@ -1203,11 +1333,14 @@ export function SocialEventsTable({
     } catch (err) {
       toast.error(`Failed to update the guest list: ${
         err instanceof Error ? err.message : 'unknown error'}.`);
-      // The list on screen is now behind whatever did get written before the
-      // failure, so it is reloaded rather than left looking untouched.
+      /* Put the list back to what it was and reload. The optimistic copy is
+         now a claim the server did not accept, and some of the writes may
+         have gone through before the one that failed — so the refetch, not
+         the rollback, is what the drawer ends up showing. */
+      undo();
       onRefresh();
     }
-  }, [events, onRefresh]);
+  }, [events, onRefresh, getEffectiveGuestIds, localGuests]);
 
   const handleDelete = async (eventId: number) => {
     if (!confirm('Delete this social event? This cannot be undone.')) return;
@@ -1224,7 +1357,7 @@ export function SocialEventsTable({
 
   /* per-event invited attendees + rsvp map */
   const getEventData = (ev: SocialEvent) => {
-    const ids = parseRepIds(ev.prospect_attendees);
+    const ids = getEffectiveGuestIds(ev);
     const invited = ids.map(id => attendees.find(a => a.id === id)).filter(Boolean) as Attendee[];
     const rsvpMap: Record<number, RsvpStatus[]> = {};
     for (const a of invited) rsvpMap[a.id] = getEffectiveRsvp(ev.id, a.id);
