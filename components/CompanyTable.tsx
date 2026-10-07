@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { getConfigCategory } from '@/lib/configCache';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
@@ -216,9 +217,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   // Map of status option id → value for all user-scoped status options
   const [userScopedStatusMap, setUserScopedStatusMap] = useState<Map<number, string>>(new Map());
   useEffect(() => {
-    fetch('/api/config?category=status')
-      .then(r => r.json())
-      .then((opts: { id: number; value: string; scope: string | null }[]) => {
+    getConfigCategory('status')
+      .then(rows => {
+        const opts = rows as { id: number; value: string; scope: string | null }[];
         const map = new Map<number, string>();
         opts.filter(o => o.scope === 'user').forEach(o => map.set(o.id, o.value));
         setUserScopedStatusMap(map);

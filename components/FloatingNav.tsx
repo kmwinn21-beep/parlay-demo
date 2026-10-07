@@ -25,6 +25,21 @@ const INTEL_ITEMS = [
   { href: '/program-intelligence', label: 'Program Intelligence' },
 ];
 
+/**
+ * Every destination in the phone's nav menu — and all of them render as Links
+ * with prefetch OFF.
+ *
+ * Next prefetches a Link once it is on screen, which for a navigation menu
+ * means downloading every page in the app the moment the menu opens. The
+ * sidebar gets away with it because it mounts once and stays; this menu is
+ * unmounted when it closes, so the whole set is fetched again on every open.
+ * Measured in production: each of these eleven routes was requested exactly
+ * twice during a single conference visit, which is the menu having been opened
+ * twice.
+ *
+ * The destinations are not pages you wait on either — they are a tap away by
+ * choice, not a hover away by accident.
+ */
 const NAV_ITEMS = [
   {
     href: '/',
@@ -397,6 +412,10 @@ export function FloatingNav() {
               {item.href !== null ? (
                 <Link
                   href={item.href}
+                  /* See the note on NAV_ITEMS: this menu unmounts when it
+                     closes, so a prefetch here is paid for again every time it
+                     is opened. */
+                  prefetch={false}
                   onClick={() => setOpen(false)}
                   className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl shadow-lg backdrop-blur-sm border min-w-[152px] transition-colors ${pillCls}`}
                 >
@@ -507,6 +526,7 @@ export function FloatingNav() {
                 >
                   <Link
                     href={item.href}
+                    prefetch={false}
                     onClick={() => { setOpen(false); setIntelOpen(false); }}
                     className="flex items-center whitespace-nowrap text-sm font-semibold text-brand-primary bg-brand-accent hover:bg-brand-accent/90 backdrop-blur-sm rounded-2xl px-4 py-2.5 border border-white/20 shadow-lg transition-colors text-left min-w-[152px]"
                   >

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, Fragment } from 'react';
+import { getConfigCategory } from '@/lib/configCache';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -1365,9 +1366,8 @@ export function MeetingsTable({
   }, [user]);
 
   useEffect(() => {
-    fetch('/api/config?category=meeting_type', { cache: 'no-store' })
-      .then(r => r.json())
-      .then((data: { value: string }[]) => setMeetingTypeOptions(data.map(d => d.value)))
+    getConfigCategory('meeting_type')
+      .then(rows => setMeetingTypeOptions((rows as { value: string }[]).map(d => d.value)))
       .catch(() => {});
   }, []);
 

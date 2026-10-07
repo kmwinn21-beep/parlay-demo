@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { loadConferenceNav } from '@/lib/conferenceNav';
 import { useUser } from '@/components/UserContext';
 import { useActiveConference, type ActiveConference } from '@/components/ActiveConferenceContext';
 import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
@@ -42,7 +43,14 @@ export function SetConferenceButton() {
     autoSetAttempted.current = true;
     void (async () => {
       try {
-        const data: ConferenceRow[] = await fetch('/api/conferences?nav=1').then(r => r.json());
+        /* Through the shared nav cache rather than straight to the network.
+           The conference menu asks for this exact URL on every page, and this
+           asked for it again a moment later — measured in production as two
+           /api/conferences?nav=1 requests inside the same second. The cache
+           answers the second one from memory. */
+        const { conferences, failed } = await loadConferenceNav();
+        if (failed) return;
+        const data = conferences as ConferenceRow[];
         const userNames = [user.displayName, user.repName]
           .filter(Boolean)
           .map(s => s!.trim().toLowerCase());

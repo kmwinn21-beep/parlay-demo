@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getConfigCategory } from '@/lib/configCache';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import type { UserOption } from '@/lib/useUserOptions';
 
@@ -30,9 +31,8 @@ export function AssignFollowUpFields({
   const [actionOptions, setActionOptions] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch('/api/config?category=follow_up_actions')
-      .then(r => (r.ok ? r.json() : []))
-      .then((data: { value: string }[]) => setActionOptions(Array.isArray(data) ? data.map(d => d.value) : []))
+    getConfigCategory('follow_up_actions')
+      .then(rows => setActionOptions((rows as { value: string }[]).map(d => d.value)))
       .catch(() => {});
   }, []);
 

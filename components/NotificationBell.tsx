@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { startPolling, stopPolling } from '@/lib/pollingManager';
+import { refreshUnreadNotifications, subscribeUnreadNotifications } from '@/lib/unreadNotifications';
 import Link from 'next/link';
 
 interface Notification {
@@ -79,14 +79,6 @@ export function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/notifications?unread_only=1&limit=200');
-      if (!res.ok) return;
-      const data = await res.json();
-      setUnreadCount(Array.isArray(data) ? data.length : 0);
-    } catch { /* non-fatal */ }
-  }, []);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -95,17 +87,25 @@ export function NotificationBell() {
       if (!res.ok) return;
       const data = await res.json();
       setNotifications(Array.isArray(data) ? data : []);
-      setUnreadCount(Array.isArray(data) ? data.length : 0);
+      /* The count is NOT taken from this list. It is capped at 20, so opening
+         the panel with fifty unread used to drop the badge to 20 — and now
+         that the badge is shared, it would have dropped the nav's copy too.
+         The subscription owns the number; this only asks it to look again. */
+      refreshUnreadNotifications();
     } catch { /* non-fatal */ } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchUnreadCount();
-    startPolling('notification-bell', fetchUnreadCount, 30_000, 30_000);
-    return () => stopPolling('notification-bell');
-  }, [fetchUnreadCount]);
+  /*
+   * Subscribed rather than polling.
+   *
+   * This and useUnreadNotificationCount asked for the identical URL on their
+   * own 30-second timers, so one number cost two requests a minute for as long
+   * as the app was open. One poller lives in lib/unreadNotifications.ts now
+   * and both read from it.
+   */
+  useEffect(() => subscribeUnreadNotifications(setUnreadCount), []);
 
   // Fetch notifications when dropdown opens
   useEffect(() => {
@@ -136,6 +136,10 @@ export function NotificationBell() {
       });
       setNotifications(prev => prev.filter(n => n.id !== id));
       setUnreadCount(prev => Math.max(0, prev - 1));
+      // The bell's own number is already right; this tells the nav badge,
+      // which is a separate subscriber and would otherwise stay stale for up
+      // to a poll.
+      refreshUnreadNotifications();
     } catch { /* non-fatal */ }
   }, [isDemo]);
 
@@ -149,6 +153,7 @@ export function NotificationBell() {
       });
       setNotifications([]);
       setUnreadCount(0);
+      refreshUnreadNotifications();
     } catch { /* non-fatal */ }
   }, [isDemo]);
 
