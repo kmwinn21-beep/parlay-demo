@@ -17,6 +17,8 @@ export interface AdditionalAttendeeRecord {
   last_name: string;
   title: string | null;
   email: string | null;
+  /** For the card's phone badge, as the primary attendee carries one. */
+  phone: string | null;
   photo_url: string | null;
   company_id: number | null;
   company_name: string | null;
@@ -59,7 +61,7 @@ export async function loadAdditionalAttendees(
 
   const ids = Array.from(all);
   const rows = await db.execute({
-    sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.photo_url,
+    sql: `SELECT a.id, a.first_name, a.last_name, a.title, a.email, a.phone, a.photo_url,
                  co.id AS company_id, co.name AS company_name
             FROM attendees a
             LEFT JOIN companies co ON a.company_id = co.id
@@ -75,6 +77,7 @@ export async function loadAdditionalAttendees(
       last_name: String(r.last_name ?? ''),
       title: r.title != null ? String(r.title) : null,
       email: r.email != null ? String(r.email) : null,
+      phone: r.phone != null ? String(r.phone) : null,
       photo_url: r.photo_url != null ? String(r.photo_url) : null,
       company_id: r.company_id != null ? Number(r.company_id) : null,
       company_name: r.company_name != null ? String(r.company_name) : null,
