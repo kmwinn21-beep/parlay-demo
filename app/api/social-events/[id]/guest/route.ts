@@ -40,21 +40,45 @@ export async function POST(
       .map(s => parseInt(s.trim(), 10))
       .filter(n => !isNaN(n) && n > 0);
 
+    /*
+     * The guest list and the RSVP row go in together, or neither does.
+     *
+     * They used to be two execute() calls, and the second one could fail on
+     * its own: the attendee was then listed as invited with no RSVP record, so
+     * the drawer counted them under INVITED and the RSVP columns disagreed —
+     * and the client, seeing the request fail, never reloaded, so the list it
+     * showed was the one from before the half-write.
+     *
+     * The INSERT is guarded by a SELECT rather than by ON CONFLICT.
+     *
+     * ON CONFLICT names a constraint, and naming one that an account's
+     * database does not have is an error rather than a no-op: "ON CONFLICT
+     * clause does not match any PRIMARY KEY or UNIQUE constraint". The
+     * composite key is in the CREATE TABLE, but that statement is IF NOT
+     * EXISTS, so a database whose table predates it keeps whatever shape it
+     * was made with and every guest add fails with a 500. Reproduced against a
+     * real SQLite file built that way: POST returns 500, prospect_attendees is
+     * updated anyway, and no RSVP row is written — which is the half-write
+     * above. WHERE NOT EXISTS asks about rows instead of about constraints, so
+     * it behaves the same on either shape.
+     */
+    const statements = [];
     if (!existing.includes(aid)) {
-      const updated = [...existing, aid].join(',');
-      await db.execute({
+      statements.push({
         sql: 'UPDATE social_events SET prospect_attendees = ? WHERE id = ?',
-        args: [updated, id],
+        args: [[...existing, aid].join(','), id],
       });
     }
-
-    // Upsert RSVP record with 'maybe' (invited) status
-    await db.execute({
+    statements.push({
       sql: `INSERT INTO social_event_rsvps (social_event_id, attendee_id, rsvp_status, updated_at)
-            VALUES (?, ?, 'maybe', datetime('now'))
-            ON CONFLICT (social_event_id, attendee_id) DO NOTHING`,
-      args: [id, aid],
+            SELECT ?, ?, 'maybe', datetime('now')
+            WHERE NOT EXISTS (
+              SELECT 1 FROM social_event_rsvps
+              WHERE social_event_id = ? AND attendee_id = ?
+            )`,
+      args: [id, aid, id, aid],
     });
+    await db.batch(statements, 'write');
 
     // Return success before best-effort notification so DB failures in
     // notification lookup never surface as a guest-add failure to the client.

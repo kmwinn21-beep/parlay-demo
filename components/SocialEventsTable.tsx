@@ -1174,27 +1174,38 @@ export function SocialEventsTable({
     const added = ids.filter(id => !current.includes(id));
     const removed = current.filter(id => !ids.includes(id));
     if (added.length === 0 && removed.length === 0) return;
+    /*
+     * Every failure used to arrive as `throw new Error()`, so the toast said
+     * "Failed to update the guest list." and the status was gone — a 401 from
+     * an expired session and a 500 from the database read identically, and
+     * there was nothing to act on. The reason travels now: a short one in the
+     * toast, the whole thing in the console.
+     */
+    const send = async (method: 'POST' | 'DELETE', attendee_id: number) => {
+      const res = await fetch(`/api/social-events/${eventId}/guest`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ attendee_id }),
+      });
+      if (res.ok) return;
+      const detail = await res.json().catch(() => null);
+      console.error(`${method} /api/social-events/${eventId}/guest`, res.status, detail);
+      throw new Error(
+        res.status === 401 ? 'your session has expired — sign in again'
+          : detail?.error ? String(detail.error)
+          : `the server returned ${res.status}`);
+    };
     try {
-      for (const attendee_id of added) {
-        const res = await fetch(`/api/social-events/${eventId}/guest`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendee_id }),
-        });
-        if (!res.ok) throw new Error();
-      }
-      for (const attendee_id of removed) {
-        const res = await fetch(`/api/social-events/${eventId}/guest`, {
-          method: 'DELETE',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ attendee_id }),
-        });
-        if (!res.ok) throw new Error();
-      }
+      for (const attendee_id of added) await send('POST', attendee_id);
+      for (const attendee_id of removed) await send('DELETE', attendee_id);
       toast.success('Guest list updated.');
       onRefresh();
-    } catch {
-      toast.error('Failed to update the guest list.');
+    } catch (err) {
+      toast.error(`Failed to update the guest list: ${
+        err instanceof Error ? err.message : 'unknown error'}.`);
+      // The list on screen is now behind whatever did get written before the
+      // failure, so it is reloaded rather than left looking untouched.
+      onRefresh();
     }
   }, [events, onRefresh]);
 
