@@ -460,7 +460,7 @@ function RankFields({ rank, onChange }: {
   );
 }
 
-function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull, rank, onRankChange, onOpenCompany }: {
+function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMaps, companies, userOptionsFull, rank, onRankChange, onQuickView }: {
   attendee: Attendee;
   statuses: RsvpStatus[];
   onToggleRsvp: (s: RsvpStatus) => void;
@@ -470,8 +470,9 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
   userOptionsFull: Array<{ id: number; value: string }>;
   rank: GuestRank;
   onRankChange: (next: GuestRank) => void;
-  /** Open the company beside the list rather than leaving for its record. */
-  onOpenCompany: (target: QuickViewTarget) => void;
+  /** Open a guest or their company beside the list, rather than leaving for
+   *  the record. Both names on the card use it. */
+  onQuickView: (target: QuickViewTarget) => void;
 }) {
   const [open, setOpen] = useState(false);
   const company = companies.find(c => c.id === attendee.company_id);
@@ -496,7 +497,17 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
             className="w-9 h-9 text-xs mt-0.5"
           />
           <div className="min-w-0 flex-1">
-            <a href={`/attendees/${attendee.id}`} onClick={e => e.stopPropagation()} className="font-semibold text-sm text-brand-primary hover:underline leading-tight block">{attendee.first_name} {attendee.last_name}</a>
+            {/* The quick view, for the same reason the company name opens one:
+                leaving the drawer for a record costs the list, the filters,
+                the search and the scroll position. */}
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation();
+                onQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}`.trim() });
+              }}
+              className="font-semibold text-sm text-brand-primary hover:underline leading-tight block text-left"
+            >{attendee.first_name} {attendee.last_name}</button>
             {attendee.title && <p className="text-xs text-gray-500 mt-0.5">{attendee.title}</p>}
             {attendee.company_name && (
               attendee.company_id
@@ -509,7 +520,7 @@ function AttendeeRSVPCard({ attendee, statuses, onToggleRsvp, onRemove, colorMap
                     type="button"
                     onClick={e => {
                       e.stopPropagation();
-                      onOpenCompany({ type: 'company', id: attendee.company_id!, name: attendee.company_name! });
+                      onQuickView({ type: 'company', id: attendee.company_id!, name: attendee.company_name! });
                     }}
                     className="text-xs text-brand-primary hover:underline mt-0.5 block text-left"
                   >{attendee.company_name}</button>
@@ -752,7 +763,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
           {visible.length === 0
             ? <p className="text-sm text-gray-400 text-center py-8">No attendees to show.</p>
             : visible.map(att => (
-              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} rank={rankOf(att.id)} onRankChange={next => onRankChange(att.id, next)} onOpenCompany={setQuickView} />
+              <AttendeeRSVPCard key={att.id} attendee={att} statuses={rsvpMap[att.id] || []} onToggleRsvp={s => onToggleRsvp(att.id, s)} onRemove={() => onRemoveGuest(att.id)} colorMaps={colorMaps} companies={companies} userOptionsFull={userOptionsFull} rank={rankOf(att.id)} onRankChange={next => onRankChange(att.id, next)} onQuickView={setQuickView} />
             ))}
         </div>
       </div>

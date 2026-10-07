@@ -273,11 +273,24 @@ console.log('\n— a company opens beside the list, not instead of it —');
    * who a company is. Measured: the quick view opens, nothing navigates, and
    * closing it leaves the search box still reading what was typed.
    */
-  eq('the company name opens the quick view', /onOpenCompany\(\{ type: 'company'/.test(card), true);
-  eq('  and is no longer a link to the record',
-    /href=\{`\/companies\/\$\{attendee\.company_id\}`\}/.test(card), false);
-  // The card is itself clickable; the company must not also toggle it open.
-  eq('  without also toggling the card', /e\.stopPropagation\(\);/.test(card), true);
+  eq('the company name opens the quick view', /onQuickView\(\{ type: 'company'/.test(card), true);
+  eq('  and the guest name opens one too', /onQuickView\(\{ type: 'attendee'/.test(card), true);
+  eq('  neither is a link to a record any more',
+    /href=\{`\/companies\/\$\{attendee\.company_id\}`\}/.test(card)
+      || /href=\{`\/attendees\/\$\{attendee\.id\}`\}/.test(card), false);
+  /* The card is itself clickable — it expands to the RSVP controls — so both
+     names have to stop the click reaching it. Measured: opening either quick
+     view leaves the card collapsed. */
+  /* Asserted per handler, not as a count: the card has other stopPropagation
+     calls — the avatar, the remove button — so a count passed even with one of
+     these removed. The mutation that proved it. */
+  eq('  without also toggling the card open',
+    /e\.stopPropagation\(\);\s*\n\s*onQuickView\(\{ type: 'attendee'/.test(card), true);
+  eq('    nor on the company either',
+    /e\.stopPropagation\(\);\s*\n\s*onQuickView\(\{ type: 'company'/.test(card), true);
+  // One callback for both, rather than a second one that could be wired to a
+  // different layer or forgotten at the call site.
+  eq('  through one callback', /onQuickView: \(target: QuickViewTarget\) => void;/.test(card), true);
 
   const at2 = file.indexOf('function GuestListSheet(');
   const sheet = file.slice(at2, file.indexOf('function GuestListModal(', at2));
@@ -285,7 +298,7 @@ console.log('\n— a company opens beside the list, not instead of it —');
   /* Above this drawer's own z-[60]. The quick view portals to the body, so
      without saying so it opens BEHIND the list that opened it. */
   eq('  on a layer above the guest list', /zClass="z-\[80\]"/.test(sheet), true);
-  eq('  and the card is told how to open it', /onOpenCompany=\{setQuickView\}/.test(sheet), true);
+  eq('  and the card is told how to open it', /onQuickView=\{setQuickView\}/.test(sheet), true);
 }
 
 console.log('\n— and it stops at the site header —');
