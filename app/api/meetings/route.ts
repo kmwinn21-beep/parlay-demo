@@ -71,6 +71,11 @@ export async function GET(request: NextRequest) {
           a.last_name,
           a.title,
           a.photo_url,
+          -- For the contact badges on the mobile meeting card. Both are
+          -- optional on an attendee, and the card draws a badge only for the
+          -- one that is there.
+          a.email,
+          a.phone,
           co.id AS company_id,
           co.name AS company_name,
           co.wse AS company_wse,
@@ -112,6 +117,8 @@ export async function GET(request: NextRequest) {
         as_additional_attendee: attendeeId != null && Number(r.attendee_id) !== Number(attendeeId),
         conference_id: Number(r.conference_id),
         photo_url: r.photo_url != null ? String(r.photo_url) : null,
+        email: r.email != null ? String(r.email) : null,
+        phone: r.phone != null ? String(r.phone) : null,
         meeting_date: String(r.meeting_date ?? ''),
         meeting_time: String(r.meeting_time ?? ''),
         location: r.location != null ? String(r.location) : null,

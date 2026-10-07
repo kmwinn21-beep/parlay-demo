@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, Fragment } from 'react';
 import { getConfigCategory } from '@/lib/configCache';
+import { mailtoHref, smsHref, telHref } from '@/lib/contactLinks';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -60,6 +61,9 @@ export interface Meeting {
   last_name: string;
   photo_url?: string | null;
   title: string | null;
+  /** Optional on an attendee; the card's contact badges appear only when set. */
+  email?: string | null;
+  phone?: string | null;
   company_id: number | null;
   company_name: string | null;
   company_wse: number | null;
@@ -245,6 +249,263 @@ const ROW_PILL = `inline-flex items-center ${ROW_PILL_H} px-2 rounded-xl border 
  * the pills are blockified and no baseline is involved at all.
  */
 const CARD_FIELD = 'flex-shrink-0 flex flex-col items-start';
+
+/**
+ * Reach an attendee from the card: a phone badge and an envelope.
+ *
+ * A rep in a conference hall wants to ring the person they are about to meet,
+ * not open their record two screens away. Each badge appears only when there
+ * is something behind it, so a row with neither simply has none — an icon that
+ * dials nothing is worse than no icon.
+ *
+ * The envelope is a plain mailto. The phone opens a sheet first, because a
+ * number can be called or texted and the card cannot know which was meant.
+ */
+/* 24px, the avatar's size on this card, so the three circles on a row read as
+   one set rather than two big ones and a small one. */
+const CONTACT_BADGE =
+  'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 border transition-colors';
+
+function PhoneGlyph({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+    </svg>
+  );
+}
+
+function MailGlyph({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  );
+}
+
+function ChatGlyph({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    </svg>
+  );
+}
+
+interface ContactPerson { id: number; name: string; phone?: string | null; email?: string | null }
+
+/**
+ * The empty half of a pair.
+ *
+ * A missing number used to mean no badge, which left a row that said nothing
+ * about whether anybody had ever looked. Dotted and grey, as the rest of the
+ * app draws a slot with nothing in it — the `+ Type` pill on a company card,
+ * the `+ Rank` on a guest — and tapping it is how the number gets added,
+ * standing in the hall, rather than two screens away on the record.
+ */
+function AddContactBadge({ kind, person, onAdd }: {
+  kind: 'phone' | 'email';
+  person: ContactPerson;
+  onAdd: (p: ContactPerson, field: 'phone' | 'email') => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); onAdd(person, kind); }}
+      aria-label={`Add ${kind === 'phone' ? 'a phone number' : 'an email address'} for ${person.name}`}
+      title={`Add ${kind === 'phone' ? 'a phone number' : 'an email address'}`}
+      className={`${CONTACT_BADGE} border-dashed border-gray-300 text-gray-400 hover:text-gray-600 hover:border-gray-400`}
+    >
+      <span className="text-[8px] font-semibold leading-none -mr-px">+</span>
+      {kind === 'phone' ? <PhoneGlyph className="w-2.5 h-2.5" /> : <MailGlyph className="w-2.5 h-2.5" />}
+    </button>
+  );
+}
+
+function ContactBadges({ person, onPhone, onAdd, className = '' }: {
+  person: ContactPerson;
+  onPhone: (p: ContactPerson) => void;
+  onAdd: (p: ContactPerson, field: 'phone' | 'email') => void;
+  /**
+   * Whatever the avatar beside it carries.
+   *
+   * The primary attendee's row is items-start and drops its avatar by mt-0.5
+   * to sit on the name's line; the guests' rows are items-center and do not.
+   * Without matching that, the badges sat 2px above the avatar on the primary
+   * rows and level with it on the guests' — measured, and enough to make the
+   * column read as staggered.
+   */
+  className?: string;
+}) {
+  const tel = telHref(person.phone);
+  const mail = mailtoHref(person.email);
+  return (
+    /* Between the name block and the avatar, so the avatar stays where it has
+       always been and the row still reads name, then contact, then face.
+       Always two slots: filled where there is something, dotted where there
+       is not, so the pair is in the same place on every row. */
+    <div className={`flex items-center gap-1.5 flex-shrink-0 ${className}`}>
+      {tel ? (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onPhone(person); }}
+          aria-label={`Contact ${person.name} by phone`}
+          className={`${CONTACT_BADGE} bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100`}
+        >
+          <PhoneGlyph className="w-3 h-3" />
+        </button>
+      ) : <AddContactBadge kind="phone" person={person} onAdd={onAdd} />}
+      {mail ? (
+        <a
+          href={mail}
+          onClick={e => e.stopPropagation()}
+          aria-label={`Email ${person.name}`}
+          className={`${CONTACT_BADGE} bg-sky-50 border-sky-200 text-sky-600 hover:bg-sky-100`}
+        >
+          <MailGlyph className="w-3 h-3" />
+        </a>
+      ) : <AddContactBadge kind="email" person={person} onAdd={onAdd} />}
+    </div>
+  );
+}
+
+/**
+ * Type the missing number or address in, without leaving the card.
+ *
+ * Saved straight onto the attendee with a one-field PATCH, which is the same
+ * endpoint the attendee's own form writes through — so what is typed here
+ * appears on their record, not only on this meeting.
+ */
+function AddContactSheet({ person, field, onClose, onSaved }: {
+  person: ContactPerson;
+  field: 'phone' | 'email';
+  onClose: () => void;
+  onSaved: (attendeeId: number, field: 'phone' | 'email', value: string) => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  const trimmed = value.trim();
+  // The same test the badge will apply when deciding to draw itself, so a
+  // value that saves is a value that shows.
+  const usable = field === 'phone' ? telHref(trimmed) !== null : mailtoHref(trimmed) !== null;
+
+  const save = async () => {
+    if (!usable || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/attendees/${person.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: trimmed }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        throw new Error(detail?.error ? String(detail.error) : `the server returned ${res.status}`);
+      }
+      onSaved(person.id, field, trimmed);
+      toast.success(field === 'phone' ? 'Phone number saved.' : 'Email saved.');
+      onClose();
+    } catch (err) {
+      toast.error(`Could not save: ${err instanceof Error ? err.message : 'unknown error'}.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center sm:justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="modal-sheet-mobile w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-4 pb-8 sm:pb-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-brand-primary">{person.name}</p>
+        <p className="text-xs text-gray-500 mb-3">
+          {field === 'phone' ? 'Add a phone number' : 'Add an email address'}
+        </p>
+        <input
+          autoFocus
+          type={field === 'phone' ? 'tel' : 'email'}
+          inputMode={field === 'phone' ? 'tel' : 'email'}
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') save(); }}
+          placeholder={field === 'phone' ? '(512) 555-0143' : 'name@company.com'}
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
+        />
+        <div className="flex gap-2 mt-3">
+          <button type="button" onClick={onClose} className="btn-secondary text-sm flex-1">Cancel</button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={!usable || saving}
+            className="btn-primary text-sm flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Call or text, as a sheet.
+ *
+ * The same shape the meeting outcome picker and the company card's type picker
+ * already use on a phone, so this is not a new kind of popup. Portalled to the
+ * body: the card it opens from sits inside scrolling, transformed containers,
+ * and a sheet nested in those is clipped by them.
+ */
+function CallOrTextSheet({ person, onClose }: { person: ContactPerson; onClose: () => void }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const tel = telHref(person.phone);
+  const sms = smsHref(person.phone);
+  if (!mounted || !tel) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center sm:justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="modal-sheet-mobile w-full sm:max-w-xs bg-white rounded-t-2xl sm:rounded-2xl p-4 pb-8 sm:pb-4"
+        onClick={e => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-brand-primary">{person.name}</p>
+        <p className="text-xs text-gray-500 mb-3">{person.phone}</p>
+        {/* Anchors, not handlers: the browser owns tel: and sms:, and a click
+            handler calling window.location would do the same thing worse. */}
+        <a
+          href={tel}
+          onClick={onClose}
+          className="flex items-center gap-3 w-full px-3 py-3 rounded-xl border border-gray-200 hover:bg-gray-50 mb-2"
+        >
+          <span className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center flex-shrink-0">
+            <PhoneGlyph />
+          </span>
+          <span className="text-sm font-medium text-gray-700">Call</span>
+        </a>
+        {sms && (
+          <a
+            href={sms}
+            onClick={onClose}
+            className="flex items-center gap-3 w-full px-3 py-3 rounded-xl border border-gray-200 hover:bg-gray-50"
+          >
+            <span className="w-8 h-8 rounded-full bg-violet-50 border border-violet-200 text-violet-600 flex items-center justify-center flex-shrink-0">
+              <ChatGlyph />
+            </span>
+            <span className="text-sm font-medium text-gray-700">Text</span>
+          </a>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 
 /**
  * The same column, with its value centred under the label rather than ranged
@@ -1220,6 +1481,26 @@ export function MeetingsTable({
   // until it is clicked again or something outside the table is pressed.
   const { focusedId: focusedMeetingId, regionRef: meetingTableRef, onCardClick: onMeetingCardClick } = useCardFocus();
   const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
+  /** Which attendee's number the Call/Text sheet is open for. */
+  const [callTarget, setCallTarget] = useState<ContactPerson | null>(null);
+  /** Which attendee's missing field is being typed in. */
+  const [addContact, setAddContact] = useState<{ person: ContactPerson; field: 'phone' | 'email' } | null>(null);
+  /**
+   * Numbers and addresses added from a card, before the page reloads.
+   *
+   * The meetings come in as a prop, so a save has nowhere to land until the
+   * parent refetches — and the badge the reader just filled in would go back
+   * to being a dotted plus. Keyed by attendee id rather than by meeting,
+   * because the same person can be on several meetings on screen and all of
+   * them should fill in at once.
+   */
+  const [contactEdits, setContactEdits] = useState<Record<number, { phone?: string; email?: string }>>({});
+  const withEdits = useCallback((p: ContactPerson): ContactPerson => ({
+    ...p, ...(contactEdits[p.id] ?? {}),
+  }), [contactEdits]);
+  const onContactSaved = useCallback((attendeeId: number, field: 'phone' | 'email', value: string) => {
+    setContactEdits(prev => ({ ...prev, [attendeeId]: { ...prev[attendeeId], [field]: value } }));
+  }, []);
   // A follow-up the outcome change just created, waiting to be assigned.
   const [assignFollowUp, setAssignFollowUp] = useState<{ ids: number[]; meeting: Meeting; outcome: string } | null>(null);
   const [assigningFollowUp, setAssigningFollowUp] = useState(false);
@@ -1690,6 +1971,12 @@ export function MeetingsTable({
                 </span>
                 {m.title && <p className="text-xs font-semibold text-gray-500 mt-0.5">{m.title}</p>}
               </div>
+              <ContactBadges
+                person={withEdits({ id: m.attendee_id, name: `${m.first_name} ${m.last_name}`.trim(), phone: m.phone, email: m.email })}
+                onPhone={setCallTarget}
+                onAdd={(person, field) => setAddContact({ person, field })}
+                className="mt-0.5"
+              />
               <AttendeeInitialsAvatar
                 name={`${m.first_name} ${m.last_name}`.trim()}
                 photoUrl={m.photo_url}
@@ -1707,6 +1994,15 @@ export function MeetingsTable({
                   <p className="text-xs font-normal text-gray-600 truncate">{extra.first_name} {extra.last_name}</p>
                   {extra.title && <p className="text-xs font-normal text-gray-400 truncate">{extra.title}</p>}
                 </div>
+                {/* Guests get the same pair. A card with badges on the primary
+                    attendee and none on the person beside them would read as
+                    though the guest had no contact details rather than as
+                    though nobody had looked. */}
+                <ContactBadges
+                  person={withEdits({ id: extra.id, name: `${extra.first_name} ${extra.last_name}`.trim(), phone: extra.phone, email: extra.email })}
+                  onPhone={setCallTarget}
+                  onAdd={(person, field) => setAddContact({ person, field })}
+                />
                 <AttendeeInitialsAvatar
                   name={`${extra.first_name} ${extra.last_name}`}
                   photoUrl={extra.photo_url}
@@ -2389,6 +2685,17 @@ export function MeetingsTable({
       )}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
+      {callTarget && (
+        <CallOrTextSheet person={callTarget} onClose={() => setCallTarget(null)} />
+      )}
+      {addContact && (
+        <AddContactSheet
+          person={addContact.person}
+          field={addContact.field}
+          onClose={() => setAddContact(null)}
+          onSaved={onContactSaved}
+        />
       )}
       {assignFollowUp && (
         <AssignFollowUpDialog
