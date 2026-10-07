@@ -141,5 +141,48 @@ console.log('\n— and the search can be emptied in one tap —');
   eq('  with room reserved for it', /px-3 py-2 pr-9 text-sm/.test(field), true);
 }
 
+console.log('\n— and the drawer can narrow to my accounts —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* The drawer, not the picker: both have a My Accounts button now. Sliced
+     FORWARD from the drawer's own function and asserted non-empty. */
+  const at = file.indexOf('function GuestListSheet(');
+  const sheet = file.slice(at, file.indexOf('function GuestListModal(', at));
+  eq('there is a drawer to read', at !== -1 && sheet.length > 1000, true);
+
+  eq('it has a My Accounts button', /My Accounts\s*\n?\s*<\/button>/.test(sheet), true);
+  eq('  which says whether it is on', /aria-pressed=\{myAccountsOnly\}/.test(sheet), true);
+
+  /*
+   * Through the same two helpers the Build Guest List picker uses, so "my
+   * accounts" means one thing on both surfaces rather than two implementations
+   * that drift.
+   */
+  eq('  narrowing by the same rule as the picker',
+    /attendeesAtCompanies\(invitedAttendees, companiesAssignedTo\(companies, \[me\]\)\)/.test(sheet), true);
+  eq('  with the signed-in rep read the same way',
+    /user\?\.configId != null/.test(sheet), true);
+
+  /*
+   * Disabled when the login has no rep profile. There is nothing to match on,
+   * so filtering would empty the list and look broken. Measured in Chromium
+   * with configId null: the button renders disabled.
+   */
+  eq('  and disabled when there is no rep profile', /disabled=\{!me\}/.test(sheet), true);
+
+  /*
+   * The counts follow the filter. A summary reading 49 INVITED over four rows
+   * is worse than no summary. Measured at 390px with four guests, two of them
+   * at the signed-in rep's accounts: off 4 rows / 4 INVITED, on 2 rows /
+   * 2 INVITED, off again back to 4.
+   */
+  eq('  the summary describes the filtered list',
+    /invitedIds=\{accountScoped\.map\(a => a\.id\)\}[\s\S]{0,160}attendees=\{accountScoped\}/.test(sheet), true);
+  eq('  and the type chips narrow it further',
+    /selectedTypes\.size > 0 \? accountScoped\.filter/.test(sheet), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

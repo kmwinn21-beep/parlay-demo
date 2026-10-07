@@ -141,7 +141,11 @@ console.log('\n— and a failure says what happened —');
      they were fixed here. Sliced FORWARD from the handler's own name and
      asserted non-empty, so it cannot pass by reading nothing. */
   const start = file.indexOf('const handleSaveGuestList =');
-  const table = file.slice(start, file.indexOf('}, [events, onRefresh]);', start));
+  /* Ends at the handler's own dependency list, matched loosely: it gained
+     deps when the optimistic write went in, and an exact anchor silently ran
+     the slice on into handlers that still throw bare Errors. */
+  const endAt = file.slice(start).search(/\n  \}, \[events, onRefresh[^\]]*\]\);/);
+  const table = file.slice(start, start + (endAt === -1 ? 0 : endAt));
   eq('there is a save handler to read', start !== -1 && table.length > 400, true);
   /*
    * "Failed to update the guest list." and nothing else is what this started
