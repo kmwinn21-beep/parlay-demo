@@ -78,28 +78,50 @@ interface SectionConfig {
   visible: boolean;
 }
 
-const _cache: Record<string, SectionConfig[]> = {};
-const _pending: Record<string, Promise<SectionConfig[]> | undefined> = {};
+/**
+ * One response, cached once — not once per page name.
+ *
+ * /api/admin/section-config answers for EVERY page in a single payload, and
+ * this cache was keyed by the page a caller happened to want. So four
+ * components asking for four different sections each fetched the identical
+ * URL, kept their own slice and threw the other three away. Measured in
+ * production: three to four requests to this endpoint inside the same second
+ * on a conference page, all of them the same bytes.
+ *
+ * `cache: 'no-store'` made it worse by forbidding the browser from answering
+ * the repeats itself. It stays, because an admin's edit has to show up without
+ * a hard reload — but now there is only one request for it to apply to.
+ */
+type SectionConfigByPage = Record<string, SectionConfig[]>;
 
-export function invalidateSectionConfig(page?: string) {
-  if (page) {
-    delete _cache[page];
-    delete _pending[page];
-  } else {
-    for (const k of Object.keys(_cache)) delete _cache[k];
-    for (const k of Object.keys(_pending)) delete _pending[k];
-  }
+let _all: SectionConfigByPage | null = null;
+let _pending: Promise<SectionConfigByPage> | null = null;
+
+export function invalidateSectionConfig(_page?: string) {
+  // The whole payload goes, whichever page prompted it: there is one copy now,
+  // and a caller cannot drop another page's slice without dropping its own.
+  void _page;
+  _all = null;
+  _pending = null;
 }
 
-async function fetchSectionConfig(page: string): Promise<SectionConfig[]> {
-  try {
-    const res = await fetch('/api/admin/section-config', { cache: 'no-store' });
-    if (!res.ok) return [];
-    const data = await res.json() as Record<string, SectionConfig[]>;
-    return data[page] ?? [];
-  } catch {
-    return [];
-  }
+function fetchAllSectionConfig(): Promise<SectionConfigByPage> {
+  if (_all) return Promise.resolve(_all);
+  if (_pending) return _pending;
+  _pending = fetch('/api/admin/section-config', { cache: 'no-store' })
+    .then(res => (res.ok ? res.json() as Promise<SectionConfigByPage> : {}))
+    .then(data => {
+      _all = data ?? {};
+      _pending = null;
+      return _all;
+    })
+    .catch(() => {
+      // Not cached: a failure must not become the answer every later caller
+      // gets for the life of the page.
+      _pending = null;
+      return {};
+    });
+  return _pending;
 }
 
 export function useSectionConfig(page: string) {
@@ -107,18 +129,14 @@ export function useSectionConfig(page: string) {
   const [config, setConfig] = useState<SectionConfig[]>([]);
 
   useEffect(() => {
-    if (_cache[page]) {
-      setConfig(_cache[page]);
-      return;
-    }
-    if (!_pending[page]) {
-      _pending[page] = fetchSectionConfig(page).then(c => {
-        _cache[page] = c;
-        delete _pending[page];
-        return c;
-      });
-    }
-    _pending[page]!.then(c => setConfig(c));
+    let cancelled = false;
+    // Synchronous when the payload is already here, so a second component
+    // mounting on the same page does not flash its defaults.
+    if (_all) { setConfig(_all[page] ?? []); return; }
+    fetchAllSectionConfig().then(all => {
+      if (!cancelled) setConfig(all[page] ?? []);
+    });
+    return () => { cancelled = true; };
   }, [page]);
 
   const getLabel = (key: string): string => {
@@ -161,7 +179,9 @@ export function useSectionConfig(page: string) {
     });
 
     setConfig(sections);
-    _cache[page] = sections;
+    // Optimistic: write this page's slice into the one cached payload, so a
+    // sibling component reading the same page sees the new order at once.
+    if (_all) _all = { ..._all, [page]: sections };
 
     try {
       await fetch('/api/admin/section-config', {

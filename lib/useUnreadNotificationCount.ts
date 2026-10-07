@@ -1,29 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { startPolling, stopPolling } from '@/lib/pollingManager';
+import { subscribeUnreadNotifications, unreadNotificationCount } from '@/lib/unreadNotifications';
 
+/**
+ * The unread badge's number.
+ *
+ * A subscriber now rather than a fetcher: this and the header's bell both
+ * wanted the same number and each polled for it, which cost two requests a
+ * minute for one figure. See lib/unreadNotifications.ts.
+ */
 export function useUnreadNotificationCount(): number {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchCount() {
-      try {
-        const res = await fetch('/api/notifications?unread_only=1&limit=200', { credentials: 'include' });
-        if (!res.ok || cancelled) return;
-        const data = await res.json() as unknown[];
-        if (!cancelled) setCount(Array.isArray(data) ? data.length : 0);
-      } catch {
-        // non-fatal
-      }
-    }
-
-    fetchCount();
-    startPolling('notification-count', fetchCount, 30_000, 30_000);
-    return () => { cancelled = true; stopPolling('notification-count'); };
-  }, []);
-
+  const [count, setCount] = useState(unreadNotificationCount);
+  useEffect(() => subscribeUnreadNotifications(setCount), []);
   return count;
 }

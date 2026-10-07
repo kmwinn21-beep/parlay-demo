@@ -97,3 +97,31 @@ export function invalidateConfigCache() {
   } catch { /* see configVersion */ }
   invalidateCached('__config__');
 }
+
+/**
+ * One category of config options, deduplicated and cached briefly.
+ *
+ * Several components want one list each — statuses, meeting types, seniority —
+ * and each fetched it for itself on mount. Two of them wanting the same
+ * category meant two identical requests in the same instant, and switching
+ * tabs asked again for something nobody had changed. Measured on a conference
+ * page: five /api/config requests inside one second.
+ *
+ * Keyed by the URL, so two callers asking for the same category share one
+ * request and a third asking a minute later still gets a fresh one. The
+ * version is carried for the same reason getConfig carries it: an admin's edit
+ * has to move every later fetch to a URL the browser's own cache has not seen.
+ *
+ * Returns the parsed rows, or [] if the request fails — the shape every
+ * current caller already falls back to.
+ */
+export function getConfigCategory(category: string, form?: string): Promise<unknown[]> {
+  const url = `/api/config?category=${encodeURIComponent(category)}`
+    + (form ? `&form=${encodeURIComponent(form)}` : '')
+    + `&v=${configVersion()}`;
+  return getCached(url, () =>
+    fetch(url)
+      .then(r => (r.ok ? r.json() : []))
+      .then(rows => (Array.isArray(rows) ? rows as unknown[] : []))
+      .catch(() => []));
+}

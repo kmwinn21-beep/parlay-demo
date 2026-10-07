@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getConfigCategory } from '@/lib/configCache';
 import { ConferenceTargetsTab } from './pre-conference/ConferenceTargetsTab';
 import type { AddableGroup } from './pre-conference/ConferenceTargetsTab';
 import type { TargetEntry } from './PreConferenceReview';
@@ -69,7 +70,7 @@ export function ConferenceDetailsTargetsTab({ conferenceId, conferenceName, meet
     Promise.all([
       fetch(`/api/conferences/${conferenceId}/targets`).then(r => r.ok ? r.json() : []),
       fetch(`/api/conferences/${conferenceId}`).then(r => r.ok ? r.json() : {}),
-      fetch('/api/config?category=seniority').then(r => r.ok ? r.json() : []),
+      getConfigCategory('seniority'),
     ])
       .then(([targets, confData, senOptions]) => {
         const tMap = new Map<number, TargetEntry>();

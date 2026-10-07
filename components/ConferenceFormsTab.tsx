@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { getConfigCategory } from '@/lib/configCache';
 import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -287,15 +288,13 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
       const [formsRes, templatesRes, statusRes, socialEventsRes] = await Promise.all([
         fetch(`/api/conference-forms?conference_id=${conferenceId}`),
         fetch('/api/form-templates'),
-        fetch('/api/config?category=status'),
+        getConfigCategory('status'),
         fetch(`/api/social-events?conference_id=${conferenceId}`),
       ]);
       if (formsRes.ok) setForms(await formsRes.json());
       if (templatesRes.ok) setTemplates(await templatesRes.json());
-      if (statusRes.ok) {
-        const data = await statusRes.json();
-        setStatusOptions(data.map((o: { id: number; value: string }) => ({ id: o.id, value: o.value })));
-      }
+      setStatusOptions((statusRes as { id: number; value: string }[])
+        .map(o => ({ id: o.id, value: o.value })));
       if (socialEventsRes.ok) setSocialEvents(await socialEventsRes.json());
     } catch { toast.error('Failed to load forms'); }
     finally { setLoading(false); }

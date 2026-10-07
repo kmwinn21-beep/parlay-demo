@@ -178,10 +178,142 @@ console.log('\n— and the drawer can narrow to my accounts —');
    * at the signed-in rep's accounts: off 4 rows / 4 INVITED, on 2 rows /
    * 2 INVITED, off again back to 4.
    */
+  /* searchScoped is accountScoped with the search applied — the bar is handed
+     whatever the list has been narrowed to, whichever control narrowed it. */
   eq('  the summary describes the filtered list',
-    /invitedIds=\{accountScoped\.map\(a => a\.id\)\}[\s\S]{0,160}attendees=\{accountScoped\}/.test(sheet), true);
+    /invitedIds=\{searchScoped\.map\(a => a\.id\)\}[\s\S]{0,160}attendees=\{searchScoped\}/.test(sheet), true);
+  eq('  the search starts from the account filter',
+    /filterGuests\(accountScoped, search\)/.test(sheet), true);
   eq('  and the type chips narrow it further',
-    /selectedTypes\.size > 0 \? accountScoped\.filter/.test(sheet), true);
+    /selectedTypes\.size > 0 \? searchScoped\.filter/.test(sheet), true);
+}
+
+console.log('\n— finding one person on a saved list —');
+{
+  const { filterGuests, matchesGuestQuery, guestQueryTerms } = await import('@/lib/guestSearch');
+  const GUESTS = [
+    { first_name: 'Adele', last_name: 'Acosta', title: 'VP of HR', company_name: 'Karlfurt Enterprises' },
+    { first_name: 'Mike', last_name: 'Roach', title: 'Chief Strategy Officer', company_name: 'Lifespace Communities' },
+    { first_name: 'Matt', last_name: 'Kinne', title: 'COO', company_name: 'Lifespark' },
+    { first_name: 'Ruthie', last_name: 'Wallace', title: 'CEO', company_name: 'Bergnaum and Sons' },
+  ];
+  const names = q => filterGuests(GUESTS, q).map(g => g.last_name);
+
+  eq('by name', names('acosta'), ['Acosta']);
+  eq('  by company', names('bergnaum'), ['Wallace']);
+  eq('  by title', names('coo'), ['Kinne']);
+
+  // Substring, not prefix: a reader half-remembering a name types the middle
+  // of it as often as the start.
+  eq('part of a word matches', names('lifespa'), ['Roach', 'Kinne']);
+  eq('  and case does not matter', names('ADELE'), ['Acosta']);
+
+  /*
+   * Each term has to match SOMETHING, but not all the same field — one
+   * haystack per person. "acosta vp" is a name and a title, and a per-field
+   * search would find nobody.
+   */
+  eq('terms can land in different fields', names('acosta vp'), ['Acosta']);
+  eq('  and all of them must land somewhere', names('karlfurt ceo'), []);
+  eq('  extra whitespace is not a term', names('  acosta   '), ['Acosta']);
+
+  // An empty query is not a filter.
+  eq('nothing typed keeps everyone', filterGuests(GUESTS, '').length, 4);
+  eq('  as does whitespace alone', filterGuests(GUESTS, '   ').length, 4);
+  eq('  which is what no terms means', guestQueryTerms('  '), []);
+
+  // A guest missing a field is searched on the fields they have, not skipped.
+  eq('a missing field is not a match failure',
+    matchesGuestQuery({ first_name: 'Jo', last_name: null, title: null, company_name: 'Acme' },
+      guestQueryTerms('jo acme')), true);
+}
+
+console.log('\n— the drawer wires it up —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const at = file.indexOf('function GuestListSheet(');
+  const sheet = file.slice(at, file.indexOf('function GuestListModal(', at));
+  eq('there is a drawer to read', at !== -1 && sheet.length > 1000, true);
+
+  eq('the drawer has its own search', /placeholder="Search guests by name, company, or title\.\.\."/.test(sheet), true);
+  eq('  below the filter chips',
+    sheet.indexOf('<RSVPSummaryBar') < sheet.indexOf('Search guests by name'), true);
+  eq('  with a clear button like the picker’s', /aria-label="Clear search"/.test(sheet), true);
+  eq('  narrowing through the shared matcher', /filterGuests\(accountScoped, search\)/.test(sheet), true);
+  /* And the counts follow it, as they follow My Accounts: a bar reading 7
+     INVITED over one row would be describing a list that is not on screen. */
+  eq('  and the counts describe what is shown',
+    /invitedIds=\{searchScoped\.map\(a => a\.id\)\}[\s\S]{0,160}attendees=\{searchScoped\}/.test(sheet), true);
+
+  /*
+   * The chips run as ONE row that scrolls sideways. Five of them wrapped onto
+   * a second line on a phone, and every line they take is a line of guest
+   * list they cover. Measured at 390px: one row 30px tall, five chips,
+   * scrollWidth past clientWidth, and the scrollbar hidden.
+   */
+  eq('the chips are one scrolling row',
+    /flex items-center gap-1\.5 flex-nowrap overflow-x-auto scrollbar-hide/.test(file), true);
+  eq('  only where they are stacked under the counts', /stackOperators\s*\n?\s*\? 'flex items-center/.test(file), true);
+}
+
+console.log('\n— a company opens beside the list, not instead of it —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const at = file.indexOf('function AttendeeRSVPCard(');
+  const card = file.slice(at, file.indexOf('function ', at + 30));
+  eq('there is a guest card to read', at !== -1 && card.length > 400, true);
+
+  /*
+   * Leaving the drawer for a full record meant losing the guest list, the
+   * filters and the search, and coming back by the back button — to look at
+   * who a company is. Measured: the quick view opens, nothing navigates, and
+   * closing it leaves the search box still reading what was typed.
+   */
+  eq('the company name opens the quick view', /onQuickView\(\{ type: 'company'/.test(card), true);
+  eq('  and the guest name opens one too', /onQuickView\(\{ type: 'attendee'/.test(card), true);
+  eq('  neither is a link to a record any more',
+    /href=\{`\/companies\/\$\{attendee\.company_id\}`\}/.test(card)
+      || /href=\{`\/attendees\/\$\{attendee\.id\}`\}/.test(card), false);
+  /* The card is itself clickable — it expands to the RSVP controls — so both
+     names have to stop the click reaching it. Measured: opening either quick
+     view leaves the card collapsed. */
+  /* Asserted per handler, not as a count: the card has other stopPropagation
+     calls — the avatar, the remove button — so a count passed even with one of
+     these removed. The mutation that proved it. */
+  eq('  without also toggling the card open',
+    /e\.stopPropagation\(\);\s*\n\s*onQuickView\(\{ type: 'attendee'/.test(card), true);
+  eq('    nor on the company either',
+    /e\.stopPropagation\(\);\s*\n\s*onQuickView\(\{ type: 'company'/.test(card), true);
+  // One callback for both, rather than a second one that could be wired to a
+  // different layer or forgotten at the call site.
+  eq('  through one callback', /onQuickView: \(target: QuickViewTarget\) => void;/.test(card), true);
+
+  const at2 = file.indexOf('function GuestListSheet(');
+  const sheet = file.slice(at2, file.indexOf('function GuestListModal(', at2));
+  eq('the drawer renders the quick view', /<QuickViewDrawer target=\{quickView\}/.test(sheet), true);
+  /* Above this drawer's own z-[60]. The quick view portals to the body, so
+     without saying so it opens BEHIND the list that opened it. */
+  eq('  on a layer above the guest list', /zClass="z-\[80\]"/.test(sheet), true);
+  eq('  and the card is told how to open it', /onQuickView=\{setQuickView\}/.test(sheet), true);
+}
+
+console.log('\n— and it stops at the site header —');
+{
+  const { readFileSync } = await import('node:fs');
+  const qv = readFileSync('components/QuickViewDrawer.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  /* sheet-below-header SPANS the space under the header; h-[90vh] capped at
+     it, which only lands the top edge there when the content fills the cap.
+     Measured at 390px with the header at 85px plus a 59px inset: the panel
+     opens at 144 and runs to 844. */
+  eq('the quick view spans the space below the header',
+    /sheet-below-header/.test(qv), true);
+  eq('  rather than a fraction of the viewport', /h-\[90vh\]/.test(qv), false);
+  eq('  and keeps its full height on a pointer', /sm:h-full/.test(qv), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

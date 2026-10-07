@@ -172,8 +172,23 @@ function ConferenceCard({ conf }: { conf: Conference }) {
     : undefined;
 
   return (
+    /*
+     * prefetch={false}, because a list of conferences is a list of pages
+     * nobody is about to open.
+     *
+     * Next prefetches a Link's whole destination once it is on screen. On this
+     * page that means every card fetches a full conference page in the
+     * background: measured in production, opening ONE conference pulled
+     * /conferences/4, /10, /15, /16, /17 and /18 within the same second, five
+     * of them never looked at. The conference page is the most expensive route
+     * in the app, so these are the costliest possible thing to speculate on.
+     *
+     * What it costs: the first tap on a card is a fraction slower, once. What
+     * it saves: five sixths of the page loads on this screen.
+     */
     <Link
       href={`/conferences/${conf.id}`}
+      prefetch={false}
       className="card p-3 hover:shadow-md transition-all hover:border-brand-secondary border border-transparent group flex flex-col"
     >
       <div className="flex items-start justify-between gap-2">
