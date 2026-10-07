@@ -10,6 +10,7 @@ import { useConfigColors } from '@/lib/useConfigColors';
 import { getConfig } from '@/lib/configCache';
 import { parseRepIds, getRepInitials } from '@/lib/useUserOptions';
 import { sameIdSet } from '@/lib/guestListIds';
+import { filterGuests } from '@/lib/guestSearch';
 import { useUser } from '@/components/UserContext';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { companiesAssignedTo, attendeesAtCompanies, type RepRef } from '@/lib/guestFilters';
@@ -264,7 +265,17 @@ function RSVPSummaryBar({ invitedIds, rsvpMap, selectedTypes, icpCompanyTypes, a
   );
   // One toggle per ICP company type; multiple can be active at once.
   const primaryTypeBtn = icpCompanyTypes.length > 0 || leadingControl ? (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    /*
+     * In the drawer these run as ONE row that scrolls sideways, rather than
+     * wrapping. Four chips plus Add/Edit wrapped onto a second line on a
+     * phone, and every line they take is a line of guest list they cover —
+     * the drawer's whole purpose is the list underneath. No scrollbar: it is
+     * a hairline nobody can grab on a phone, and the chips running off the
+     * edge is its own indication that there is more.
+     */
+    <div className={stackOperators
+      ? 'flex items-center gap-1.5 flex-nowrap overflow-x-auto scrollbar-hide'
+      : 'flex items-center gap-1.5 flex-wrap'}>
       {leadingControl}
       {icpCompanyTypes.map(type => (
         <button
@@ -594,6 +605,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   });
   const [activeFilters, setActiveFilters] = useState<RsvpStatus[]>([]);
   const [myAccountsOnly, setMyAccountsOnly] = useState(false);
+  const [search, setSearch] = useState('');
   const { user } = useUser();
   /* The signed-in user as a rep, which is how a company records an
      assignment. Null when their login has no rep profile — there is nothing to
@@ -619,7 +631,12 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
   const accountScoped = myAccountsOnly && me
     ? attendeesAtCompanies(invitedAttendees, companiesAssignedTo(companies, [me]))
     : invitedAttendees;
-  const byPrimaryType = selectedTypes.size > 0 ? accountScoped.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : accountScoped;
+  /* Searched after the account filter and before the type chips, and handed
+     to the summary bar as well, so the counts describe the list on screen
+     rather than the one it was drawn from — the same rule My Accounts
+     follows. */
+  const searchScoped = filterGuests(accountScoped, search);
+  const byPrimaryType = selectedTypes.size > 0 ? searchScoped.filter(a => a.company_type != null && selectedTypes.has(a.company_type)) : searchScoped;
   const filtered = activeFilters.length === 0 ? byPrimaryType : byPrimaryType.filter(a => {
     const s = rsvpMap[a.id] || [];
     return activeFilters.some(f => s.includes(f));
@@ -685,7 +702,35 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <RSVPSummaryBar invitedIds={accountScoped.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={accountScoped} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators leadingControl={buildGuestListBtn} />
+          <RSVPSummaryBar invitedIds={searchScoped.map(a => a.id)} rsvpMap={rsvpMap} selectedTypes={selectedTypes} icpCompanyTypes={icpCompanyTypes} attendees={searchScoped} onToggleType={toggleType} activeFilters={activeFilters} onToggleFilter={handleToggleFilter} stackOperators leadingControl={buildGuestListBtn} />
+          {/*
+            Below the chips, because it answers a different question: they ask
+            which KIND of guest, this asks where one PERSON is. Drawn like the
+            Build Guest List picker's own search, clear button and all, so the
+            two searches in this drawer are the same control.
+          */}
+          <div className="relative mt-2">
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search guests by name, company, or title..."
+              aria-label="Search the guest list"
+              className="w-full px-3 py-2 pr-9 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-secondary"
+            />
+            {search !== '' && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
         <div className="overflow-y-auto flex-1 p-3 space-y-2 pb-24">
           {visible.length === 0
