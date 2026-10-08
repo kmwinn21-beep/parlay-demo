@@ -26,9 +26,19 @@ interface Props {
    * modal — has to say so, or this opens behind the thing that opened it.
    */
   zClass?: string;
+  /**
+   * Opened BESIDE the drawer that opened it, rather than over the page.
+   *
+   * Docked, this paints no backdrop of its own: the drawer alongside already
+   * has one, and a second would dim that drawer as well — the thing the reader
+   * is meant to still be looking at. Outside clicks fall through to the
+   * existing backdrop, which is the same arrangement CompanyAttendeesDrawer
+   * uses for its activity timeline.
+   */
+  docked?: boolean;
 }
 
-export function QuickViewDrawer({ target, onClose, zClass = 'z-50' }: Props) {
+export function QuickViewDrawer({ target, onClose, zClass = 'z-50', docked = false }: Props) {
   const [mounted, setMounted] = useState(false);
   const { panelStyle, handleResizeStart } = useDrawerResize(480);
 
@@ -42,16 +52,18 @@ export function QuickViewDrawer({ target, onClose, zClass = 'z-50' }: Props) {
   if (!mounted) return null;
 
   return createPortal(
-    <div className={`fixed inset-0 ${zClass} flex items-end sm:items-stretch sm:justify-end`}>
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+    <div className={`fixed inset-0 ${zClass} flex items-end sm:items-stretch sm:justify-end ${
+      docked ? 'pointer-events-none' : ''}`}>
+      {/* Backdrop — not when docked; see the prop. */}
+      {!docked && <div className="absolute inset-0 bg-black/40" onClick={onClose} />}
       {/* Panel */}
       <div
         /* sheet-below-header rather than h-[90vh]: it SPANS the space under the
            site header instead of capping at it, so the top edge lands on the
            header whatever is inside. See app/globals.css — a cap only puts the
            edge there when the content is tall enough to reach it. */
-        className="drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[480px] sheet-below-header sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none"
+        className={`drawer-mobile-responsive relative flex flex-col bg-white w-full sm:w-[480px] sheet-below-header sm:h-full shadow-2xl rounded-t-2xl sm:rounded-tl-2xl sm:rounded-tr-none ${
+          docked ? 'pointer-events-auto' : ''}`}
         style={panelStyle}
       >
         {/* Resize handle */}

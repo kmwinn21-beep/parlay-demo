@@ -316,5 +316,59 @@ console.log('\n— and it stops at the site header —');
   eq('  and keeps its full height on a pointer', /sm:h-full/.test(qv), true);
 }
 
+console.log('\n— and it opens beside the list, not on top of it —');
+{
+  const { readFileSync } = await import('node:fs');
+  const file = readFileSync('components/SocialEventsTable.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const at = file.indexOf('function GuestListSheet(');
+  const sheet = file.slice(at, file.indexOf('function GuestListModal(', at));
+  const ref = readFileSync('components/CompanyAttendeesDrawer.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  /*
+   * The move CompanyAttendeesDrawer already makes when its activity timeline
+   * opens: the first drawer crosses to the far left, the record takes the
+   * right. Measured at 1440x900 — guest list 940-1440 alone, 0-500 with a
+   * record open at 960-1440, and back to 940-1440 when the record closes.
+   */
+  eq('the drawer slides when a record opens',
+    /style=\{\{ right: quickView \? 'calc\(100% - 500px\)' : 0 \}\}/.test(sheet), true);
+  // Anchored by `right` in BOTH states, so the move is one animatable value
+  // rather than a jump between two anchors. Same rule the reference follows.
+  eq('  anchored by right either way', /sm:absolute sm:inset-y-0/.test(sheet), true);
+  eq('  with the same 300ms ease-out', /sm:transition-\[right\] sm:duration-300 sm:ease-out/.test(sheet), true);
+  eq('  which is what the drawer it copies uses',
+    /sm:transition-\[right\] sm:duration-300 sm:ease-out/.test(ref), true);
+
+  // The rounded corners follow it across: the drawer is on the screen's left
+  // edge now, so the radius belongs on its right.
+  eq('  and its corners move with it', /sm:rounded-tr-2xl sm:rounded-br-2xl/.test(sheet), true);
+
+  /*
+   * No room for both on a phone, so the list steps aside — the same thing the
+   * reference does. Measured at 390px: the guest list goes display:none and
+   * the record runs full width from the header to the bottom.
+   */
+  eq('on a phone the list gives way', /hidden sm:flex sm:rounded-tr-2xl/.test(sheet), true);
+  eq('  as it does in the drawer this copies', /hidden sm:flex sm:rounded-tr-2xl/.test(ref), true);
+
+  /*
+   * One backdrop, not two. The record is docked, so it paints none of its own:
+   * a second would dim the guest list, which is the thing the reader is meant
+   * to still be looking at. Measured: one backdrop in every state.
+   */
+  const qv = readFileSync('components/QuickViewDrawer.tsx', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  eq('the record is docked', /docked \/>/.test(sheet), true);
+  eq('  so it paints no backdrop of its own', /\{!docked && <div className="absolute inset-0 bg-black\/40"/.test(qv), true);
+  eq('  and lets clicks past to the one underneath',
+    /docked \? 'pointer-events-none' : ''/.test(qv), true);
+  eq('  except on its own panel', /docked \? 'pointer-events-auto' : ''/.test(qv), true);
+  // Undocked callers are untouched: the quick view opens over the page with
+  // its own backdrop everywhere else it is used.
+  eq('  while an undocked one still has one', /docked = false/.test(qv), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
