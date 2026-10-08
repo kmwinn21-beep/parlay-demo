@@ -376,7 +376,20 @@ export function PreConferenceReviewModal() {
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+    /*
+     * Re-run when the panel opens, not once per mount.
+     *
+     * This component renders null until slot.isOpen — and the effect ran on
+     * the first mount, when it had. headerRef.current was null, the effect
+     * returned, and with an empty dependency list it never tried again. So the
+     * observer was never attached at all: headerHeight stayed 0, the panel
+     * published --pcr-header-h: 0px, and the rep drawer pinned to it opened at
+     * the top of the screen over the clock.
+     *
+     * This is why reading the border box instead of the content box changed
+     * nothing on a device: there was no measurement happening to correct.
+     */
+  }, [slot.isOpen]);
 
   // Cycling loading text
   const LOADING_LINES = ['Your Pre-Conference Score is Loading', 'Compiling Relevant Data', 'Scoring Attendee Targets'];

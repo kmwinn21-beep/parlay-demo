@@ -36,7 +36,37 @@ const eq = (label, got, want) => {
 const strip = (f) => readFileSync(f, 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-console.log('\n— the header reports how tall it actually is —');
+console.log('\n— the header is measured at all —');
+{
+  const pcr = strip('components/PreConferenceReview.tsx');
+
+  /*
+   * The effect has to re-run when the panel OPENS.
+   *
+   * This component returns null until slot.isOpen, and the effect ran once on
+   * the first mount — when it had returned null. headerRef.current was null,
+   * the effect returned, and with an empty dependency list it never tried
+   * again. The observer was never attached: headerHeight stayed 0, the panel
+   * published --pcr-header-h: 0px, and the drawer pinned to it opened at the
+   * top of the screen.
+   *
+   * This is why reading the border box instead of the content box fixed
+   * nothing on a device — there was no measurement happening to correct. The
+   * probe that said otherwise rendered the panel already open, which is the
+   * one sequence that hides this.
+   *
+   * Measured mounting closed and then opening, at 390x844 with a 59px inset:
+   * with [] the variable is 0px and the drawer opens at 0, 132px above the
+   * header's bottom edge; with [slot.isOpen] it is 131.5px and the drawer
+   * opens at 132.
+   */
+  eq('the observer is attached when the panel opens',
+    /observer\.disconnect\(\);[\s\S]{0,80}\}, \[slot\.isOpen\]\);/.test(pcr), true);
+  eq('  and the panel is the thing that renders null until then',
+    /if \(!slot\.isOpen\) return null;/.test(pcr), true);
+}
+
+console.log('\n— and it reports how tall it actually is —');
 {
   const pcr = strip('components/PreConferenceReview.tsx');
 
