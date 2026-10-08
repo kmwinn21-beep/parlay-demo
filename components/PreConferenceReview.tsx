@@ -345,17 +345,35 @@ export function PreConferenceReviewModal() {
   const loadedForIdRef = useRef<number | null>(null);
   const CACHE_TTL_MS = 60 * 1000;
 
-  // Header height, tracked live (it changes when the mobile stat pills
-  // collapse/expand) and exposed as a CSS var on the panel below so
-  // mobile-drawer content — e.g. the rep drill-down panel in
-  // pre-conference/LandscapeTab.tsx — can pin its top edge to the header's
-  // bottom edge without hardcoding a height that would drift out of sync.
+  /*
+   * Header height, tracked live (it changes when the mobile stat pills
+   * collapse/expand) and exposed as a CSS var on the panel below so
+   * mobile-drawer content — e.g. the rep drill-down panel in
+   * pre-conference/LandscapeTab.tsx — can pin its top edge to the header's
+   * bottom edge without hardcoding a height that would drift out of sync.
+   *
+   * The BORDER box, not the content box.
+   *
+   * This read entry.contentRect, which excludes padding — and this header is
+   * mostly padding on a phone: px-6 py-4 plus pt-[calc(1rem +
+   * env(safe-area-inset-top))] for the status bar. Measured in Chromium at
+   * 390x844 with a 59px inset: contentRect said 41 where the header was
+   * actually 132. So the drawer pinned to it opened 91px too high, over the
+   * status bar and the clock.
+   *
+   * borderBoxSize is the right number and is what every current browser
+   * reports; getBoundingClientRect is the fallback for the Safari versions
+   * that observe but do not carry it.
+   */
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setHeaderHeight(entry.contentRect.height));
+    const observer = new ResizeObserver(([entry]) => {
+      const border = entry.borderBoxSize?.[0]?.blockSize;
+      setHeaderHeight(border ?? el.getBoundingClientRect().height);
+    });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);

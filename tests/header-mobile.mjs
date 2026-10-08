@@ -460,7 +460,13 @@ console.log('\n— both drawer shapes stop at the header —');
   ).trim().split('\n').filter(Boolean);
   let unhandled = 0;
   for (const f of drawerFiles) {
-    for (const cls of readFileSync(f, 'utf8').matchAll(/drawer-mobile-responsive[^'"`]*/g)) {
+    /* Comments stripped first. This scanned raw file text, so a comment
+       EXPLAINING the rules — one naming `.drawer-mobile-responsive:not(.left-0)`
+       — read as a drawer carrying left-0 without the anchored shape and failed
+       the build. A comment is not a className. */
+    const src = readFileSync(f, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    for (const cls of src.matchAll(/drawer-mobile-responsive[^'"`]*/g)) {
       const s = cls[0];
       const anchored = /\bfixed\b/.test(s) && /\bbottom-0\b/.test(s) && /\bleft-0\b/.test(s) && /\bright-0\b/.test(s);
       if (/\bleft-0\b/.test(s) && !anchored) unhandled++;

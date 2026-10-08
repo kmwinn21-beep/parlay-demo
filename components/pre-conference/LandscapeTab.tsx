@@ -1498,7 +1498,17 @@ function RepDetailPanel({
   );
 
   return (
-    <div className="drawer-mobile-responsive fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] rounded-t-2xl sm:inset-x-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[480px] sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none z-[60] flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden">
+    /*
+     * !max-h-none, because this drawer anchors its OWN top.
+     *
+     * globals.css caps `.drawer-mobile-responsive:not(.left-0)` at the space
+     * below the site header, for the drawers that are flex children and cannot
+     * be top-anchored. This one is positioned and sets `top` itself, so the cap
+     * only over-constrains it: with top, bottom and a max-height all in play
+     * the browser drops `bottom`, and the drawer stopped 12px above the bottom
+     * of the screen — measured 832 against an 844 viewport.
+     */
+    <div className="drawer-mobile-responsive !max-h-none fixed inset-x-0 bottom-0 top-[var(--pcr-header-h,0px)] rounded-t-2xl sm:inset-x-auto sm:inset-y-0 sm:left-auto sm:right-0 sm:w-[480px] sm:rounded-tl-2xl sm:rounded-bl-2xl sm:rounded-tr-none z-[60] flex flex-col border border-gray-200 bg-white shadow-2xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 bg-gray-50 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
