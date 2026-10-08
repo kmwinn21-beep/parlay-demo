@@ -168,5 +168,43 @@ console.log('\n— opened beside the row that asked for it —');
   eq('  and the panel is not drawn there', /notesView && !isPhone && \(/.test(table), true);
 }
 
+console.log('\n— and the table says which row it is about —');
+{
+  const table = strip('components/MeetingsTable.tsx');
+
+  /*
+   * The panel beside the table is about ONE meeting, and without this the
+   * reader has to remember which row they opened while reading it. Reading a
+   * row's notes picks that row out exactly as clicking it does — the same
+   * cardEmphasisClass, so there is one way a meetings row is emphasised.
+   * Measured at 1440px: the notes row stays at opacity 1 while every other
+   * drops to 0.2.
+   */
+  eq('opening the notes emphasises that row',
+    /const emphasisedMeetingId = \(notesView && !isPhone\) \? notesView\.meeting\.id : focusedMeetingId;/.test(table), true);
+  eq('  through the emphasis the table already has',
+    /focused: emphasisedMeetingId === m\.id,[\s\S]{0,120}otherFocused: emphasisedMeetingId != null && emphasisedMeetingId !== m\.id,/.test(table), true);
+  eq('  and the row carries the picked-out fill too',
+    /cardRowClass\(selectedIds\.has\(m\.id\), emphasisedMeetingId === m\.id\)/.test(table), true);
+  /* The notes row wins over the clicked one: opening the panel is the more
+     recent thing the reader did, and two highlighted rows would say the panel
+     belonged to both. */
+  eq('  nothing still keys the row off the clicked card alone',
+    /focused: focusedMeetingId === m\.id,/.test(table), false);
+}
+
+console.log('\n— the company name —');
+{
+  const table = strip('components/MeetingsTable.tsx');
+  /* Measured in Chromium: 14px, weight 700, Playfair Display, brand-primary.
+     My first reading said 600/Poppins — I had measured the MOBILE card's
+     button, which renders the same text earlier in the DOM, in a probe with
+     no --font-heading for font-serif to resolve against. */
+  eq('is bold serif in the brand primary',
+    /companyNameNode\(m, 'text-sm font-bold text-brand-primary font-serif/.test(table), true);
+  eq('  and no longer the small secondary',
+    /companyNameNode\(m, 'text-xs font-semibold text-brand-secondary/.test(table), false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

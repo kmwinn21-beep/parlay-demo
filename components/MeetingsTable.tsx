@@ -1652,6 +1652,16 @@ export function MeetingsTable({
   // switching modes shouldn't inherit what was collapsed in the other one.
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const hasActions = !!onEdit;
+
+  /**
+   * The row the table is drawing attention to.
+   *
+   * The notes panel wins over the clicked card: opening it is the more recent
+   * thing the reader did, and two highlighted rows would say the panel beside
+   * them belonged to both. On a phone there is no panel, so it is just the
+   * clicked card as before.
+   */
+  const emphasisedMeetingId = (notesView && !isPhone) ? notesView.meeting.id : focusedMeetingId;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
   const avgCostPerUnit = useAvgCostPerUnit();
@@ -2248,9 +2258,17 @@ export function MeetingsTable({
          which finds it by this attribute exactly as the follow-ups table does. */
       data-meeting-id={m.id}
       onClick={onMeetingCardClick(m.id)}
-      className={`align-top ${cardRowClass(selectedIds.has(m.id), focusedMeetingId === m.id)} ${cardEmphasisClass({
-        focused: focusedMeetingId === m.id,
-        otherFocused: focusedMeetingId != null && focusedMeetingId !== m.id,
+      /*
+       * Reading a row's notes picks that row out, exactly as clicking it does:
+       * the panel beside the table is about ONE meeting, and without this the
+       * reader has to hold on to which row they opened while reading it. The
+       * notes row takes precedence over the clicked one — opening the notes is
+       * the more recent thing the reader did, and two highlighted rows would
+       * say the panel belonged to both.
+       */
+      className={`align-top ${cardRowClass(selectedIds.has(m.id), emphasisedMeetingId === m.id)} ${cardEmphasisClass({
+        focused: emphasisedMeetingId === m.id,
+        otherFocused: emphasisedMeetingId != null && emphasisedMeetingId !== m.id,
         dimmed: false,
       })}`}
     >
@@ -2374,7 +2392,7 @@ export function MeetingsTable({
           case 'company': return !hideCompany ? <td key="company" className="px-3 py-2 text-gray-600 leading-snug align-top">
             {m.company_name && m.company_id ? (
               <div className="flex items-center gap-1 group">
-                {companyNameNode(m, 'text-xs font-semibold text-brand-secondary hover:underline break-words whitespace-normal leading-snug')}
+                {companyNameNode(m, 'text-sm font-bold text-brand-primary font-serif hover:underline break-words whitespace-normal leading-snug')}
               </div>
             ) : (<span className="text-gray-300">—</span>)}
             {/*
