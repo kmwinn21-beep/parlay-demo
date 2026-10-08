@@ -345,20 +345,51 @@ export function PreConferenceReviewModal() {
   const loadedForIdRef = useRef<number | null>(null);
   const CACHE_TTL_MS = 60 * 1000;
 
-  // Header height, tracked live (it changes when the mobile stat pills
-  // collapse/expand) and exposed as a CSS var on the panel below so
-  // mobile-drawer content — e.g. the rep drill-down panel in
-  // pre-conference/LandscapeTab.tsx — can pin its top edge to the header's
-  // bottom edge without hardcoding a height that would drift out of sync.
+  /*
+   * Header height, tracked live (it changes when the mobile stat pills
+   * collapse/expand) and exposed as a CSS var on the panel below so
+   * mobile-drawer content — e.g. the rep drill-down panel in
+   * pre-conference/LandscapeTab.tsx — can pin its top edge to the header's
+   * bottom edge without hardcoding a height that would drift out of sync.
+   *
+   * The BORDER box, not the content box.
+   *
+   * This read entry.contentRect, which excludes padding — and this header is
+   * mostly padding on a phone: px-6 py-4 plus pt-[calc(1rem +
+   * env(safe-area-inset-top))] for the status bar. Measured in Chromium at
+   * 390x844 with a 59px inset: contentRect said 41 where the header was
+   * actually 132. So the drawer pinned to it opened 91px too high, over the
+   * status bar and the clock.
+   *
+   * borderBoxSize is the right number and is what every current browser
+   * reports; getBoundingClientRect is the fallback for the Safari versions
+   * that observe but do not carry it.
+   */
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   useEffect(() => {
     const el = headerRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setHeaderHeight(entry.contentRect.height));
+    const observer = new ResizeObserver(([entry]) => {
+      const border = entry.borderBoxSize?.[0]?.blockSize;
+      setHeaderHeight(border ?? el.getBoundingClientRect().height);
+    });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+    /*
+     * Re-run when the panel opens, not once per mount.
+     *
+     * This component renders null until slot.isOpen — and the effect ran on
+     * the first mount, when it had. headerRef.current was null, the effect
+     * returned, and with an empty dependency list it never tried again. So the
+     * observer was never attached at all: headerHeight stayed 0, the panel
+     * published --pcr-header-h: 0px, and the rep drawer pinned to it opened at
+     * the top of the screen over the clock.
+     *
+     * This is why reading the border box instead of the content box changed
+     * nothing on a device: there was no measurement happening to correct.
+     */
+  }, [slot.isOpen]);
 
   // Cycling loading text
   const LOADING_LINES = ['Your Pre-Conference Score is Loading', 'Compiling Relevant Data', 'Scoring Attendee Targets'];
