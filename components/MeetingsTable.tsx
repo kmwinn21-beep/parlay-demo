@@ -16,6 +16,8 @@ import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills, OverlappingStatusBadges } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
+import { MeetingNotesPanel } from '@/components/MeetingNotesPanel';
+import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
@@ -1474,6 +1476,8 @@ export function MeetingsTable({
    */
   const titleUnderName = !orderedColumns.some(col => col.key === 'title');
   const customColumns = useCustomColumns(tableName);
+  // The notes panel is a side column on a pointer and the popover on a phone.
+  const isPhone = useIsPhone();
   const [sortKey, setSortKey] = useState<SortKey>('datetime');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -1575,6 +1579,22 @@ export function MeetingsTable({
 
   // The notes card opened from a row's kebab, and where it hangs from.
   const [notesView, setNotesView] = useState<{ meeting: Meeting; anchor: DOMRect } | null>(null);
+  /*
+   * The notes panel sits in a column beside the table, starting level with the
+   * row it belongs to — the arrangement the follow-ups table already uses for
+   * its own detail drawer, through the same hook. Offsets are measured rather
+   * than computed because meeting rows are not a uniform height: a row with
+   * two attendees is taller than one with a single attendee.
+   */
+  const notesWrapRef = useRef<HTMLDivElement>(null);
+  const notesPanelRef = useRef<HTMLDivElement>(null);
+  const { offset: notesOffset, overhang: notesOverhang } = useAnchoredDrawer({
+    open: notesView != null && !isPhone,
+    anchorKey: notesView ? String(notesView.meeting.id) : null,
+    wrapRef: notesWrapRef,
+    panelRef: notesPanelRef,
+    findAnchor: (wrap, key) => wrap.querySelector<HTMLElement>(`tr[data-meeting-id="${CSS.escape(key)}"]`),
+  });
   // What the card actually found, so adding a note lights the row's badge
   // without waiting for the list to be fetched again.
   const [noteCounts, setNoteCounts] = useState<Record<number, number>>({});
@@ -2224,6 +2244,9 @@ export function MeetingsTable({
     // to repeat it. Same treatment as the follow-ups table.
     <tr
       key={m.id}
+      /* The notes panel lines itself up with this row — see useAnchoredDrawer,
+         which finds it by this attribute exactly as the follow-ups table does. */
+      data-meeting-id={m.id}
       onClick={onMeetingCardClick(m.id)}
       className={`align-top ${cardRowClass(selectedIds.has(m.id), focusedMeetingId === m.id)} ${cardEmphasisClass({
         focused: focusedMeetingId === m.id,
@@ -2600,6 +2623,9 @@ export function MeetingsTable({
       {/* The cards sit on the same grey the header row uses, inset from the
           container so the gap around them matches the gap between them. */}
       {!cardsOnly && viewMode === 'table' && (
+      /* relative, so the notes panel's column can be absolutely placed inside
+         it — the same shape the follow-ups table wraps its own drawer in. */
+      <div ref={notesWrapRef} className="relative">
       <div
         ref={meetingTableRef}
         className={`hidden lg:block ${CARD_TABLE_WRAP}`}
@@ -2682,6 +2708,37 @@ export function MeetingsTable({
         </table>
       </div>
       </div>
+
+      {/* The notes panel, in a column at the table's right and level with the
+          row that opened it. The spacer below gives a panel anchored near the
+          bottom somewhere to scroll to; it sits outside the table so growing
+          it cannot move the row the offset was measured against. */}
+      {notesView && !isPhone && (
+        <>
+          <div className="hidden lg:block" style={{ height: notesOverhang }} aria-hidden />
+          <div
+            className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-2 lg:z-20 lg:pointer-events-none"
+            style={{ paddingTop: notesOffset }}
+          >
+            <div ref={notesPanelRef} className="lg:pointer-events-auto">
+              <MeetingNotesPanel
+                attendeeId={notesView.meeting.attendee_id}
+                attendeeName={`${notesView.meeting.first_name} ${notesView.meeting.last_name}`.trim()}
+                subtitle={[notesView.meeting.title, notesView.meeting.company_name].filter(Boolean).join(' · ')}
+                conferenceName={notesView.meeting.conference_name}
+                onClose={() => setNotesView(null)}
+                onCountChange={count => setNoteCounts(prev => ({ ...prev, [notesView.meeting.attendee_id]: count }))}
+                onOpenRecord={() => {
+                  setQuickView({ type: 'attendee', id: notesView.meeting.attendee_id,
+                    name: `${notesView.meeting.first_name} ${notesView.meeting.last_name}`.trim() });
+                  setNotesView(null);
+                }}
+              />
+            </div>
+          </div>
+        </>
+      )}
+      </div>
       )}
       {quickView && (
         <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
@@ -2709,7 +2766,18 @@ export function MeetingsTable({
         />
       )}
 
-      {notesView && (
+      {/*
+        Desktop reads the notes in the drawer the follow-ups table uses, with
+        each note laid out as the dashboard feed lays one out. A phone keeps
+        the popover: SlideInPanel's mobile form is a 75vh bottom sheet, and
+        two sheets — this one over the meeting card's own — is a worse answer
+        than the card that is already there.
+      */}
+      {/* A phone keeps the popover. SlideInPanel's mobile form is a 75vh bottom
+          sheet, and that over the meeting card's own sheet is a worse answer
+          than the card already there. The desktop panel is rendered beside the
+          table above. */}
+      {notesView && isPhone && (
         <NotesPopoverCard
           attendeeId={notesView.meeting.attendee_id}
           conferenceName={notesView.meeting.conference_name}

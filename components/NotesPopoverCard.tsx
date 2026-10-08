@@ -83,8 +83,13 @@ export interface PopoverNote {
   touchpoint_type?: string | null;
 }
 
-/** The tags a note wears, in the order the record shows them. */
-function noteTags(n: PopoverNote): string[] {
+/**
+ * The tags a note wears, in the order the record shows them.
+ *
+ * Exported because the meeting notes panel draws the same note and must wear
+ * the same tags in the same order — a second copy of this is two orders.
+ */
+export function noteTagsOf(n: PopoverNote): string[] {
   return [n.note_type, n.touchpoint_type, n.status]
     .map(t => (t ?? '').trim())
     .filter(Boolean);
@@ -414,7 +419,7 @@ export function NotesPopoverCard({
                     authorInitials: initials(n.rep || ''),
                     authorColour: avatarColour(n.rep || ''),
                     when: formatNoteDateTime(n.created_at),
-                    tags: noteTags(n),
+                    tags: noteTagsOf(n),
                     conference: n.conference_name ?? null,
                   }}
                 />
