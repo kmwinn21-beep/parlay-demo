@@ -715,8 +715,27 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
     // ancestor whose top is 300, the sheet's top went to 300 rather than to
     // the header's 144.
     <div className="fixed inset-0 z-[60] flex flex-col justify-end sm:flex-row sm:justify-end bg-black/40" onClick={onClose}>
+      {/*
+        On a pointer, opening a guest or their company slides THIS across to the
+        far left and puts the record on the right, rather than stacking one
+        drawer on top of the other — the same move CompanyAttendeesDrawer makes
+        when its activity timeline opens, and the same 300ms ease-out.
+
+        Both states are anchored by `right` so the move is one animatable value
+        rather than a jump between two anchors. Percentages on a positioned
+        element resolve against its containing block, which here is the
+        full-screen backdrop, so `calc(100% - 500px)` puts this drawer's left
+        edge on 0 without depending on 100vw and the scrollbar it counts.
+
+        On a phone there is no room for both, so this one is hidden while the
+        record is open and the back of the record returns to it.
+      */}
       <div
-        className={`drawer-mobile-responsive relative bg-white rounded-t-2xl sm:rounded-tr-none sm:rounded-br-none sm:rounded-bl-2xl shadow-2xl border border-brand-highlight flex flex-col ${SHEET_BELOW_HEADER} sm:h-full sm:w-[500px] sm:max-w-full overflow-hidden`}
+        className={`drawer-mobile-responsive relative bg-white rounded-t-2xl shadow-2xl border border-brand-highlight flex-col ${SHEET_BELOW_HEADER} sm:h-full sm:w-[500px] sm:max-w-full overflow-hidden sm:absolute sm:inset-y-0 sm:transition-[right] sm:duration-300 sm:ease-out ${
+          quickView
+            ? 'hidden sm:flex sm:rounded-tr-2xl sm:rounded-br-2xl sm:rounded-tl-none sm:rounded-bl-none'
+            : 'flex sm:rounded-tr-none sm:rounded-br-none sm:rounded-bl-2xl'}`}
+        style={{ right: quickView ? 'calc(100% - 500px)' : 0 }}
         onClick={e => e.stopPropagation()}
       >
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 flex-shrink-0">
@@ -771,7 +790,7 @@ function GuestListSheet({ event, invitedAttendees, rsvpMap, onToggleRsvp, onRemo
           body and would otherwise open behind the list that opened it. */}
       {quickView && (
         <div onClick={e => e.stopPropagation()}>
-          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} zClass="z-[80]" />
+          <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} zClass="z-[80]" docked />
         </div>
       )}
       {editingGuests && (
