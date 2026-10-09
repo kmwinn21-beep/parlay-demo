@@ -26,11 +26,17 @@ export const INLINE_EDIT_FIELD_CLASS =
  * without intervention the cancel click would commit the very edit it is meant
  * to discard. preventDefault on mousedown keeps focus on the field so onClick
  * runs first; the same blur-race guard MentionTextarea uses for its suggestions.
+ *
+ * An editor that closes on an outside click rather than on blur — the status
+ * multiselect — cannot see that preventDefault, because its listener is on the
+ * document and fires whatever this button does with the event. The data
+ * attribute is how it recognises this button and leaves the commit alone.
  */
 export function InlineEditCancelButton({ onCancel }: { onCancel: () => void }) {
   return (
     <button
       type="button"
+      data-inline-edit-cancel
       onMouseDown={e => e.preventDefault()}
       onClick={onCancel}
       className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
