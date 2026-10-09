@@ -4207,7 +4207,18 @@ export default function ConferenceDetailPage() {
       {tabDrawerOpen === null ? (
         <div
           ref={tabBarRef}
-          className="border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]"
+          /* mt-6 is the page stack's own gap, put back by hand.
+
+             The page root is a space-y-6 column, which spaces its CHILDREN —
+             and this row's parent is `contents` on desktop, so the 1.5rem
+             landed on an element that generates no box and was lost. The card
+             above ended flush against this row, and the shadow below, sized to
+             paint the gap, painted the card instead: measured at 1440, the
+             shadow's top edge sat 1px under the bottom row of meta pills,
+             which is the cut that was reported. With the gap back it is 25px
+             clear, and the row still pins to the top when the page scrolls —
+             a margin is a position in the flow, not a constraint on sticky. */
+          className="mt-6 border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]"
         >
           {tabNav}
         </div>
