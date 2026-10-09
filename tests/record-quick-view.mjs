@@ -83,11 +83,15 @@ console.log('\n— every drawer that can, renders it inline —');
       eq(`  and ${name} loads no page into a frame`, /embed=true/.test(src), false);
     }
   }
-  const qv = strip('components/QuickViewDrawer.tsx');
-  eq('the shared drawer still frames a conference',
-    /canRenderInline\(target\.type\)/.test(qv), true);
-  eq('  as does the notetaker',
-    /canRenderInline\(recordDrawer\.type\)/.test(strip('components/MeetingNotetaker.tsx')), true);
+  /*
+   * No drawer decides for itself. Whether a record is rendered inline or
+   * framed depends on the viewport width and on the type, and a call site
+   * that branched on either would be a second place to get it wrong.
+   */
+  for (const f of DRAWERS) {
+    eq(`  ${f.split('/').pop()} does not decide for itself`,
+      /canRenderInline\(/.test(strip(f)), false);
+  }
 
   /*
    * The guard that matters more than any single file: nothing may frame an
@@ -159,6 +163,40 @@ console.log('\n— the drawer looks as it did —');
    */
   eq('  without the page’s full-screen height', /h-screen/.test(body), false);
   eq('  filling the drawer instead', /flex-1 min-h-0/.test(body), true);
+}
+
+
+console.log('\n— inline only where the drawer is the viewport —');
+{
+  const body = strip('components/RecordQuickViewBody.tsx');
+
+  /*
+   * The record views lay out with VIEWPORT breakpoints — sm:grid-cols-2,
+   * md:grid-cols-4, lg:grid-cols-3. An iframe has its own viewport, and a
+   * 480px drawer meant none of them applied, so the record stacked into the
+   * one column that fits. Inline they resolve against the HOST: on a 1440px
+   * screen a four-column grid was crushed into 480px, every word wrapped down
+   * the page. Reported from a desktop screenshot.
+   *
+   * So inline is right exactly where the drawer IS the viewport — below sm.
+   * Driven in Chromium: 1440, 1024 and 700 all render the iframe; 390 takes
+   * the inline path.
+   */
+  eq('the width decides', /const isPhone = useIsPhone\(\);/.test(body), true);
+  eq('  and anything wider is framed', /if \(!isPhone \|\| !canRenderInline\(type\)\) \{/.test(body), true);
+  eq('  with the frame built here, once', /src=\{`\$\{BASE_PATH\[type\]\}\/\$\{id\}\$\{query\}`\}/.test(body), true);
+  // A company opened as another row's parent keeps that context in the frame.
+  eq('  carrying parent_of when there is one',
+    /parent_of=\$\{encodeURIComponent\(parentOf\)\}/.test(body), true);
+
+  /*
+   * useIsPhone starts false, so the first render is the FRAME and a phone
+   * swaps to inline after mount. That is the safe way round: the frame is
+   * correct at every width, the inline view only at one.
+   */
+  const hook = strip('lib/useIsPhone.ts');
+  eq('  starting from the answer that is always right',
+    /useState\(false\)/.test(hook), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

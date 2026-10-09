@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useIsPhone } from '@/lib/useIsPhone';
 
 /**
  * A record, rendered inside the drawer that opened it.
@@ -24,6 +25,28 @@ import dynamic from 'next/dynamic';
  *
  * It is the SAME component the route renders, so the drawer looks exactly as
  * it did — not a summary built to resemble it.
+ *
+ * ── Only on a phone, and that is not a preference ──────────────────────────
+ *
+ * The record views lay themselves out with VIEWPORT breakpoints —
+ * sm:grid-cols-2, md:grid-cols-4, lg:grid-cols-3. An iframe has its own
+ * viewport, and the drawer's 480px meant none of them applied: the record
+ * stacked into one column, which is what fits a drawer.
+ *
+ * Rendered inline, those breakpoints resolve against the HOST's viewport. On a
+ * 1440px screen all of them apply, and a four-column grid is crushed into a
+ * 480px drawer — columns a few characters wide, every word wrapped down the
+ * page. Reported, and plainly wrong.
+ *
+ * So inline is correct exactly when the drawer is as wide as the viewport,
+ * which is below `sm`. Above it the iframe stays, because its separate
+ * viewport is the thing making the layout right. That also means the saving
+ * lands where the cost was: a phone is where a quick view is how a record is
+ * read at all.
+ *
+ * Making this work at every width means the views laying out by CONTAINER
+ * rather than by viewport — container queries, across two files of a couple
+ * of thousand lines each. Worth doing, not worth doing reactively.
  */
 
 /*
@@ -51,7 +74,18 @@ function RecordLoading() {
 
 export type RecordQuickViewType = 'attendee' | 'company' | 'conference';
 
-/** Which record types render inline; anything else still needs the iframe. */
+const BASE_PATH: Record<RecordQuickViewType, string> = {
+  attendee: '/attendees',
+  company: '/companies',
+  conference: '/conferences',
+};
+
+/**
+ * Has this record type an inline view at all?
+ *
+ * A conference has not, so it is framed at every width. Width decides the
+ * rest — see the note at the top.
+ */
 export function canRenderInline(type: RecordQuickViewType): boolean {
   return type === 'attendee' || type === 'company';
 }
@@ -68,6 +102,28 @@ export function RecordQuickViewBody({ type, id, parentOf, onClose }: {
    */
   onClose?: () => void;
 }) {
+  const isPhone = useIsPhone();
+
+  /*
+   * Above sm the iframe stays, and its own viewport is the point: it is what
+   * keeps the record in one column inside a 480px drawer. useIsPhone starts
+   * false and corrects after mount, so this begins as the frame and becomes
+   * the inline view on a phone — the safe way round, since the frame is
+   * correct at every width and the inline view only at one.
+   */
+  if (!isPhone || !canRenderInline(type)) {
+    const query = type === 'company' && parentOf
+      ? `?embed=true&parent_of=${encodeURIComponent(parentOf)}`
+      : '?embed=true';
+    return (
+      <iframe
+        src={`${BASE_PATH[type]}/${id}${query}`}
+        className="flex-1 w-full border-0"
+        title="Record"
+      />
+    );
+  }
+
   return (
     /*
      * The wrapper the iframe's own page carried — see EmbedChecker in
