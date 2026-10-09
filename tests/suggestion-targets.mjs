@@ -241,7 +241,7 @@ console.log('\n— a read-only field is context, not a text box —');
 console.log('\n— the attendee record has the section at all —');
 {
   const { readFileSync } = await import('node:fs');
-  const page = readFileSync('app/attendees/[id]/page.tsx', 'utf8');
+  const page = readFileSync('components/records/AttendeeDetailView.tsx', 'utf8');
   eq('it is mounted', /<SuggestedUpdatesSection entityType="attendee" entityId=\{Number\(id\)\} \/>/.test(page), true);
   eq('  and imported', /import \{ SuggestedUpdatesSection \}/.test(page), true);
   // The GET resolves an attendee to their employer, so one row shows in both
@@ -249,7 +249,7 @@ console.log('\n— the attendee record has the section at all —');
   const route = readFileSync('app/api/suggestions/route.ts', 'utf8');
   eq('an attendee lookup falls through to the company',
     /if \(entityType === 'attendee'\) \{[\s\S]{0,200}lookupType = 'company'/.test(route), true);
-  const company = readFileSync('app/companies/[id]/page.tsx', 'utf8');
+  const company = readFileSync('components/records/CompanyDetailView.tsx', 'utf8');
   eq('  and the company record still has its own', /entityType="company"/.test(company), true);
 }
 

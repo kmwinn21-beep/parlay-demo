@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
+import { createPortal } from 'react-dom';
 import { getConfigCategory } from '@/lib/configCache';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -339,6 +341,9 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [quickViewId, setQuickViewId] = useState<number | null>(null);
+  // document only exists once mounted, and the quick view portals into it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   /**
    * The child whose row the reader came from, when the drawer was opened by
    * following a parent link. It only labels the header — the record itself is
@@ -2403,8 +2408,18 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         />
       )}
 
-      {/* Quick View iframe drawer */}
-      {quickViewId !== null && (
+      {/*
+        Quick View iframe drawer — through a portal to the body.
+
+        globals.css gives this shape `top: var(--mobile-header-h)` so it stops
+        at the site header, but `position: fixed` resolves against the viewport
+        only while nothing above it is transformed. On a phone this table is
+        inside the conference tab drawer, which carries a translateY to slide,
+        so the 144px was measured from the drawer's own top — already the
+        header — and this opened at 288. Measured at 390x844 with a 59px inset,
+        before and after.
+      */}
+      {quickViewId !== null && mounted && createPortal(
         <>
           <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
           <div className="fixed inset-0 z-40 bg-black/30" onClick={() => { setQuickViewId(null); setQuickViewParentOf(null); }} />
@@ -2432,13 +2447,11 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 </svg>
               </button>
             </div>
-            <iframe
-              src={`/companies/${quickViewId}?embed=true${quickViewParentOf ? `&parent_of=${encodeURIComponent(quickViewParentOf)}` : ''}`}
-              className="flex-1 w-full border-0"
-              title="Quick View"
-            />
+            <RecordQuickViewBody type="company" id={quickViewId} parentOf={quickViewParentOf}
+              onClose={() => { setQuickViewId(null); setQuickViewParentOf(null); }} />
           </div>
-        </>
+        </>,
+        document.body,
       )}
 
       {attendeesDrawerCompany && (

@@ -550,7 +550,7 @@ await guarded('the detail form save', async () => {
     /'crm_contact_link' in body/.test(put), true);
 
   // The form itself: the input, and the state it is bound to.
-  const form = readFileSync('app/attendees/[id]/page.tsx', 'utf-8');
+  const form = readFileSync('components/records/AttendeeDetailView.tsx', 'utf-8');
   eq('the form renders a CRM Contact Link input',
     /<label className="label">CRM Contact Link<\/label>/.test(form), true);
   eq('  bound to editData.crm_contact_link',

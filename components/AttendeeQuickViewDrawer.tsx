@@ -1,6 +1,7 @@
 'use client';
 
 import { useDrawerResize } from '@/lib/useDrawerResize';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 
 // Same iframe-embed quick view pattern used in components/AttendeeTable.tsx —
 // extracted here so it can be triggered from other tables (e.g. the outreach
@@ -41,11 +42,7 @@ export function AttendeeQuickViewDrawer({
             </svg>
           </button>
         </div>
-        <iframe
-          src={`/attendees/${attendeeId}?embed=true`}
-          className="flex-1 w-full border-0"
-          title="Quick View"
-        />
+        <RecordQuickViewBody type="attendee" id={attendeeId} onClose={onClose} />
       </div>
     </>
   );
