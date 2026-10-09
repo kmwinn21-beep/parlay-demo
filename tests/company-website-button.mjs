@@ -97,7 +97,7 @@ console.log('\n— which of the two the button shows —');
 
 console.log('\n— the header renders it twice, and only through the component —');
 {
-  const page = strip('app/companies/[id]/page.tsx');
+  const page = strip('components/records/CompanyDetailView.tsx');
   eq('both headers use it',
     (page.match(/<CompanyWebsiteButton website=\{company\.website\} name=\{company\.name\}/g) ?? []).length, 2);
   eq('  the wide one at md', /<CompanyWebsiteButton website=\{company\.website\} name=\{company\.name\} size="md" \/>/.test(page), true);

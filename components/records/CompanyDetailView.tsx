@@ -1,0 +1,2064 @@
+'use client';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+import toast from 'react-hot-toast';
+import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
+import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
+import { NotesSection, type EntityNote } from '@/components/NotesSection';
+import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
+import { PinnedNotesSection, type PinnedNote } from '@/components/PinnedNotesSection';
+import { BackButton } from '@/components/BackButton';
+import { CompanyTouchpointMatrix } from '@/components/CompanyTouchpointMatrix';
+import { MultiSelectDropdown } from '@/components/MultiSelectDropdown';
+import { RepMultiSelect } from '@/components/RepMultiSelect';
+import { MatchMasterAccountField, type MasterAccountApplyPatch } from '@/components/MatchMasterAccountField';
+import { useConfigColors } from '@/lib/useConfigColors';
+import { useConfigOptions } from '@/lib/useConfigOptions';
+import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
+import { getPillClass, getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
+import { effectiveSeniority } from '@/lib/parsers';
+import { evaluateIcpRules, type IcpConfig } from '@/lib/icpRulesEval';
+import { useUnitTypeLabel } from '@/lib/useUnitTypeLabel';
+import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
+import { type UserOption, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
+import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
+import { useUser } from '@/components/UserContext';
+import { InternalRelationshipsSection } from '@/components/InternalRelationshipsSection';
+import { VendorRelationshipsSection } from '@/components/VendorRelationshipsSection';
+import { SuggestedUpdatesSection } from '@/components/SuggestedUpdatesSection';
+import { CompanyWebsiteButton } from '@/components/CompanyWebsiteButton';
+import { SectionJumpMenu } from '@/components/SectionJumpMenu';
+import { useCollapsibleSection, setAllSections, useAnySectionExpanded } from '@/lib/sectionExpansion';
+import { ConferenceTimeline } from '@/components/ConferenceTimeline';
+import { AnimatedCollapse, FadeCollapse } from '@/components/CollapseAnimation';
+import { useSectionConfig } from '@/lib/useSectionConfig';
+import { CompanyDrawer } from '@/components/CompanyDrawer';
+import { ActivityTimelineModal } from '@/components/ActivityTimelineModal';
+import { useCapabilities } from '@/lib/useCapabilities';
+import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDrawer';
+import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
+import { SearchableSelect } from '@/components/SearchableSelect';
+import { ScrollRow } from '@/components/ScrollRow';
+import { ClosedWonDealsSection } from '@/components/ClosedWonDealsSection';
+import type { ClosedDeal } from '@/lib/ClosedDealDraftContext';
+
+interface ConferenceItem { id: number; name: string; start_date: string; end_date: string; location: string; }
+
+interface Attendee {
+  id: number;
+  first_name: string;
+  last_name: string;
+  photo_url?: string | null;
+  title?: string;
+  email?: string;
+  seniority?: string;
+  company_id?: number;
+  conference_count: number;
+  conference_names?: string;
+}
+
+interface StatusOptionMeta {
+  id: number;
+  value: string;
+  status_key: string | null;
+  scope: string | null; // 'global' | 'user'
+}
+
+interface StatusMarker {
+  status_option_id: number;
+  initials: string;
+}
+
+interface Company {
+  id: number;
+  name: string;
+  website?: string;
+  profit_type?: string;
+  company_type?: string;
+  notes?: string;
+  wse?: number;
+  status?: string;
+  assigned_user?: string;
+  parent_company_id?: number;
+  entity_structure?: string;
+  services?: string[];
+  sub_types?: string[];
+  icp?: string;
+  crm_link?: string;
+  master_account_key?: string | null;
+  master_account_name?: string | null;
+  industry?: string;
+  territory_id?: number | null;
+  hq_state?: string | null;
+  created_at: string;
+  my_user_status_ids?: number[];
+  status_markers?: StatusMarker[];
+  attendees: Attendee[];
+  conferences?: ConferenceItem[];
+  parent_company?: { id: number; name: string; company_type?: string | null } | null;
+  child_companies?: { id: number; name: string; website: string | null; company_type: string | null; attendee_count: number }[];
+}
+
+/** Normalize legacy boolean ICP strings ("true"/"false") to the configured option values. */
+function normalizeIcpValue(raw: string | null | undefined, options: string[]): string | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  if (lower === 'true' || lower === 'yes' || lower === 'y' || lower === '1') return options[0] ?? raw;
+  if (lower === 'false' || lower === 'no' || lower === 'n' || lower === '0') return options[1] ?? raw;
+  return raw;
+}
+
+/**
+ * What a related company is to the one being viewed. Carries the same
+ * parent/child glyphs the companies table puts on its company-type pill, so
+ * the two readings of the relationship look like the same thing.
+ */
+function EntityDesignationPill({ designation, label, colorMap }: {
+  /** Which end of the link this is — not the text, which the account names. */
+  designation: 'Parent' | 'Child';
+  label: string;
+  colorMap: Record<string, string | null>;
+}) {
+  const isParent = designation === 'Parent';
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMap[label]).badgeClass}`}
+    >
+      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {isParent ? (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+        ) : (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+        )}
+      </svg>
+      {label}
+    </span>
+  );
+}
+
+function ConferenceCountTooltip({ count, names }: { count: number; names?: string }) {
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; above: boolean } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const list = names ? names.split(',').map(n => n.trim()).filter(Boolean) : [];
+
+  const handleMouseEnter = () => {
+    if (!ref.current || list.length === 0) return;
+    const rect = ref.current.getBoundingClientRect();
+    const w = Math.min(240, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(rect.left + rect.width / 2 - w / 2, window.innerWidth - w - 8));
+    const above = rect.top > 180;
+    setPos({ top: above ? rect.top - 8 : rect.bottom + 8, left, width: w, above });
+  };
+
+  return (
+    <div ref={ref} className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={() => setPos(null)}>
+      <span
+        className={`inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full text-xs font-semibold ${count >= 4 ? 'bg-green-100 text-green-700' : count === 3 ? 'bg-yellow-100 text-yellow-700' : count === 2 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}
+        style={{ cursor: list.length > 0 ? 'pointer' : 'default' }}
+      >
+        {count}
+      </span>
+      {pos && (
+        <div style={{ position: 'fixed', top: pos.top, left: pos.left, width: pos.width, zIndex: 9999, transform: pos.above ? 'translateY(-100%)' : 'translateY(0)' }}>
+          <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl px-3 py-2.5">
+            <p className="font-semibold mb-1.5 text-gray-300 uppercase tracking-wide text-[10px]">Conferences Attended</p>
+            <ul className="space-y-1">{list.map((name, i) => <li key={i} className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />{name}</li>)}</ul>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The props exist for the quick-view drawers, which render this component
+ * INLINE rather than loading the page into an iframe. Everything else opens
+ * the real route and passes nothing, so the URL stays the source of truth.
+ */
+export function CompanyDetailView({ embedId, embedParentOf, onEmbeddedLeave }: {
+  embedId?: string;
+  embedParentOf?: string | null;
+  /**
+   * Where "leave this record" goes when it is not a page.
+   *
+   * In an iframe, router.push('/companies') navigated the iframe and the host
+   * page never moved. Rendered inline it would navigate the HOST — so
+   * deleting a company from a quick view opened on a conference would throw
+   * the reader out of the conference. Embedded, the drawer closes instead.
+   */
+  onEmbeddedLeave?: () => void;
+}) {
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  /**
+   * Set when this record is embedded as the parent of a row the reader was
+   * just looking at, so the header can say which child brought them here. The
+   * full record page is never opened with it.
+   */
+  const parentOfChild = embedParentOf !== undefined ? embedParentOf : searchParams.get('parent_of');
+  const id = embedId ?? (params.id as string);
+  const colorMaps = useConfigColors();
+  // Named by the account: the Related Entities pills read their labels from
+  // Entity Structure rather than saying "Parent"/"Child" whatever it is called
+  // here. Values come back ordered by sort_order.
+  const entityStructureOptions = useConfigOptions().entity_structure;
+  const { getLabel: getSectionLabel, orderedKeys: sectionOrder, isVisible: isSectionVisible } = useSectionConfig('company');
+  const unitTypeLabel = useUnitTypeLabel();
+  const { planCapabilities } = useCapabilities();
+  const avgCostPerUnit = useAvgCostPerUnit();
+
+  const [company, setCompany] = useState<Company | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<Partial<Company>>({});
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [attendeePage, setAttendeePage] = useState(1);
+  const ATTENDEE_PAGE_SIZE = 100;
+  const [companyFollowUps, setCompanyFollowUps] = useState<FollowUp[]>([]);
+  const [companyNotes, setCompanyNotes] = useState<EntityNote[]>([]);
+  const [companyMeetings, setCompanyMeetings] = useState<Meeting[]>([]);
+  const { openMeetingNotes } = useMeetingNotesDrawer();
+  const [actionOptions, setActionOptions] = useState<string[]>([]);
+  const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
+  const [editingCompanyAttendeeId, setEditingCompanyAttendeeId] = useState<number | null>(null);
+  const [savingCompanyAttendeeId, setSavingCompanyAttendeeId] = useState<number | null>(null);
+  const [productsExpanded, setProductsExpanded] = useCollapsibleSection(false);
+
+  // Dynamic config options
+  const [statusOptions, setStatusOptions] = useState<string[]>([]);
+  const [statusOptionObjects, setStatusOptionObjects] = useState<StatusOptionMeta[]>([]);
+  const [myUserStatusIds, setMyUserStatusIds] = useState<Set<number>>(new Set());
+  const [companyTypeOptions, setCompanyTypeOptions] = useState<string[]>([]);
+  const [profitTypeOptions, setProfitTypeOptions] = useState<string[]>([]);
+  const [userOptions, setUserOptions] = useState<UserOption[]>([]);
+  const [territoryOptions, setTerritoryOptions] = useState<{ id: number; name: string; color: string }[]>([]);
+  const [servicesOptions, setServicesOptions] = useState<string[]>([]);
+  // The Vendor Type list, reused as the company's own Sub Type(s).
+  const [subTypeOptions, setSubTypeOptions] = useState<string[]>([]);
+  const [industryOptions, setIndustryOptions] = useState<string[]>([]);
+  const [icpOptions, setIcpOptions] = useState<string[]>([]);
+  const [icpConfig, setIcpConfig] = useState<IcpConfig>({ rules: [], unitTypeReq: { operator: null, value1: null, value2: null } });
+  const [touchpointTotal, setTouchpointTotal] = useState<number | null>(null);
+  const [showTpMatrix, setShowTpMatrix] = useState(false);
+
+  // Operator / Capital relationship state
+  const [relatedDrawerCompanyId, setRelatedDrawerCompanyId] = useState<number | null>(null);
+  const [relatedDrawerCompanyName, setRelatedDrawerCompanyName] = useState<string | undefined>();
+  const [statusExpanded, setStatusExpanded] = useCollapsibleSection(false);
+  const [communitiesExpanded, setCommunitiesExpanded] = useCollapsibleSection(false);
+  const anySectionExpanded = useAnySectionExpanded();
+  const [configuredProductNames, setConfiguredProductNames] = useState<Set<string>>(new Set());
+  const [showAssignFollowUp, setShowAssignFollowUp] = useState(false);
+  const [showMeeting, setShowMeeting] = useState(false);
+
+  // Pinned notes state
+  const [pinnedNotes, setPinnedNotes] = useState<PinnedNote[]>([]);
+  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<number>>(new Set());
+  const { user } = useUser();
+
+  // Internal relationships state
+  const [internalRelationships, setInternalRelationships] = useState<{ id: number; company_id: number; rep_ids: string | null; contact_ids: string | null; relationship_status: string; description: string; created_at: string }[]>([]);
+  const [relTypeOptions, setRelTypeOptions] = useState<{ id: number; value: string }[]>([]);
+
+  // Activity timeline state
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [quickView, setQuickView] = useState<QuickViewTarget | null>(null);
+  const [relMapOpen, setRelMapOpen] = useState(false);
+
+  const [closedDeals, setClosedDeals] = useState<ClosedDeal[]>([]);
+
+  // Intel drawer state
+  interface IntelItem {
+    conference_id: number;
+    conference_name: string;
+    tier: string;
+    summary: string;
+    pain_point_signals: string[];
+    trigger_events: string[];
+    buying_signals: string[];
+    opening_angles: string[];
+    used_icp_fallback: boolean;
+    is_fallback: boolean;
+    generated_at: string | null;
+  }
+  const [intelItems, setIntelItems] = useState<IntelItem[]>([]);
+  const [showIntelDrawer, setShowIntelDrawer] = useState(false);
+  const [selectedIntelIdx, setSelectedIntelIdx] = useState(0);
+
+  const fetchInternalRelationships = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/internal-relationships?company_id=${id}`);
+      if (res.ok) setInternalRelationships(await res.json());
+    } catch { /* non-fatal */ }
+  }, [id]);
+
+  useEffect(() => {
+    fetch(`/api/companies/${id}/intel`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.items) setIntelItems(data.items); })
+      .catch(() => {});
+  }, [id]);
+
+  // Add-attendee form on the Attendees card. The company is fixed to this
+  // record; the conference is the choice the user has to make.
+  const [showAddAttendee, setShowAddAttendee] = useState(false);
+  const [allConferences, setAllConferences] = useState<ConferenceItem[]>([]);
+  const [addAttendee, setAddAttendee] = useState({ first_name: '', last_name: '', title: '', email: '' });
+  const [addAttendeeConf, setAddAttendeeConf] = useState<ConferenceItem | null>(null);
+  const [isAddingAttendee, setIsAddingAttendee] = useState(false);
+
+  useEffect(() => {
+    if (!showAddAttendee || allConferences.length > 0) return;
+    fetch('/api/conferences')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: ConferenceItem[]) => {
+        if (!Array.isArray(rows)) return;
+        setAllConferences([...rows].sort((a, b) => (b.start_date || '').localeCompare(a.start_date || '')));
+      })
+      .catch(() => {});
+  }, [showAddAttendee, allConferences.length]);
+
+  const fetchCompany = useCallback(async () => {
+    try {
+      const [compRes, statusRes, compTypeRes, profitRes, actionRes, userRes, servicesRes, subTypeRes, icpRes, allCompaniesRes, relTypeRes, icpConfigRes, industryRes, productsRes, territoriesRes] = await Promise.all([
+        fetch(`/api/companies/${id}`),
+        fetch('/api/config?category=status&form=company_detail'),
+        fetch('/api/config?category=company_type&form=company_detail'),
+        fetch('/api/config?category=profit_type&form=company_detail'),
+        fetch('/api/config?category=action&form=company_detail'),
+        fetch('/api/config?category=user&form=company_detail'),
+        fetch('/api/config?category=services&form=company_detail'),
+        fetch('/api/config?category=vendor_type&form=company_detail'),
+        fetch('/api/config?category=icp&form=company_detail'),
+        fetch('/api/companies'),
+        fetch('/api/config?category=rep_relationship_type&form=company_detail'),
+        fetch('/api/admin/icp-rules'),
+        fetch('/api/config?category=industries&form=company_detail'),
+        fetch('/api/config?category=products'),
+        fetch('/api/admin/territories'),
+      ]);
+      if (!compRes.ok) throw new Error('Not found');
+      const data = await compRes.json();
+      setCompany(data);
+      setMyUserStatusIds(new Set<number>(data.my_user_status_ids || []));
+      setEditData({
+        name: data.name,
+        website: data.website || '',
+        profit_type: data.profit_type || '',
+        company_type: data.company_type || '',
+        notes: data.notes || '',
+        wse: data.wse ?? undefined,
+        assigned_user: data.assigned_user || '',
+        entity_structure: data.entity_structure || '',
+        services: Array.isArray(data.services) ? data.services : [],
+        sub_types: Array.isArray(data.sub_types) ? data.sub_types : [],
+        icp: data.icp || null,
+        industry: data.industry || '',
+        territory_id: data.territory_id ?? null,
+        hq_state: data.hq_state ?? null,
+        crm_link: data.crm_link || '',
+        master_account_key: data.master_account_key ?? null,
+        master_account_name: data.master_account_name ?? null,
+      });
+      if (statusRes.ok) {
+        const statusData = await statusRes.json() as StatusOptionMeta[];
+        setStatusOptionObjects(statusData);
+        setStatusOptions(statusData.map(o => o.value));
+      }
+      if (compTypeRes.ok) {
+        const compTypeData = await compTypeRes.json();
+        setCompanyTypeOptions(compTypeData.map((o: { value: string }) => o.value));
+      }
+      if (profitRes.ok) setProfitTypeOptions((await profitRes.json()).map((o: { value: string }) => o.value));
+      if (actionRes.ok) setActionOptions((await actionRes.json()).map((o: { value: string }) => o.value));
+      if (userRes.ok) setUserOptions((await userRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      if (servicesRes.ok) setServicesOptions((await servicesRes.json()).map((o: { value: string }) => o.value));
+      if (subTypeRes.ok) setSubTypeOptions((await subTypeRes.json()).map((o: { value: string }) => o.value));
+      if (industryRes.ok) setIndustryOptions((await industryRes.json()).map((o: { value: string }) => o.value));
+      if (territoriesRes.ok) {
+        const territoriesData = await territoriesRes.json() as { territories: { id: number; name: string; color: string }[] };
+        setTerritoryOptions(territoriesData.territories.map(t => ({ id: t.id, name: t.name, color: t.color })));
+      }
+      if (icpRes.ok) setIcpOptions((await icpRes.json()).map((o: { value: string }) => o.value).filter((v: string) => v !== 'True' && v !== 'False'));
+      if (icpConfigRes.ok) setIcpConfig(await icpConfigRes.json() as IcpConfig);
+      if (relTypeRes.ok) setRelTypeOptions((await relTypeRes.json()).map((o: { id: number; value: string }) => ({ id: Number(o.id), value: String(o.value) })));
+      if (allCompaniesRes.ok) setAllCompanies((await allCompaniesRes.json()).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })));
+      if (productsRes.ok) {
+        const productsData = await productsRes.json() as Array<{ value: string; metadata?: string | null }>;
+        const configured = new Set<string>();
+        for (const p of productsData) {
+          if (!p.metadata) continue;
+          try {
+            const m = JSON.parse(p.metadata) as { functions?: Record<string, string>; seniority?: Record<string, string> };
+            const hasConfiguredFunction = Object.values(m.functions ?? {}).some(v => v === 'high' || v === 'med');
+            const hasConfiguredSeniority = Object.keys(m.seniority ?? {}).length > 0;
+            if (hasConfiguredFunction || hasConfiguredSeniority) configured.add(p.value);
+          } catch { /* skip */ }
+        }
+        setConfiguredProductNames(configured);
+      }
+
+      // For parent companies, include child company IDs in meetings, follow-ups, and notes queries
+      const childIds = (data.child_companies || []).map((c: { id: number }) => c.id);
+      const isParent = childIds.length > 0;
+      const companyIds = isParent ? [id, ...childIds].join(',') : null;
+
+      const [fuRes, notesRes, meetingsRes] = await Promise.all([
+        fetch(companyIds
+          ? `/api/follow-ups?company_ids=${companyIds}`
+          : `/api/follow-ups?company_id=${id}`),
+        fetch(companyIds
+          ? `/api/notes?entity_type=company&entity_ids=${companyIds}`
+          : `/api/notes?entity_type=company&entity_id=${id}`),
+        fetch(companyIds
+          ? `/api/meetings?company_ids=${companyIds}`
+          : `/api/meetings?company_id=${id}`),
+      ]);
+      if (fuRes.ok) setCompanyFollowUps(await fuRes.json());
+      if (notesRes.ok) setCompanyNotes(await notesRes.json());
+      if (meetingsRes.ok) setCompanyMeetings(await meetingsRes.json());
+
+      // Fetch pinned notes and touchpoint total in parallel
+      try {
+        const [pinnedRes, tpRes] = await Promise.all([
+          fetch(`/api/pinned-notes?entity_type=company&entity_id=${id}`),
+          fetch(`/api/companies/${id}/touchpoints`),
+        ]);
+        if (pinnedRes.ok) {
+          const pinData = await pinnedRes.json();
+          setPinnedNotes(pinData);
+          setPinnedNoteIds(new Set(pinData.map((p: PinnedNote) => p.note_id)));
+        }
+        if (tpRes.ok) {
+          const tpData = await tpRes.json();
+          setTouchpointTotal(tpData.total ?? 0);
+        }
+      } catch { /* non-fatal */ }
+
+      // Fetch closed deals (non-fatal)
+      try {
+        const dealsRes = await fetch(`/api/companies/${id}/closed-deals`);
+        if (dealsRes.ok) setClosedDeals((await dealsRes.json()).deals ?? []);
+      } catch { /* non-fatal */ }
+    } catch {
+      toast.error('Failed to load company');
+      if (embedId) onEmbeddedLeave?.(); else router.push('/companies');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, router]);
+
+  useEffect(() => {
+    fetchCompany();
+    fetchInternalRelationships();
+  }, [fetchCompany, fetchInternalRelationships]);
+
+  // Sync edits made inside a QuickView iframe back to this page's attendee list.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== 'parlay:attendee:updated') return;
+      const u = e.data.attendee;
+      if (!u?.id) return;
+      setCompany(prev => {
+        if (!prev) return prev;
+        return { ...prev, attendees: prev.attendees.map(a => a.id === u.id ? { ...a, ...u } : a) };
+      });
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { meetingId: deletedId } = (e as CustomEvent<{ meetingId: number }>).detail;
+      setCompanyMeetings(prev => prev.map(m => m.id === deletedId ? { ...m, has_notes: false } : m));
+    };
+    window.addEventListener('meeting-notes-deleted', handler);
+    return () => window.removeEventListener('meeting-notes-deleted', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      fetch(`/api/follow-ups?company_id=${id}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data) setCompanyFollowUps(data); })
+        .catch(() => {});
+    };
+    window.addEventListener('meeting-tasks-confirmed', handler);
+    return () => window.removeEventListener('meeting-tasks-confirmed', handler);
+  }, [id]);
+
+  // Optimistically update company type to Customer when a new deal is logged
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { companyId: savedCompanyId, deal } = (e as CustomEvent).detail as { companyId: number; deal: { id: number } };
+      if (savedCompanyId !== Number(id)) return;
+      const isNew = !closedDeals.some(d => d.id === deal.id);
+      if (!isNew) return;
+      const customerLabel = companyTypeOptions.find(v => v.toLowerCase() === 'customer') ?? 'Customer';
+      setCompany(prev => prev ? { ...prev, company_type: customerLabel } : prev);
+      setEditData(prev => ({ ...prev, company_type: customerLabel }));
+      setClosedDeals(prev => prev.some(d => d.id === deal.id) ? prev : [deal as ClosedDeal, ...prev]);
+    };
+    window.addEventListener('closed-deal-saved', handler);
+    return () => window.removeEventListener('closed-deal-saved', handler);
+  }, [id, closedDeals, companyTypeOptions]);
+
+  // Auto-classify ICP when WSE, Company Type, or Services change in edit mode
+  useEffect(() => {
+    if (!isEditing) return;
+    const services = Array.isArray(editData.services) ? editData.services.join(',') : '';
+    const icp = evaluateIcpRules(
+      {
+        company_type: editData.company_type || null,
+        services: services || null,
+        wse: editData.wse != null ? String(editData.wse) : null,
+        profit_type: editData.profit_type || null,
+        entity_structure: editData.entity_structure || null,
+      },
+      icpConfig,
+      icpOptions,
+    );
+    setEditData((p) => ({ ...p, icp }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing, editData.wse, editData.company_type, editData.services, editData.profit_type, editData.entity_structure]);
+
+  // Search companies for relate modal
+
+  const handleSave = async () => {
+    if (!editData.name) {
+      toast.error('Company name is required.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/companies/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editData),
+      });
+      if (!res.ok) throw new Error('Update failed');
+      toast.success('Company updated!');
+      setIsEditing(false);
+      fetchCompany();
+    } catch {
+      toast.error('Failed to update company');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleStatus = async (value: string) => {
+    const clickedMeta = statusOptionObjects.find(o => o.value === value);
+    const isUserScoped = clickedMeta?.scope === 'user';
+
+    if (isUserScoped && clickedMeta) {
+      const optId = clickedMeta.id;
+      const wasSet = myUserStatusIds.has(optId);
+      const nextIds = new Set(myUserStatusIds);
+      if (wasSet) { nextIds.delete(optId); } else { nextIds.add(optId); }
+      setMyUserStatusIds(nextIds);
+      try {
+        // Build payload: global statuses + all currently-toggled user-scoped statuses (as signal to backend)
+        const globalStatuses = (company?.status || '').split(',').map(s => s.trim()).filter(Boolean);
+        const userScopedStatuses = statusOptionObjects
+          .filter(o => o.scope === 'user' && nextIds.has(o.id))
+          .map(o => o.value);
+        const res = await fetch(`/api/companies/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: [...globalStatuses, ...userScopedStatuses].join(',') }),
+        });
+        if (!res.ok) throw new Error();
+        fetchCompany();
+        toast.success(nextIds.has(optId) ? `${value} set.` : `${value} removed.`);
+      } catch {
+        setMyUserStatusIds(myUserStatusIds);
+        toast.error('Failed to update status.');
+      }
+      return;
+    }
+
+    const currentStatuses = new Set((company?.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown'));
+    if (currentStatuses.has(value)) { currentStatuses.delete(value); } else { currentStatuses.add(value); }
+    const newStatus = Array.from(currentStatuses).join(',');
+    try {
+      const res = await fetch(`/api/companies/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error();
+      setCompany(prev => prev ? { ...prev, status: newStatus } : prev);
+      toast.success(newStatus ? 'Status updated — all attendees updated.' : 'Status cleared — all attendees updated.');
+    } catch {
+      toast.error('Failed to update status.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this company? Attendees will be unlinked but not deleted.')) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/companies/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+      toast.success('Company deleted.');
+      if (embedId) onEmbeddedLeave?.(); else router.push('/companies');
+    } catch {
+      toast.error('Failed to delete company');
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCompanyChange = async (attendeeId: number, newCompanyId: number) => {
+    setSavingCompanyAttendeeId(attendeeId);
+    try {
+      const res = await fetch(`/api/attendees/${attendeeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: newCompanyId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Company updated.');
+      setEditingCompanyAttendeeId(null);
+      fetchCompany();
+    } catch {
+      toast.error('Failed to update company.');
+    } finally {
+      setSavingCompanyAttendeeId(null);
+    }
+  };
+
+
+
+
+  const handlePinNote = async (noteId: number, conferenceName: string | null, attendeeName: string | null, attendeeId: number | null) => {
+    if (!user?.email) { toast.error('You must be logged in to pin notes.'); return; }
+    try {
+      const res = await fetch('/api/pinned-notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note_id: noteId,
+          entity_type: 'company',
+          entity_id: Number(id),
+          pinned_by: user.email,
+          conference_name: conferenceName,
+          attendee_name: attendeeName,
+          attendee_id: attendeeId,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Note pinned!');
+      fetchCompany();
+    } catch {
+      toast.error('Failed to pin note.');
+    }
+  };
+
+  const handleUnpinNote = async (pinId: number) => {
+    if (!confirm('Unpin this note?')) return;
+    try {
+      const res = await fetch('/api/pinned-notes', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pinId }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Note unpinned.');
+      setPinnedNotes(prev => prev.filter(p => p.id !== pinId));
+      setPinnedNoteIds(prev => {
+        const next = new Set(prev);
+        const pin = pinnedNotes.find(p => p.id === pinId);
+        if (pin) next.delete(pin.note_id);
+        return next;
+      });
+    } catch {
+      toast.error('Failed to unpin note.');
+    }
+  };
+
+  const handleToggleFollowUp = async (id: number, completed: boolean) => {
+    setCompanyFollowUps(prev =>
+      prev.map(fu =>
+        fu.id === id ? { ...fu, completed } : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, completed }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(completed ? 'Marked as completed!' : 'Marked as pending.');
+    } catch {
+      setCompanyFollowUps(prev =>
+        prev.map(fu =>
+          fu.id === id ? { ...fu, completed: !completed } : fu
+        )
+      );
+      toast.error('Failed to update.');
+    }
+  };
+
+  const handleDeleteFollowUp = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this follow-up?')) return;
+    const prev = companyFollowUps;
+    setCompanyFollowUps(fus => fus.filter(fu => fu.id !== id));
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Follow-up deleted.');
+    } catch {
+      setCompanyFollowUps(prev);
+      toast.error('Failed to delete follow-up.');
+    }
+  };
+
+  const handleRepChange = async (id: number, rep: string | null) => {
+    setCompanyFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.id === id
+          ? { ...fu, assigned_rep: rep }
+          : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, assigned_rep: rep }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Rep updated.');
+    } catch {
+      fetchCompany();
+      toast.error('Failed to update rep.');
+    }
+  };
+
+  const handleFollowUpActionChange = async (id: number, action: string) => {
+    setCompanyFollowUps((prev) => prev.map((fu) => fu.id === id ? { ...fu, follow_up_action: action || null } : fu));
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, follow_up_action: action || null }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Follow up action updated.');
+    } catch {
+      fetchCompany();
+      toast.error('Failed to update follow up action.');
+    }
+  };
+
+  const handleNextStepsChange = async (id: number, nextSteps: string) => {
+    setCompanyFollowUps((prev) =>
+      prev.map((fu) =>
+        fu.id === id ? { ...fu, next_steps: nextSteps } : fu
+      )
+    );
+    try {
+      const res = await fetch('/api/follow-ups', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, next_steps: nextSteps }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success('Next step updated.');
+    } catch {
+      fetchCompany();
+      toast.error('Failed to update next step.');
+    }
+  };
+
+  const handleAddAttendee = async () => {
+    if (!company) return;
+    if (!addAttendee.first_name.trim() || !addAttendee.last_name.trim()) {
+      toast.error('First and last name are required.');
+      return;
+    }
+    if (!addAttendeeConf) {
+      toast.error('Choose a conference.');
+      return;
+    }
+    setIsAddingAttendee(true);
+    try {
+      const res = await fetch(`/api/conferences/${addAttendeeConf.id}/attendees/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          first_name: addAttendee.first_name.trim(),
+          last_name: addAttendee.last_name.trim(),
+          title: addAttendee.title.trim() || undefined,
+          email: addAttendee.email.trim() || undefined,
+          // Fixed to the record being viewed — the route matches it by name.
+          company: company.name,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to add attendee');
+      }
+      toast.success(`Added to ${addAttendeeConf.name}.`);
+      setAddAttendee({ first_name: '', last_name: '', title: '', email: '' });
+      setAddAttendeeConf(null);
+      setShowAddAttendee(false);
+      fetchCompany();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add attendee');
+    } finally {
+      setIsAddingAttendee(false);
+    }
+  };
+
+  const handleBulkToggleFollowUp = async (ids: number[]) => {
+    // Optimistic: mark all as complete immediately
+    setCompanyFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: true } : fu));
+    try {
+      await Promise.all(ids.map(id =>
+        fetch('/api/follow-ups', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, completed: true }),
+        }).then(res => { if (!res.ok) throw new Error(); })
+      ));
+      toast.success(`${ids.length} task${ids.length === 1 ? '' : 's'} marked complete.`);
+    } catch {
+      // Revert optimistic update
+      setCompanyFollowUps(prev => prev.map(fu => ids.includes(fu.id) ? { ...fu, completed: false } : fu));
+      toast.error('Failed to mark all done.');
+      throw new Error();
+    }
+  };
+
+  const filteredAttendees = company?.attendees || [];
+
+  const attendeeTotalPages = Math.ceil(filteredAttendees.length / ATTENDEE_PAGE_SIZE);
+  // Every attendee is rendered; FadeCollapse decides how much of the list is
+  // visible, which is what lets the cut land mid-row rather than between rows.
+  const paginatedAttendees = filteredAttendees;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-4 border-brand-secondary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!company) return null;
+
+  // Header pills render twice — one scrolling line on mobile, the
+  // wrapping row on desktop.
+  const headerPills = (
+    <>
+      {parseRepIds(company.assigned_user ?? '').map(id => userOptions.find(u => u.id === id)).filter(Boolean).map((user, i) => (
+                    <span key={i} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${getPreset(colorMaps.user?.[user!.value]).badgeClass}`}>
+                      <svg className="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {getRepInitials(user!.value)}
+                    </span>
+                  ))}
+                  {company.company_type && (
+                    <span className={`${getBadgeClass(company.company_type, colorMaps.company_type || {})} inline-flex items-center gap-1`}>
+                      {company.entity_structure === 'Parent' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.entity_structure === 'Child' && (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4" />
+                        </svg>
+                      )}
+                      {company.company_type}
+                    </span>
+                  )}
+                  {company.profit_type && (
+                    <span className={`badge ${company.profit_type === 'for-profit' ? 'badge-green' : 'badge-gold'}`}>
+                      {company.profit_type}
+                    </span>
+                  )}
+                  {(() => {
+                    const pill = formatValuePill(company.wse, avgCostPerUnit);
+                    return pill ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300 whitespace-nowrap">
+                        {pill}
+                      </span>
+                    ) : null;
+                  })()}
+                  <span className="badge-gray whitespace-nowrap">{company.attendees.length} attendees</span>
+                </>
+  );
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Phone only: the record is long enough that scrolling to a section is
+          a chore, and this row already carries the page's other navigation. */}
+      <div className="flex items-center justify-between gap-3">
+        <BackButton />
+        {/* Phone gets both controls inside the Jump To menu; there's no room
+            for a second button beside Back. */}
+        <SectionJumpMenu className="sm:hidden" />
+        <button
+          type="button"
+          onClick={() => setAllSections(!anySectionExpanded)}
+          className="hidden sm:inline-flex items-center text-sm text-gray-500 hover:text-brand-primary transition-colors"
+        >
+          {anySectionExpanded ? 'Collapse All' : 'Expand All'}
+        </button>
+      </div>
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column — main content */}
+        <div className="lg:col-span-2 space-y-6">
+
+      {/* Company Info Card */}
+      <div className="card">
+        {isEditing ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-semibold text-brand-primary font-serif">Edit Company</h2>
+              <div>
+                <label className="label">ICP</label>
+                <div className="inline-flex items-center rounded-lg border border-gray-200 p-1 bg-gray-50">
+                  {icpOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setEditData((p) => ({ ...p, icp: option }))}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${editData.icp === option ? 'bg-brand-secondary text-white' : 'text-gray-600 hover:text-gray-800'}`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">Company Name *</label>
+                <input
+                  value={editData.name || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, name: e.target.value }))}
+                  className="input-field"
+                />
+              </div>
+              <div>
+                <label className="label">{unitTypeLabel}</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={editData.wse ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setEditData((p) => ({ ...p, wse: val === '' ? undefined : Number(val) }));
+                  }}
+                  className="input-field"
+                  placeholder={`# of ${unitTypeLabel}`}
+                />
+              </div>
+              <div>
+                <label className="label">Website</label>
+                <input
+                  value={editData.website || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, website: e.target.value }))}
+                  className="input-field"
+                  placeholder="https://example.com"
+                />
+              </div>
+              <div>
+                <label className="label">CRM Link</label>
+                <input
+                  value={editData.crm_link || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, crm_link: e.target.value }))}
+                  className="input-field"
+                  placeholder="Link to this company in your CRM"
+                />
+              </div>
+              <div>
+                <label className="label">Company Type</label>
+                <select
+                  value={editData.company_type || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, company_type: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select type...</option>
+                  {companyTypeOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Profit Type</label>
+                <select
+                  value={editData.profit_type || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, profit_type: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select...</option>
+                  {profitTypeOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Assigned User</label>
+                <RepMultiSelect
+                  options={userOptions}
+                  selectedIds={parseRepIds(editData.assigned_user)}
+                  onChange={(ids) => setEditData((p) => ({ ...p, assigned_user: ids.join(',') }))}
+                  triggerClass="input-field w-full flex items-center justify-between gap-2 text-sm"
+                  placeholder="Select users..."
+                />
+              </div>
+              {/* Entity Structure isn't editable here. It describes whether a
+                  company has a parent or children, which only the companies
+                  table's Create Parent/Child Relationship action sets — typing
+                  it by hand marked a company a child of nobody, so the
+                  "Subsidiary of" line had nothing to render. */}
+              <div>
+                <label className="label">Territory</label>
+                <select
+                  value={editData.territory_id ?? ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, territory_id: e.target.value ? Number(e.target.value) : null }))}
+                  className="input-field"
+                >
+                  <option value="">Select territory...</option>
+                  {territoryOptions.map(opt => (
+                    <option key={opt.id} value={opt.id}>{opt.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <MultiSelectDropdown
+                  label="Services"
+                  options={servicesOptions}
+                  values={Array.isArray(editData.services) ? editData.services : []}
+                  onChange={(values) => setEditData((p) => ({ ...p, services: values }))}
+                  placeholder="Select services..."
+                  emptyMessage="No services configured. Add options in the Admin panel."
+                />
+              </div>
+              <div>
+                {/* What kind of vendor this company is — the relationship form
+                    reads it as its Vendor Type. */}
+                <MultiSelectDropdown
+                  label="Sub Type(s)"
+                  options={subTypeOptions}
+                  values={Array.isArray(editData.sub_types) ? editData.sub_types : []}
+                  onChange={(values) => setEditData((p) => ({ ...p, sub_types: values }))}
+                  placeholder="Select sub type(s)..."
+                  emptyMessage="No vendor types configured. Add options in the Admin panel."
+                />
+              </div>
+              <div>
+                <label className="label">Industry</label>
+                <select
+                  value={editData.industry || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, industry: e.target.value }))}
+                  className="input-field"
+                >
+                  <option value="">Select industry...</option>
+                  {industryOptions.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">HQ State</label>
+                <input
+                  value={editData.hq_state || ''}
+                  onChange={(e) => setEditData((p) => ({ ...p, hq_state: e.target.value.toUpperCase().slice(0, 2) }))}
+                  className="input-field uppercase"
+                  placeholder="e.g. TX"
+                  maxLength={2}
+                />
+              </div>
+              <div>
+                <MatchMasterAccountField
+                  currentValues={{
+                    website: editData.website,
+                    assigned_user: editData.assigned_user,
+                    hq_state: editData.hq_state,
+                    territory_id: editData.territory_id,
+                    entity_structure: editData.entity_structure,
+                    services: Array.isArray(editData.services) ? editData.services : [],
+                    wse: editData.wse,
+                    crm_link: editData.crm_link,
+                    company_type: editData.company_type,
+                    profit_type: editData.profit_type,
+                    master_account_key: editData.master_account_key,
+                    master_account_name: editData.master_account_name,
+                  }}
+                  userOptions={userOptions}
+                  territoryOptions={territoryOptions}
+                  unitTypeLabel={unitTypeLabel}
+                  onApply={(patch: MasterAccountApplyPatch) => setEditData((p) => ({ ...p, ...patch }))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <button onClick={handleSave} disabled={isSaving} className="btn-primary">
+                {isSaving ? 'Saving...' : 'Save'}
+              </button>
+              <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleDelete} disabled={isDeleting} className="btn-danger">
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {/* Header: avatar, name, badges, actions */}
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-xl bg-brand-highlight flex items-center justify-center text-brand-primary text-xl font-bold font-serif flex-shrink-0">
+                {company.name[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h1 className="text-2xl font-bold text-brand-primary font-serif flex items-center gap-2">
+                      {company.name}
+                      {/* Desktop-only: icon buttons inline with name */}
+                      <span className="hidden sm:inline-flex items-center gap-2">
+                        {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
+                          <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 flex-shrink-0">
+                            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                        )}
+                        {intelItems.length > 0 && (
+                          <button onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }} title="View company intel" className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0">
+                            <svg className="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                          </button>
+                        )}
+                        {planCapabilities?.intelligence_core?.activity_timeline && (
+                          <button type="button" title="View activity timeline" onClick={() => setTimelineOpen(true)} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5 text-brand-secondary" aria-hidden="true">
+                              <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                            </svg>
+                          </button>
+                        )}
+                        {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                          <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
+                            <svg className="w-5 h-5 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                          </button>
+                        )}
+                        <CompanyWebsiteButton website={company.website} name={company.name} size="md" />
+                        {company.crm_link && (
+                          <a
+                            href={company.crm_link.startsWith('http') ? company.crm_link : `https://${company.crm_link}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open in CRM"
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-teal-50 hover:bg-teal-100 transition-colors flex-shrink-0"
+                          >
+                            <svg className="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7c0-1.657 3.582-3 8-3s8 1.343 8 3-3.582 3-8 3-8-1.343-8-3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7v5c0 1.657-3.582 3-8 3s-8-1.343-8-3V7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12v5c0 1.657-3.582 3-8 3s-8-1.343-8-3v-5" /></svg>
+                          </a>
+                        )}
+                      </span>
+                    </h1>
+                    {parentOfChild && (
+                      <p className="text-sm text-gray-500 mt-0.5">Parent of {parentOfChild}</p>
+                    )}
+                    {company.parent_company && (
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        Subsidiary of{' '}
+                        <Link href={`/companies/${company.parent_company.id}`} className="text-brand-secondary hover:underline">
+                          {company.parent_company.name}
+                        </Link>
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    {/* Mobile: borderless icon-only button */}
+                    <button onClick={() => setIsEditing(true)} className="sm:hidden p-1.5 rounded hover:bg-gray-100 text-gray-500 transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    {/* Desktop: labelled button with border */}
+                    <button onClick={() => setIsEditing(true)} className="hidden sm:flex btn-secondary text-sm items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                {/* Mobile keeps these on one scrolling line; desktop wraps.
+                    The circular icon buttons below stay where they are. */}
+                <div className="hidden sm:flex flex-wrap gap-2 mt-2">
+                  {headerPills}
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile: the pill and icon rows run the full width of the card,
+                lining up with the avatar's left edge rather than the text
+                column, so the chevron has room. */}
+            <ScrollRow className="sm:hidden mt-2" gapClass="gap-2">
+              {headerPills}
+            </ScrollRow>
+            <div className="flex sm:hidden items-center gap-2 mt-2">
+              {icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0] && (
+                <span title="Ideal Customer Profile" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-100 flex-shrink-0">
+                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                </span>
+              )}
+              {intelItems.length > 0 && (
+                <button onClick={() => { setSelectedIntelIdx(0); setShowIntelDrawer(true); }} title="View company intel" className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 hover:bg-amber-200 transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                </button>
+              )}
+              {planCapabilities?.intelligence_core?.activity_timeline && (
+                <button type="button" title="View activity timeline" onClick={() => setTimelineOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 hover:bg-blue-100 transition-colors flex-shrink-0">
+                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-brand-secondary" aria-hidden="true">
+                    <line x1="2" y1="10" x2="18" y2="10" /><circle cx="6" cy="6" r="1.5" fill="currentColor" stroke="none" /><circle cx="10" cy="13" r="1.5" fill="currentColor" stroke="none" /><circle cx="14" cy="5" r="1.5" fill="currentColor" stroke="none" /><line x1="6" y1="10" x2="6" y2="6" strokeWidth="1.4" /><line x1="10" y1="10" x2="10" y2="13" strokeWidth="1.4" /><line x1="14" y1="10" x2="14" y2="5" strokeWidth="1.4" />
+                  </svg>
+                </button>
+              )}
+              {planCapabilities?.intelligence_core?.internal_relationship_mapping && (
+                <button type="button" title="View relationship map" onClick={() => setRelMapOpen(true)} className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[#EEEDFE] hover:bg-[#E0DEF8] transition-colors flex-shrink-0">
+                  <svg className="w-4 h-4 text-[#7F77DD]" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                </button>
+              )}
+              <CompanyWebsiteButton website={company.website} name={company.name} />
+              {company.crm_link && (
+              <a
+                href={company.crm_link.startsWith('http') ? company.crm_link : `https://${company.crm_link}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open in CRM"
+                className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-teal-50 hover:bg-teal-100 transition-colors flex-shrink-0"
+              >
+                <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7c0-1.657 3.582-3 8-3s8 1.343 8 3-3.582 3-8 3-8-1.343-8-3z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7v5c0 1.657-3.582 3-8 3s-8-1.343-8-3V7" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12v5c0 1.657-3.582 3-8 3s-8-1.343-8-3v-5" /></svg>
+              </a>
+                        )}
+            </div>
+
+            {/* Metadata fields */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">ICP</p>
+                {(() => {
+                  const displayIcp = normalizeIcpValue(company.icp, icpOptions);
+                  return icpOptions.length > 0 && displayIcp === icpOptions[0] ? (
+                    <span className="inline-flex items-center gap-1 text-sm font-medium text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      {displayIcp}
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-500">{displayIcp || '—'}</span>
+                  );
+                })()}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">{unitTypeLabel}</p>
+                {company.wse != null ? (
+                  <span className="text-sm text-gray-600 inline-flex items-center gap-1">
+                    <svg className="w-4 h-4 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M2 18h20M4 18v-3a8 8 0 0116 0v3M12 3v2M4.93 7.93l1.41 1.41M19.07 7.93l-1.41 1.41" /></svg>
+                    {company.wse.toLocaleString()}
+                  </span>
+                ) : <p className="text-sm text-gray-400">—</p>}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Services</p>
+                {company.services && company.services.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {company.services.map(s => (
+                      <span key={s} className="badge-gray text-xs">{s}</span>
+                    ))}
+                  </div>
+                ) : <p className="text-sm text-gray-400">—</p>}
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
+                <span className="flex flex-wrap gap-1">
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').map(s => (
+                    <span key={s} className={getBadgeClass(s, colorMaps.status || {})}>{formatStatusLabel(s)}</span>
+                  ))}
+                  {statusOptionObjects.filter(o => o.scope === 'user').flatMap(opt => {
+                    const markers = (company.status_markers || []).filter(m => m.status_option_id === opt.id);
+                    return markers.map((m, i) => (
+                      <span key={`${opt.id}-${i}`} className={getBadgeClass(opt.value, colorMaps.status || {})}>
+                        {formatStatusLabel(opt.value)} - {m.initials}
+                      </span>
+                    ));
+                  })}
+                  {(company.status || '').split(',').map(s => s.trim()).filter(s => s && s !== 'Unknown').length === 0 &&
+                    (company.status_markers || []).length === 0 &&
+                    <span className="text-sm text-gray-400">—</span>}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+          {/* Pinned Notes */}
+          <PinnedNotesSection pinnedNotes={pinnedNotes} onUnpin={handleUnpinNote} />
+
+      {/* Attendees */}
+      <div data-company-section="attendees" className="card">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-brand-primary font-serif">
+            Attendees ({company.attendees.length})
+          </h2>
+          <div className="flex items-center gap-3">
+            {touchpointTotal !== null && (
+              <button
+                type="button"
+                onClick={() => setShowTpMatrix(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-6 4h10M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                </svg>
+                <span className="text-sm font-medium text-brand-primary">{touchpointTotal} Touchpoints</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowAddAttendee(v => !v)}
+              title={showAddAttendee ? 'Close' : 'Add attendee'}
+              aria-label="Add attendee"
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {/* Person and plus drawn separately so the plus can sit clear of
+                  the shoulder rather than touching it. */}
+              <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 7a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zM2 20a5.5 5.5 0 0111 0v1H2v-1z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9.5v6M22 12.5h-6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {showAddAttendee && (
+          <div className="mb-4 p-4 rounded-xl border border-brand-secondary/30 bg-brand-secondary/5">
+            <h3 className="text-sm font-semibold text-brand-primary mb-3">Add Attendee</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label className="label text-xs">First Name *</label>
+                <input
+                  value={addAttendee.first_name}
+                  onChange={e => setAddAttendee(p => ({ ...p, first_name: e.target.value }))}
+                  className="input-field"
+                  placeholder="First name"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Last Name *</label>
+                <input
+                  value={addAttendee.last_name}
+                  onChange={e => setAddAttendee(p => ({ ...p, last_name: e.target.value }))}
+                  className="input-field"
+                  placeholder="Last name"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Title</label>
+                <input
+                  value={addAttendee.title}
+                  onChange={e => setAddAttendee(p => ({ ...p, title: e.target.value }))}
+                  className="input-field"
+                  placeholder="Job title"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Company</label>
+                {/* Fixed to the record being viewed */}
+                <input value={company.name} readOnly disabled className="input-field bg-gray-100 text-gray-500 cursor-not-allowed" />
+              </div>
+              <div>
+                <label className="label text-xs">Conference *</label>
+                <SearchableSelect
+                  options={allConferences}
+                  value={addAttendeeConf}
+                  onChange={setAddAttendeeConf}
+                  getLabel={(c) => c.name}
+                  placeholder="Select a conference…"
+                />
+              </div>
+              <div>
+                <label className="label text-xs">Email</label>
+                <input
+                  value={addAttendee.email}
+                  onChange={e => setAddAttendee(p => ({ ...p, email: e.target.value }))}
+                  className="input-field"
+                  placeholder="email@example.com"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                type="button"
+                onClick={handleAddAttendee}
+                disabled={isAddingAttendee || !addAttendee.first_name.trim() || !addAttendee.last_name.trim() || !addAttendeeConf}
+                className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isAddingAttendee ? 'Adding…' : 'Add'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowAddAttendee(false); setAddAttendeeConf(null); setAddAttendee({ first_name: '', last_name: '', title: '', email: '' }); }}
+                className="btn-secondary text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {filteredAttendees.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-4">No attendees for this company yet.</p>
+        ) : (
+          <FadeCollapse rows={2}>
+            {/* Mobile card layout */}
+            <div className="block lg:hidden divide-y divide-gray-100">
+              {paginatedAttendees.map((attendee) => {
+                const seniority = effectiveSeniority(attendee.seniority, attendee.title);
+                return (
+                <div key={attendee.id} data-collapse-row className="p-4 bg-white">
+                  <div className="flex items-start gap-3">
+                    {/* Photo when they have one — clicking it opens the card */}
+                    <AttendeeInitialsAvatar
+                      name={`${attendee.first_name} ${attendee.last_name}`}
+                      photoUrl={attendee.photo_url}
+                      title={attendee.title}
+                      companyName={company?.name}
+                      className="w-9 h-9 text-xs mt-0.5"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* The name opens the quick-view drawer rather than
+                              navigating to the profile, as elsewhere on mobile. */}
+                          <button
+                            type="button"
+                            onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
+                            className="font-semibold text-brand-secondary hover:underline text-sm text-left truncate"
+                          >
+                            {attendee.first_name} {attendee.last_name}
+                          </button>
+                        </div>
+                        <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                      </div>
+                      {attendee.title && <p className="text-xs text-gray-500 mt-1">{attendee.title}</p>}
+                      {seniority && (
+                        <span className={`${getBadgeClass(seniority, colorMaps.seniority || {})} mt-1 inline-block text-[10px]`}>{seniority}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop table layout */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Seniority</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conferences</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedAttendees.map((attendee) => {
+                    const seniority = effectiveSeniority(attendee.seniority, attendee.title);
+                    return (
+                    <tr key={attendee.id} data-collapse-row className="hover:bg-gray-50 transition-colors group">
+                      <td className="px-4 py-3 font-medium overflow-hidden" style={{ maxWidth: 220 }}>
+                        <div className="flex items-center gap-1.5">
+                          <AttendeeInitialsAvatar
+                            name={`${attendee.first_name} ${attendee.last_name}`}
+                            photoUrl={attendee.photo_url}
+                            title={attendee.title}
+                            companyName={company?.name}
+                            className="w-7 h-7 text-[10px]"
+                          />
+                          {/* The name is the quick view now — the separate eye
+                              icon is gone, matching the mobile card. */}
+                          <button
+                            type="button"
+                            onClick={() => setQuickView({ type: 'attendee', id: attendee.id, name: `${attendee.first_name} ${attendee.last_name}` })}
+                            className="text-brand-secondary hover:underline truncate text-left"
+                            title={`${attendee.first_name} ${attendee.last_name}`}
+                          >
+                            {attendee.first_name} {attendee.last_name}
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {attendee.title ? (
+                          <span className="block text-xs leading-snug break-words whitespace-normal" title={attendee.title}>{attendee.title}</span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {seniority ? (
+                          <span className={getBadgeClass(seniority, colorMaps.seniority || {})}>{seniority}</span>
+                        ) : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {editingCompanyAttendeeId === attendee.id ? (
+                          <div className="flex items-center gap-1">
+                            <select
+                              defaultValue={attendee.company_id || ''}
+                              disabled={savingCompanyAttendeeId === attendee.id}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                if (val && val !== attendee.company_id) {
+                                  handleCompanyChange(attendee.id, val);
+                                }
+                              }}
+                              className="input-field text-xs py-1 px-2 w-40"
+                            >
+                              <option value="">Select...</option>
+                              {allCompanies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <button onClick={() => setEditingCompanyAttendeeId(null)} className="text-gray-400 hover:text-gray-600 p-0.5">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingCompanyAttendeeId(attendee.id)}
+                            className="text-xs text-gray-500 hover:text-brand-secondary hover:underline cursor-pointer"
+                            title="Click to change company"
+                          >
+                            {company.name}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <ConferenceCountTooltip count={Number(attendee.conference_count)} names={attendee.conference_names} />
+                      </td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </FadeCollapse>
+        )}
+
+      </div>
+
+          {/* Meetings */}
+          <div data-company-section="meetings" className="card p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-brand-primary font-serif">
+                Meetings
+                {companyMeetings.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({companyMeetings.length})
+                  </span>
+                )}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowMeeting(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title=" Meeting"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm font-medium text-brand-primary">Schedule</span>
+              </button>
+            </div>
+            <MeetingsTable
+              meetings={companyMeetings}
+              actionOptions={actionOptions}
+              colorMap={colorMaps.action || {}}
+              userOptions={userOptions}
+             
+              hideCompany
+              tableName="company_meetings"
+              onNotesClick={(id) => openMeetingNotes(id)}
+              onOutcomeChange={async (meetingId, outcome) => {
+                setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, outcome } : m));
+                try {
+                  const res = await fetch('/api/meetings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: meetingId, outcome }),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Outcome updated.');
+                  return await res.json();
+                } catch {
+                  fetchCompany();
+                  toast.error('Failed to update outcome.');
+                }
+              }}
+              onDelete={async (meetingId) => {
+                if (!confirm('Delete this meeting? This cannot be undone.')) return;
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, { method: 'DELETE' });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting deleted.');
+                  fetchCompany();
+                } catch {
+                  toast.error('Failed to delete meeting.');
+                }
+              }}
+              onEdit={async (meetingId, data) => {
+                setCompanyMeetings(prev => prev.map(m => m.id === meetingId ? { ...m, ...data } : m));
+                try {
+                  const res = await fetch(`/api/meetings/${meetingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  if (!res.ok) throw new Error();
+                  toast.success('Meeting updated.');
+                } catch {
+                  fetchCompany();
+                  toast.error('Failed to update meeting.');
+                }
+              }}
+            />
+          </div>
+
+          {/* Follow Ups */}
+          <div data-company-section="follow-ups" className="card p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-brand-primary font-serif">
+                Follow Ups
+                {companyFollowUps.length > 0 && (
+                  <span className="ml-2 text-sm font-normal text-gray-500">
+                    ({companyFollowUps.filter(f => !f.completed).length} pending)
+                  </span>
+                )}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowAssignFollowUp(true)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <svg className="w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span className="text-sm font-medium text-brand-primary">Follow Up</span>
+              </button>
+            </div>
+            <FollowUpsTable detailsInDrawer followUps={companyFollowUps} onToggle={handleToggleFollowUp} onDelete={handleDeleteFollowUp} userOptions={userOptions} onRepChange={handleRepChange} onNextStepsChange={handleNextStepsChange} onFollowUpActionChange={handleFollowUpActionChange} onBulkToggle={handleBulkToggleFollowUp} tableName="company_follow_ups" groupBy="conference-attendee" />
+          </div>
+
+          {/* Notes */}
+          <div data-company-section="notes">
+          <NotesSection
+            entityType="company"
+            entityId={Number(id)}
+            fadeCollapse
+            initialNotes={companyNotes}
+            parentEntityId={company.child_companies && company.child_companies.length > 0 ? Number(id) : undefined}
+            conferences={company.conferences || []}
+            attendees={(company.attendees || []).map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, company_id: Number(id), company_name: company.name }))}
+            currentCompanyName={company.name}
+            currentCompanyId={Number(id)}
+            onPin={handlePinNote}
+            pinnedNoteIds={pinnedNoteIds}
+            onMeetingNoteClick={(meetingId) => openMeetingNotes(meetingId)}
+          />
+          </div>
+
+        </div>{/* end left column */}
+
+        {/* Right column */}
+        <div className="space-y-6">
+          {/* Above the configured sections rather than inside them: this is
+              work waiting to be done, not a permanent part of the record, and
+              it disappears once there is nothing pending. */}
+          <SuggestedUpdatesSection entityType="company" entityId={Number(id)} />
+          {(() => {
+            const sectionMap: Record<string, React.ReactNode> = {
+              status: (
+                <div key="status" className="card">
+                  <button
+                    type="button"
+                    onClick={() => setStatusExpanded(v => !v)}
+                    className="w-full flex items-center gap-2 text-left"
+                  >
+                    <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${statusExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                    <h2 className="text-base font-semibold text-brand-primary font-serif">{getSectionLabel('status')}</h2>
+                  </button>
+                  <AnimatedCollapse open={statusExpanded}>
+                  <p className="text-xs text-gray-500 mt-1 mb-3">Setting a company status will update all associated attendees.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {statusOptionObjects.map(opt => {
+                      const isUserScoped = opt.scope === 'user';
+                      const isActive = isUserScoped
+                        ? myUserStatusIds.has(opt.id)
+                        : new Set((company.status || '').split(',').map(s => s.trim()).filter(Boolean)).has(opt.value);
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => handleStatus(opt.value)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition-all ${
+                            isActive ? `${getPillClass(opt.value, colorMaps.status || {})} shadow-md scale-105` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                          }`}
+                        >
+                          {opt.value}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  </AnimatedCollapse>
+                </div>
+              ),
+              closed_deals: (
+                <div key="closed_deals" className="card">
+                  <ClosedWonDealsSection
+                    companyId={Number(id)}
+                    initialDeals={closedDeals}
+                    canEdit={true}
+                  />
+                </div>
+              ),
+              conferences: (
+                <div key="conferences">
+                  <ConferenceTimeline entityType="company" entityId={Number(id)} title={getSectionLabel('conferences')} />
+                </div>
+              ),
+              communities: (() => {
+                // Both directions of the link, so a child sees the parent it
+                // belongs to and not just a parent seeing its children. Each
+                // row is labelled with what that company is to this one.
+                const related: { id: number; name: string; company_type: string | null; designation: 'Parent' | 'Child' }[] = [
+                  ...(company.parent_company
+                    ? [{
+                        id: company.parent_company.id,
+                        name: company.parent_company.name,
+                        company_type: company.parent_company.company_type ?? null,
+                        designation: 'Parent' as const,
+                      }]
+                    : []),
+                  ...(company.child_companies ?? []).map(child => ({
+                    id: child.id,
+                    name: child.name,
+                    company_type: child.company_type,
+                    designation: 'Child' as const,
+                  })),
+                ];
+                if (related.length === 0) return null;
+                return (
+                  <div key="communities" className="card">
+                    <button
+                      type="button"
+                      onClick={() => setCommunitiesExpanded(v => !v)}
+                      className="w-full flex items-center gap-2 text-left"
+                    >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${communitiesExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
+                        {getSectionLabel('communities')} ({related.length})
+                      </h2>
+                    </button>
+                    <AnimatedCollapse open={communitiesExpanded}>
+                    <div className="space-y-2 mt-3">
+                      {related.map(rel => (
+                        <Link key={`${rel.designation}-${rel.id}`} href={`/companies/${rel.id}`} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-brand-secondary hover:bg-blue-50 transition-all">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-800 truncate">{rel.name}</p>
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {rel.company_type && (
+                                <span className={`${getBadgeClass(rel.company_type, colorMaps.company_type || {})} text-xs`}>{rel.company_type}</span>
+                              )}
+                              <EntityDesignationPill
+                                designation={rel.designation}
+                                label={resolveEntityDesignation(entityStructureOptions, rel.designation)}
+                                colorMap={colorMaps.entity_structure || {}}
+                              />
+                            </div>
+                          </div>
+                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        </Link>
+                      ))}
+                    </div>
+                    </AnimatedCollapse>
+                  </div>
+                );
+              })(),
+              relationships: (
+                <InternalRelationshipsSection
+                  key="relationships"
+                  companyId={Number(id)}
+                  companyName={company.name}
+                  userOptions={userOptions}
+                  attendees={company.attendees?.map(a => ({ id: a.id, first_name: a.first_name, last_name: a.last_name, title: a.title })) || []}
+                  relTypeOptions={relTypeOptions}
+                  relationships={internalRelationships}
+                  onRefresh={fetchInternalRelationships}
+                  mapOpen={relMapOpen}
+                  onMapClose={() => setRelMapOpen(false)}
+                />
+              ),
+              operator_capital: (
+                <VendorRelationshipsSection
+                  key="operator_capital"
+                  companyId={Number(id)}
+                  userOptions={userOptions}
+                  currentUserConfigId={user?.configId ?? null}
+                  label={getSectionLabel('operator_capital')}
+                />
+              ),
+              products: (() => {
+                // Only show Products for ICP-matching companies
+                const isIcp = icpOptions.length > 0 && normalizeIcpValue(company.icp, icpOptions) === icpOptions[0];
+                if (!isIcp) return null;
+
+                // Group company attendees by selected products (only configured products)
+                const productAttendeeMap: Record<string, Array<{ name: string; title: string | null }>> = {};
+                for (const a of (company.attendees ?? []) as Array<{ first_name: string; last_name: string; title?: string | null; products?: string | null }>) {
+                  if (!a.products) continue;
+                  for (const prod of String(a.products).split(',').map(s => s.trim()).filter(Boolean)) {
+                    if (configuredProductNames.size > 0 && !configuredProductNames.has(prod)) continue;
+                    (productAttendeeMap[prod] ??= []).push({ name: `${a.first_name} ${a.last_name}`, title: a.title ?? null });
+                  }
+                }
+                const entries = Object.entries(productAttendeeMap);
+                return entries.length === 0 ? null : (
+                  <div key="products" className="card">
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 text-left"
+                      onClick={() => setProductsExpanded(prev => !prev)}
+                    >
+                      <svg className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${productsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <h2 className="text-base font-semibold text-brand-primary font-serif">
+                        {getSectionLabel('products')} <span className="text-gray-400 font-normal text-sm">({entries.length})</span>
+                      </h2>
+                    </button>
+                    <AnimatedCollapse open={productsExpanded}>
+                      <div className="space-y-3 mt-3">
+                        {entries.map(([product, attendees]) => {
+                          const preset = getPreset((colorMaps.products ?? {})[product]);
+                          return (
+                            <div key={product} className="rounded-lg border border-gray-200 overflow-hidden">
+                              <div className="px-3 py-2 border-b-2" style={{ backgroundColor: preset.hex + '18', borderColor: preset.hex }}>
+                                <span className="text-sm font-semibold" style={{ color: preset.hex }}>{product}</span>
+                              </div>
+                              <div className="px-3 py-2 flex flex-wrap gap-1.5">
+                                {attendees.map((a, i) => (
+                                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                    {a.name}{a.title ? ` · ${a.title}` : ''}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </AnimatedCollapse>
+                  </div>
+                );
+              })(),
+            };
+            return sectionOrder.map(key => {
+              if (!isSectionVisible(key) || !sectionMap[key]) return null;
+              // Anchors the phone's section-jump menu, which reads these off
+              // the page so the list can't drift from what actually rendered.
+              return <div key={key} data-company-section={key}>{sectionMap[key]}</div>;
+            });
+          })()}
+        </div>
+
+      </div>{/* end grid */}
+
+      <NewMeetingModal
+        isOpen={showMeeting}
+        onClose={() => setShowMeeting(false)}
+        prefillCompanyId={company ? Number(id) : undefined}
+        onSuccess={(meeting) => setCompanyMeetings(prev => [meeting, ...prev])}
+        availableConferences={company?.conferences}
+      />
+
+      <AssignFollowUpModal
+        isOpen={showAssignFollowUp}
+        onClose={() => setShowAssignFollowUp(false)}
+        onSuccess={fetchCompany}
+        defaultCompanyId={Number(id)}
+        availableConferences={company?.conferences}
+      />
+
+      <CompanyTouchpointMatrix
+        companyId={id}
+        open={showTpMatrix}
+        onClose={() => setShowTpMatrix(false)}
+      />
+
+      <CompanyDrawer
+        companyId={relatedDrawerCompanyId}
+        companyName={relatedDrawerCompanyName}
+        onClose={() => { setRelatedDrawerCompanyId(null); setRelatedDrawerCompanyName(undefined); }}
+      />
+
+      {/* Intel drawer */}
+      {showIntelDrawer && intelItems.length > 0 && (() => {
+        const intel = intelItems[selectedIntelIdx];
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-stretch sm:justify-end">
+            <style>{`
+              @keyframes intelFadeIn   { from { opacity: 0; }              to { opacity: 1; } }
+              @keyframes intelSlideUp  { from { transform: translateY(100%); } to { transform: translateY(0); } }
+              @keyframes intelSlideIn  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+              .intel-panel { animation: intelSlideUp 0.25s ease-out; }
+              @media (min-width: 640px) { .intel-panel { animation: intelSlideIn 0.25s ease-out; } }
+            `}</style>
+            <div className="absolute inset-0" style={{ animation: 'intelFadeIn 0.25s ease-out', backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowIntelDrawer(false)} />
+            <div className="intel-panel relative w-full sm:max-w-md h-[90vh] sm:h-full bg-white shadow-2xl flex flex-col border-t sm:border-t-0 sm:border-l border-gray-200 overflow-hidden rounded-t-2xl sm:rounded-none">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                <div>
+                  <h2 className="text-base font-semibold text-brand-primary font-serif">Company Intel</h2>
+                  {intelItems.length > 1 && (
+                    <div className="flex items-center gap-1 mt-1">
+                      {intelItems.map((item, i) => (
+                        <button
+                          key={item.conference_id}
+                          onClick={() => setSelectedIntelIdx(i)}
+                          className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${i === selectedIntelIdx ? 'bg-brand-primary text-white border-brand-primary' : 'text-gray-500 border-gray-300 hover:border-gray-400'}`}
+                        >
+                          {item.conference_name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {intelItems.length === 1 && (
+                    <p className="text-xs text-gray-500 mt-0.5">{intel.conference_name}</p>
+                  )}
+                </div>
+                <button onClick={() => setShowIntelDrawer(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                {intel.is_fallback && (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                    Generated from ICP profile — company-specific data limited
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-1">Summary</p>
+                  <p className="text-sm text-gray-600 leading-relaxed">{intel.summary}</p>
+                </div>
+
+                {intel.pain_point_signals.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Pain Point Signals</p>
+                    <ul className="space-y-1">
+                      {intel.pain_point_signals.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-amber-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.trigger_events.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Trigger Events</p>
+                    <ul className="space-y-1">
+                      {intel.trigger_events.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-blue-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.buying_signals.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Buying Signals</p>
+                    <ul className="space-y-1">
+                      {intel.buying_signals.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-green-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.opening_angles.length > 0 && (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">Opening Angles</p>
+                    <ul className="space-y-1">
+                      {intel.opening_angles.map((s, i) => (
+                        <li key={i} className="text-sm text-gray-600 flex gap-2">
+                          <span className="text-purple-500 mt-0.5 flex-shrink-0">•</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {intel.generated_at && (
+                  <p className="text-xs text-gray-400">Generated {new Date(intel.generated_at).toLocaleDateString()}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Activity timeline modal */}
+      {timelineOpen && company && (
+        <ActivityTimelineModal
+          isOpen={timelineOpen}
+          onClose={() => setTimelineOpen(false)}
+          companyId={company.id}
+          companyName={company.name}
+        />
+      )}
+
+      {/* Attendee quick view drawer */}
+      {quickView && (
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+      )}
+    </div>
+  );
+}

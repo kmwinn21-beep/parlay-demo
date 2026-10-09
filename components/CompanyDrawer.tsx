@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 
@@ -73,11 +74,7 @@ export function CompanyDrawer({ companyId, companyName, onClose }: Props) {
         </div>
 
         {/* Iframe */}
-        <iframe
-          src={`/companies/${companyId}?embed=true`}
-          className="flex-1 w-full border-0"
-          title={companyName ?? 'Company Record'}
-        />
+        <RecordQuickViewBody type="company" id={companyId} onClose={onClose} />
       </div>
     </div>,
     document.body,

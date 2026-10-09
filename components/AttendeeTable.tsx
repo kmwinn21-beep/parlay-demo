@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { MergeModal } from './MergeModal';
@@ -1295,11 +1296,7 @@ export function AttendeeTable({ attendees, onRefresh }: AttendeeTableProps) {
                 </svg>
               </button>
             </div>
-            <iframe
-              src={`/attendees/${quickViewId}?embed=true`}
-              className="flex-1 w-full border-0"
-              title="Quick View"
-            />
+            <RecordQuickViewBody type="attendee" id={quickViewId} onClose={() => setQuickViewId(null)} />
           </div>
         </>
       )}

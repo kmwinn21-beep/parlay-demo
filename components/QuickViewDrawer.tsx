@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { RecordQuickViewBody, canRenderInline } from '@/components/RecordQuickViewBody';
 import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 
@@ -90,12 +91,18 @@ export function QuickViewDrawer({ target, onClose, zClass = 'z-50', docked = fal
             </svg>
           </button>
         </div>
-        {/* Embedded record */}
-        <iframe
-          src={`${href}?embed=true`}
-          className="flex-1 border-0 w-full"
-          title={target.name}
-        />
+        {/* The record itself — rendered inline where it can be, so the drawer
+            does not boot a second copy of the app. A conference still has no
+            inline view, so that one keeps the iframe. */}
+        {canRenderInline(target.type) ? (
+          <RecordQuickViewBody type={target.type} id={target.id} onClose={onClose} />
+        ) : (
+          <iframe
+            src={`${href}?embed=true`}
+            className="flex-1 border-0 w-full"
+            title={target.name}
+          />
+        )}
       </div>
     </div>,
     document.body

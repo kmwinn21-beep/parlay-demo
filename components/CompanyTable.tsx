@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import { createPortal } from 'react-dom';
 import { getConfigCategory } from '@/lib/configCache';
 import Link from 'next/link';
@@ -2446,11 +2447,8 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
                 </svg>
               </button>
             </div>
-            <iframe
-              src={`/companies/${quickViewId}?embed=true${quickViewParentOf ? `&parent_of=${encodeURIComponent(quickViewParentOf)}` : ''}`}
-              className="flex-1 w-full border-0"
-              title="Quick View"
-            />
+            <RecordQuickViewBody type="company" id={quickViewId} parentOf={quickViewParentOf}
+              onClose={() => { setQuickViewId(null); setQuickViewParentOf(null); }} />
           </div>
         </>,
         document.body,
