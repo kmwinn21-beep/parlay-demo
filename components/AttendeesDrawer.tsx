@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import toast from 'react-hot-toast';
 import { DashboardDrawer } from '@/components/DashboardDrawer';
 import { MobileAttendeeCard, type AttendeeCardRow } from '@/components/MobileAttendeeCard';
@@ -501,10 +502,10 @@ export function AttendeesDrawer({ onClose }: { onClose: () => void }) {
                 </svg>
               </button>
             </div>
-            <iframe
-              src={`/${quickView.type === 'attendee' ? 'attendees' : 'companies'}/${quickView.id}?embed=true`}
-              className="flex-1 w-full border-0"
-              title="Record"
+            <RecordQuickViewBody
+              type={quickView.type}
+              id={quickView.id}
+              onClose={() => setQuickView(null)}
             />
           </div>
         </>

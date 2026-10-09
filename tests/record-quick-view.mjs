@@ -57,23 +57,59 @@ console.log('\n— the record is a component, not a page in a frame —');
   eq('  client-side, since they are the host’s already', /ssr: false/.test(body), true);
 }
 
+const DRAWERS = [
+  'components/QuickViewDrawer.tsx', 'components/CompanyTable.tsx',
+  'components/CompanyDrawer.tsx', 'components/AttendeeTable.tsx',
+  'components/AttendeeQuickViewDrawer.tsx', 'components/PreConferenceReview.tsx',
+  'components/MyDebriefDrawer.tsx', 'components/ConferenceActivityMapDrawer.tsx',
+  'components/AttendeesDrawer.tsx', 'components/DashboardTargetsSection.tsx',
+  'components/MeetingNotetaker.tsx',
+  /* Two of these are pages rather than components. The global guard below is
+     what found them: the first inventory grepped components/ only, and these
+     were framing records the whole time. */
+  'app/conferences/[id]/page.tsx', 'app/program-intelligence/page.tsx',
+];
+
 console.log('\n— every drawer that can, renders it inline —');
 {
-  for (const f of ['components/QuickViewDrawer.tsx', 'components/CompanyTable.tsx',
-    'components/CompanyDrawer.tsx', 'components/AttendeeTable.tsx',
-    'components/AttendeeQuickViewDrawer.tsx']) {
+  for (const f of DRAWERS) {
     const src = strip(f);
     const name = f.split('/').pop();
     eq(`${name} renders the record inline`, /<RecordQuickViewBody/.test(src), true);
-    // QuickViewDrawer keeps an iframe for conferences, which have no inline
-    // view yet; the rest should have none left at all.
-    if (!f.endsWith('QuickViewDrawer.tsx')) {
+    /* QuickViewDrawer and MeetingNotetaker can open a CONFERENCE, which has
+       no inline view yet, so those two keep an iframe for that one case. No
+       other drawer should frame anything. */
+    if (!/QuickViewDrawer|MeetingNotetaker/.test(f)) {
       eq(`  and ${name} loads no page into a frame`, /embed=true/.test(src), false);
     }
   }
-  const qv = strip('components/QuickViewDrawer.tsx');
-  eq('the shared drawer still frames a conference',
-    /canRenderInline\(target\.type\)/.test(qv), true);
+  /*
+   * No drawer decides for itself. Whether a record is rendered inline or
+   * framed depends on the viewport width and on the type, and a call site
+   * that branched on either would be a second place to get it wrong.
+   */
+  for (const f of DRAWERS) {
+    eq(`  ${f.split('/').pop()} does not decide for itself`,
+      /canRenderInline\(/.test(strip(f)), false);
+  }
+
+  /*
+   * The guard that matters more than any single file: nothing may frame an
+   * ATTENDEE or a COMPANY page again. A half-migrated pattern is its own
+   * hazard — the next drawer copied from a neighbour has even odds of copying
+   * the iframe.
+   */
+  const { execSync } = await import('node:child_process');
+  const framing = execSync(
+    "grep -rln \"embed=true\" --include='*.tsx' components/ app/ || true",
+    { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  const offenders = framing.filter(f => {
+    if (f.endsWith('RecordQuickViewBody.tsx')) return false;
+    const src = strip(f);
+    // A conference frame is allowed; an attendee or company one is not.
+    return /attendees\/\$\{[^}]*\}\?embed=true|companies\/\$\{[^}]*\}\?embed=true|\? 'attendees' : 'companies'/.test(src);
+  });
+  eq('no drawer frames an attendee or a company any more', offenders, []);
   const body = strip('components/RecordQuickViewBody.tsx');
   eq('  which is the type that has no inline view',
     /return type === 'attendee' \|\| type === 'company';/.test(body), true);
@@ -102,10 +138,9 @@ console.log('\n— and leaving a record does not take the page with it —');
       || /^\s*router\.push\('\/attendees'\);/m.test(attendee), false);
 
   // And every drawer hands the view something to call.
-  for (const f of ['components/QuickViewDrawer.tsx', 'components/CompanyTable.tsx',
-    'components/CompanyDrawer.tsx', 'components/AttendeeTable.tsx',
-    'components/AttendeeQuickViewDrawer.tsx']) {
-    eq(`  ${f.split('/').pop()} passes a way to close`, /onClose=\{/.test(strip(f)), true);
+  for (const f of DRAWERS) {
+    eq(`  ${f.split('/').pop()} passes a way to close`,
+      /<RecordQuickViewBody[\s\S]{0,240}onClose=\{/.test(strip(f)), true);
   }
 }
 
@@ -128,6 +163,40 @@ console.log('\n— the drawer looks as it did —');
    */
   eq('  without the page’s full-screen height', /h-screen/.test(body), false);
   eq('  filling the drawer instead', /flex-1 min-h-0/.test(body), true);
+}
+
+
+console.log('\n— inline only where the drawer is the viewport —');
+{
+  const body = strip('components/RecordQuickViewBody.tsx');
+
+  /*
+   * The record views lay out with VIEWPORT breakpoints — sm:grid-cols-2,
+   * md:grid-cols-4, lg:grid-cols-3. An iframe has its own viewport, and a
+   * 480px drawer meant none of them applied, so the record stacked into the
+   * one column that fits. Inline they resolve against the HOST: on a 1440px
+   * screen a four-column grid was crushed into 480px, every word wrapped down
+   * the page. Reported from a desktop screenshot.
+   *
+   * So inline is right exactly where the drawer IS the viewport — below sm.
+   * Driven in Chromium: 1440, 1024 and 700 all render the iframe; 390 takes
+   * the inline path.
+   */
+  eq('the width decides', /const isPhone = useIsPhone\(\);/.test(body), true);
+  eq('  and anything wider is framed', /if \(!isPhone \|\| !canRenderInline\(type\)\) \{/.test(body), true);
+  eq('  with the frame built here, once', /src=\{`\$\{BASE_PATH\[type\]\}\/\$\{id\}\$\{query\}`\}/.test(body), true);
+  // A company opened as another row's parent keeps that context in the frame.
+  eq('  carrying parent_of when there is one',
+    /parent_of=\$\{encodeURIComponent\(parentOf\)\}/.test(body), true);
+
+  /*
+   * useIsPhone starts false, so the first render is the FRAME and a phone
+   * swaps to inline after mount. That is the safe way round: the frame is
+   * correct at every width, the inline view only at one.
+   */
+  const hook = strip('lib/useIsPhone.ts');
+  eq('  starting from the answer that is always right',
+    /useState\(false\)/.test(hook), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

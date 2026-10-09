@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import { createPortal } from 'react-dom';
 import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
 import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
@@ -5926,10 +5927,10 @@ export default function ConferenceDetailPage() {
                 </svg>
               </button>
             </div>
-            <iframe
-              src={`/${quickViewType === 'attendee' ? 'attendees' : 'companies'}/${quickViewId}?embed=true`}
-              className="flex-1 w-full border-0"
-              title="Quick View"
+            <RecordQuickViewBody
+              type={quickViewType}
+              id={quickViewId}
+              onClose={() => setQuickViewId(null)}
             />
           </div>
         </>,

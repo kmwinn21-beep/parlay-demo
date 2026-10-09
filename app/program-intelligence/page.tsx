@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -2236,10 +2237,10 @@ export default function ProgramIntelligencePage() {
                         </svg>
                       </button>
                     </div>
-                    <iframe
-                      src={`/companies/${trendsDrawerCompanyId}?embed=true`}
-                      className="flex-1 w-full border-0"
-                      title={trendsDrawerCompanyName}
+                    <RecordQuickViewBody
+                      type="company"
+                      id={trendsDrawerCompanyId}
+                      onClose={() => { setTrendsDrawerCompanyId(null); setTrendsDrawerCompanyName(''); setTrendsPopoverId(null); }}
                     />
                   </div>
                 </>
