@@ -36,7 +36,35 @@ const eq = (label, got, want) => {
 const strip = (f) => readFileSync(f, 'utf8')
   .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-console.log('\n— it escapes whatever is transformed above it —');
+/*
+ * TWO components draw this. CompanyDrawer is the one app/companies/[id] opens
+ * for a parent or child record; CompanyTable has its own copy inline, and that
+ * is the one the conference page's Companies tab shows. They carry the same
+ * "Go to Company Record" link and the same class list, which is how the first
+ * attempt at this fixed the wrong one — the screenshot showed the table's
+ * version, with no title beside the link.
+ */
+console.log('\n— the conference page’s company table —');
+{
+  const table = strip('components/CompanyTable.tsx');
+
+  /*
+   * Measured on the real component, rendered inside a transformed
+   * top-anchored ancestor as the conference tab drawer is: top 288 against a
+   * header bottom of 144 without the portal, 144 with it.
+   */
+  eq('its quick view portals to the body',
+    /\{quickViewId !== null && mounted && createPortal\(/.test(table), true);
+  eq('  naming the body as its host', /\n        <\/>,\n        document\.body,\n      \)\}/.test(table), true);
+  eq('  once there is a document', /useEffect\(\(\) => setMounted\(true\), \[\]\);/.test(table), true);
+  // The backdrop goes with it, or it dims the page from inside the old tree.
+  eq('  taking its backdrop along',
+    /createPortal\([\s\S]{0,400}fixed inset-0 z-40 bg-black\/30/.test(table), true);
+  eq('  and it wears the shape the header rule anchors',
+    /drawer-mobile-responsive fixed bottom-0 left-0 right-0/.test(table), true);
+}
+
+console.log('\n— and the record page’s own drawer —');
 {
   const drawer = strip('components/CompanyDrawer.tsx');
 
