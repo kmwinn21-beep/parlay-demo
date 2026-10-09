@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import { useActiveConference } from '@/components/ActiveConferenceContext';
 import { useUser } from '@/components/UserContext';
 import type { DashboardConference } from './RecentSection';
@@ -698,10 +699,10 @@ export function DashboardTargetsSection({ allConferences }: { allConferences: Da
                 </svg>
               </button>
             </div>
-            <iframe
-              src={`/attendees/${drawerAttendeeId}?embed=true`}
-              className="flex-1 w-full border-0"
-              title={drawerAttendeeName}
+            <RecordQuickViewBody
+              type="attendee"
+              id={drawerAttendeeId}
+              onClose={() => setDrawerAttendeeId(null)}
             />
           </div>
         </>

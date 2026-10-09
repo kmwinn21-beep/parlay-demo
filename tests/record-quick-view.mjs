@@ -57,23 +57,55 @@ console.log('\n— the record is a component, not a page in a frame —');
   eq('  client-side, since they are the host’s already', /ssr: false/.test(body), true);
 }
 
+const DRAWERS = [
+  'components/QuickViewDrawer.tsx', 'components/CompanyTable.tsx',
+  'components/CompanyDrawer.tsx', 'components/AttendeeTable.tsx',
+  'components/AttendeeQuickViewDrawer.tsx', 'components/PreConferenceReview.tsx',
+  'components/MyDebriefDrawer.tsx', 'components/ConferenceActivityMapDrawer.tsx',
+  'components/AttendeesDrawer.tsx', 'components/DashboardTargetsSection.tsx',
+  'components/MeetingNotetaker.tsx',
+  /* Two of these are pages rather than components. The global guard below is
+     what found them: the first inventory grepped components/ only, and these
+     were framing records the whole time. */
+  'app/conferences/[id]/page.tsx', 'app/program-intelligence/page.tsx',
+];
+
 console.log('\n— every drawer that can, renders it inline —');
 {
-  for (const f of ['components/QuickViewDrawer.tsx', 'components/CompanyTable.tsx',
-    'components/CompanyDrawer.tsx', 'components/AttendeeTable.tsx',
-    'components/AttendeeQuickViewDrawer.tsx']) {
+  for (const f of DRAWERS) {
     const src = strip(f);
     const name = f.split('/').pop();
     eq(`${name} renders the record inline`, /<RecordQuickViewBody/.test(src), true);
-    // QuickViewDrawer keeps an iframe for conferences, which have no inline
-    // view yet; the rest should have none left at all.
-    if (!f.endsWith('QuickViewDrawer.tsx')) {
+    /* QuickViewDrawer and MeetingNotetaker can open a CONFERENCE, which has
+       no inline view yet, so those two keep an iframe for that one case. No
+       other drawer should frame anything. */
+    if (!/QuickViewDrawer|MeetingNotetaker/.test(f)) {
       eq(`  and ${name} loads no page into a frame`, /embed=true/.test(src), false);
     }
   }
   const qv = strip('components/QuickViewDrawer.tsx');
   eq('the shared drawer still frames a conference',
     /canRenderInline\(target\.type\)/.test(qv), true);
+  eq('  as does the notetaker',
+    /canRenderInline\(recordDrawer\.type\)/.test(strip('components/MeetingNotetaker.tsx')), true);
+
+  /*
+   * The guard that matters more than any single file: nothing may frame an
+   * ATTENDEE or a COMPANY page again. A half-migrated pattern is its own
+   * hazard — the next drawer copied from a neighbour has even odds of copying
+   * the iframe.
+   */
+  const { execSync } = await import('node:child_process');
+  const framing = execSync(
+    "grep -rln \"embed=true\" --include='*.tsx' components/ app/ || true",
+    { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+  const offenders = framing.filter(f => {
+    if (f.endsWith('RecordQuickViewBody.tsx')) return false;
+    const src = strip(f);
+    // A conference frame is allowed; an attendee or company one is not.
+    return /attendees\/\$\{[^}]*\}\?embed=true|companies\/\$\{[^}]*\}\?embed=true|\? 'attendees' : 'companies'/.test(src);
+  });
+  eq('no drawer frames an attendee or a company any more', offenders, []);
   const body = strip('components/RecordQuickViewBody.tsx');
   eq('  which is the type that has no inline view',
     /return type === 'attendee' \|\| type === 'company';/.test(body), true);
@@ -102,10 +134,9 @@ console.log('\n— and leaving a record does not take the page with it —');
       || /^\s*router\.push\('\/attendees'\);/m.test(attendee), false);
 
   // And every drawer hands the view something to call.
-  for (const f of ['components/QuickViewDrawer.tsx', 'components/CompanyTable.tsx',
-    'components/CompanyDrawer.tsx', 'components/AttendeeTable.tsx',
-    'components/AttendeeQuickViewDrawer.tsx']) {
-    eq(`  ${f.split('/').pop()} passes a way to close`, /onClose=\{/.test(strip(f)), true);
+  for (const f of DRAWERS) {
+    eq(`  ${f.split('/').pop()} passes a way to close`,
+      /<RecordQuickViewBody[\s\S]{0,240}onClose=\{/.test(strip(f)), true);
   }
 }
 

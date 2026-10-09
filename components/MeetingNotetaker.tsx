@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { RecordQuickViewBody, canRenderInline } from '@/components/RecordQuickViewBody';
 import toast from 'react-hot-toast';
 import { useCapabilities } from '@/lib/useCapabilities';
 import { AttendeePhotoModal } from '@/components/AttendeePhoto';
@@ -2640,12 +2641,22 @@ export function MeetingNotetaker({ meetingId, onClose, onRecordingStateChange, o
                 </svg>
               </button>
             </div>
-            <iframe
-              key={`${recordDrawer.type}-${recordDrawer.id}`}
-              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : recordDrawer.type === 'company' ? 'companies' : 'conferences'}/${recordDrawer.id}?embed=true`}
-              className="flex-1 border-0 w-full"
-              title={`${recordDrawer.type} record`}
-            />
+            {canRenderInline(recordDrawer.type) ? (
+              <RecordQuickViewBody
+                key={`${recordDrawer.type}-${recordDrawer.id}`}
+                type={recordDrawer.type}
+                id={recordDrawer.id}
+                onClose={closeRecord}
+              />
+            ) : (
+              /* A conference has no inline view yet. */
+              <iframe
+                key={`${recordDrawer.type}-${recordDrawer.id}`}
+                src={`/conferences/${recordDrawer.id}?embed=true`}
+                className="flex-1 border-0 w-full"
+                title={`${recordDrawer.type} record`}
+              />
+            )}
           </>
         )}
       </div>

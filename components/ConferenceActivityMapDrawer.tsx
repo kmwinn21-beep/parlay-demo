@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import toast from 'react-hot-toast';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 import { useAvgCostPerUnit, formatValuePill } from '@/lib/useAvgCostPerUnit';
@@ -470,11 +471,11 @@ function RecordPanel({
                 </svg>
               </button>
             </div>
-            <iframe
+            <RecordQuickViewBody
               key={`${record.type}-${record.id}`}
-              src={`/${record.type === 'attendee' ? 'attendees' : 'companies'}/${record.id}?embed=true`}
-              className="flex-1 border-0 w-full"
-              title={`${record.type} record`}
+              type={record.type}
+              id={record.id}
+              onClose={onClose}
             />
           </>
         )}

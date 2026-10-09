@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useMemo, useRef, useEffect, type CSSProperties } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import type { RelationshipUpdate } from '@/lib/relationshipThread';
 import { useSectionConfig } from '@/lib/useSectionConfig';
 import { useConferenceReviewModals } from '@/lib/ConferenceReviewModalsContext';
@@ -820,11 +821,11 @@ export function PreConferenceReviewModal() {
                     </svg>
                   </button>
                 </div>
-                <iframe
+                <RecordQuickViewBody
                   key={`${recordDrawer.type}-${recordDrawer.id}`}
-                  src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}?embed=true`}
-                  className="flex-1 border-0 w-full"
-                  title={`${recordDrawer.type} record`}
+                  type={recordDrawer.type}
+                  id={recordDrawer.id}
+                  onClose={closeRecord}
                 />
               </div>
             </>

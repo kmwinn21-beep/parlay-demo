@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
 import { AttendeeAvatar } from '@/components/AttendeePhoto';
 import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
@@ -2051,11 +2052,11 @@ export function MyDebriefDrawer({ conferenceId, isOpen, onClose }: Props) {
                 </svg>
               </button>
             </div>
-            <iframe
+            <RecordQuickViewBody
               key={`${recordDrawer.type}-${recordDrawer.id}`}
-              src={`/${recordDrawer.type === 'attendee' ? 'attendees' : 'companies'}/${recordDrawer.id}?embed=true`}
-              className="flex-1 border-0 w-full"
-              title={`${recordDrawer.type} record`}
+              type={recordDrawer.type}
+              id={recordDrawer.id}
+              onClose={closeRecordDrawer}
             />
           </>
         )}
