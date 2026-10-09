@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useDrawerResize } from '@/lib/useDrawerResize';
 
 interface Props {
@@ -10,10 +12,25 @@ interface Props {
 
 export function CompanyDrawer({ companyId, companyName, onClose }: Props) {
   const { panelStyle, handleResizeStart } = useDrawerResize(480);
+  // document only exists once mounted, and the portal needs it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (companyId === null) return null;
+  if (companyId === null || !mounted) return null;
 
-  return (
+  /*
+   * Through a portal to the body, because `fixed` is only relative to the
+   * viewport while nothing above it is transformed — and on a phone this opens
+   * from the company table inside the conference tab drawer, which carries a
+   * translateY to slide.
+   *
+   * globals.css gives this shape `top: var(--mobile-header-h)` so it stops at
+   * the site header. With the tab drawer as the containing block that 144px
+   * was measured from the DRAWER's top, which is already the header, so it
+   * landed at 288 — twice the header, a third of the way down the screen.
+   * Measured in Chromium at 390x844 with a 59px inset, before and after.
+   */
+  return createPortal(
     <div className="fixed inset-0 z-50">
       <style>{`
         @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
@@ -62,6 +79,7 @@ export function CompanyDrawer({ companyId, companyName, onClose }: Props) {
           title={companyName ?? 'Company Record'}
         />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
