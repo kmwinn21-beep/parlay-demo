@@ -143,5 +143,36 @@ console.log('\n— and the bulk bars still pin where they should —');
   eq('  which is the variable they read', /\.bulk-actions-sticky[\s\S]{0,200}var\(--bulk-actions-top/.test(css), true);
 }
 
+console.log('\n— and the card above it is not clipped by the gap it swallowed —');
+{
+  /*
+   * display:contents was chosen so the desktop page would lay out exactly as
+   * before. It nearly did — except that the page root is a `space-y-6`
+   * column, which spaces its CHILDREN, and the child it was spacing is now an
+   * element that generates no box. The 1.5rem was computed and discarded, the
+   * conference card ended flush against the tab row, and the row's solid
+   * shadow — sized to paint the gap above it — painted the card instead.
+   *
+   * Measured in Chromium against the real markup and the real compiled CSS:
+   * card bottom 352.5, tab row top 352.5, gap 0, and the shadow's top edge
+   * 1px under the bottom row of meta pills. With mt-6 the gap is 24 again,
+   * the shadow's top edge lands exactly on the card's bottom border, and the
+   * pills are 25px clear. At 995px, where the shadow is 1rem, 33px clear.
+   *
+   * Scrolled, the row still pins at the same place it did — 73px, against a
+   * scrollport top of 49 — because a margin is a position in the flow, not a
+   * constraint on where a sticky element may stop.
+   */
+  eq('the tab row carries the stack’s gap itself',
+    /className="mt-6 border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50/.test(page), true);
+  // The gap only has to be restored where it was lost — inside the drawer the
+  // row is not in the page stack at all.
+  eq('  only on the branch the wrapper makes boxless',
+    /tabDrawerOpen === null \? \([\s\S]{0,400}className="mt-6 border-b/.test(page), true);
+  eq('  and the shadow it makes room for is still there',
+    /shadow-\[0_-1rem_0_0_rgb\(249,250,251\)\] lg:shadow-\[0_-1\.5rem_0_0_rgb\(249,250,251\)\]/.test(page), true);
+  eq('  above a row that still sticks', /sticky top-0 z-20/.test(page), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

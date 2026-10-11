@@ -24,6 +24,7 @@ import { getBadgeClass, getPreset, formatStatusLabel} from '@/lib/colors';
 import { useUserOptions, parseRepIds, resolveRepInitials, getRepInitials } from '@/lib/useUserOptions';
 import { INLINE_EDIT_FIELD_CLASS, InlineEditCancelButton, InlineEditRow, InlineEditPlaceholder } from '@/components/InlineEditField';
 import { RepMultiSelect } from './RepMultiSelect';
+import { InlineMultiSelect } from '@/components/InlineMultiSelect';
 import { MultiSelectDropdown } from './MultiSelectDropdown';
 import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConfig';
 import { applyGroupingToHierarchyFilter, buildCompanyFamilies, compareCompanies, entriesToCompanies, type Family } from '@/lib/companyFamilies';
@@ -230,6 +231,33 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
   }, []);
 
   const statusOptions = configOptions.status ?? [];
+  /*
+   * The same map read the other way round.
+   *
+   * A company's user-scoped statuses arrive as option IDs in
+   * my_user_status_ids, while the PATCH payload and the status column are
+   * written in VALUES. Editing status inline means crossing between the two,
+   * so both directions are needed.
+   */
+  const userScopedStatusValues = useMemo(
+    () => new Set(Array.from(userScopedStatusMap.values())),
+    [userScopedStatusMap],
+  );
+  /**
+   * Every status a company carries, global and user-scoped together.
+   *
+   * The two are stored apart — the global ones comma-separated in
+   * companies.status, the user-scoped ones as rows in company_user_statuses
+   * that the list API returns as IDs — but a reader looking at the cell sees
+   * one set of badges, so the editor has to offer one set of checkboxes.
+   */
+  const companyStatusValues = useCallback((company: Company): string[] => {
+    const global = (company.status || '').split(',').map(s => s.trim()).filter(Boolean);
+    const mine = (company.my_user_status_ids || [])
+      .map(optId => userScopedStatusMap.get(optId))
+      .filter((v): v is string => !!v);
+    return [...global, ...mine];
+  }, [userScopedStatusMap]);
   const companyTypeOptions = configOptions.company_type ?? [];
   const servicesOptions = configOptions.services ?? [];
   const [search, setSearch] = useState('');
@@ -745,23 +773,58 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
       return;
     }
     if (field === 'company_type') setCellDraft(company.company_type || '');
-    else if (field === 'status') setCellDraft(company.status || '');
+    /* Both halves, because the editor edits both — see companyStatusValues. */
+    else if (field === 'status') setCellDraft(companyStatusValues(company).join(','));
   };
 
-  const saveInlineEdit = async (company: Company, field: 'company_type' | 'status' | 'wse') => {
+  /**
+   * @param draftOverride the value to save instead of `cellDraft`.
+   *
+   * The status multiselect commits from a document-level listener and hands
+   * over its own selection. Reading `cellDraft` there would read the copy from
+   * the render that registered the listener, which is the selection as it was
+   * before the last checkbox was ticked.
+   */
+  const saveInlineEdit = async (
+    company: Company,
+    field: 'company_type' | 'status' | 'wse',
+    draftOverride?: string,
+  ) => {
     if (isSavingCell) return;
+    const draft = draftOverride ?? cellDraft;
     const payload: Record<string, string | number | null> = {};
     if (field === 'wse') {
-      const trimmed = cellDraft.trim();
+      const trimmed = draft.trim();
       const parsed = trimmed === '' ? null : Number(trimmed);
       if (parsed != null && (!Number.isFinite(parsed) || parsed < 0)) { toast.error(`${unitTypeLabel} must be a non-negative number.`); return; }
       if ((company.wse ?? null) === (parsed == null ? null : Math.round(parsed))) { setEditingCell(null); return; }
       payload.wse = parsed == null ? null : Math.round(parsed);
+    } else if (field === 'status') {
+      /*
+       * Several statuses, compared as a SET.
+       *
+       * The draft is a selection, so ticking A then B and ticking B then A are
+       * the same edit written two ways. Comparing the joined strings would
+       * send a PATCH for the second one, and the PATCH cascades the status to
+       * every attendee of the company — a round trip and a write for an edit
+       * that changed nothing.
+       */
+      const next = draft.split(',').map(s => s.trim()).filter(Boolean);
+      const current = companyStatusValues(company);
+      const same = next.length === current.length && next.every(v => current.includes(v));
+      if (same) { setEditingCell(null); return; }
+      /*
+       * Sent whole, user-scoped values included. The route treats the payload
+       * as the complete picture: it strips the user-scoped values into
+       * company_user_statuses and DELETES any mark whose value is absent. So a
+       * payload of the global half alone would quietly clear the reader's own
+       * user-scoped statuses — which is what this cell's single-select editor
+       * did, every time it saved.
+       */
+      payload.status = next.join(',') || null;
     } else {
-      const nextValue = cellDraft.trim();
-      const currentValue =
-        field === 'company_type' ? (company.company_type || '')
-        : (company.status || '');
+      const nextValue = draft.trim();
+      const currentValue = company.company_type || '';
       if (nextValue === currentValue) { setEditingCell(null); return; }
       payload[field] = nextValue || null;
     }
@@ -773,12 +836,29 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error();
+      /*
+       * The route answers with the saved row, which for status is the only
+       * place the split between the two halves is authoritative: it has
+       * already stripped the user-scoped values out of the column and tells us
+       * which of them are now marked for this reader.
+       */
+      const saved = field === 'status'
+        ? await res.json().catch(() => null) as { status?: unknown; my_user_status_ids?: unknown } | null
+        : null;
       setLocalCompanies(prev => prev.map(c => {
         if (c.id !== company.id) return c;
         const updated: Company = { ...c };
         if (field === 'wse') updated.wse = payload.wse == null ? undefined : Number(payload.wse);
         else if (field === 'company_type') updated.company_type = payload[field] == null ? undefined : String(payload[field]);
-        else if (field === 'status') updated.status = payload[field] == null ? undefined : String(payload[field]);
+        else if (field === 'status') {
+          const picked = new Set(draft.split(',').map(s => s.trim()).filter(Boolean));
+          updated.status = saved && typeof saved.status === 'string'
+            ? saved.status
+            : Array.from(picked).filter(s => !userScopedStatusValues.has(s)).join(',');
+          updated.my_user_status_ids = Array.isArray(saved?.my_user_status_ids)
+            ? (saved!.my_user_status_ids as unknown[]).map(Number)
+            : Array.from(userScopedStatusMap.entries()).filter(([, v]) => picked.has(v)).map(([k]) => k);
+        }
         return updated;
       }));
       setEditingCell(null);
@@ -1157,17 +1237,22 @@ export function CompanyTable({ companies, onRefresh, tableName = 'companies', ro
           case 'status': return <td key="status" className="px-3 py-3">
             {editingCell?.companyId === company.id && editingCell.field === 'status' ? (
               <InlineEditRow onCancel={() => setEditingCell(null)}>
-                  <select
-                    className={INLINE_EDIT_FIELD_CLASS}
-                    value={cellDraft}
-                    onChange={(e) => setCellDraft(e.target.value)}
-                    onBlur={() => saveInlineEdit(company, 'status')}
-                    onKeyDown={(e) => { if (e.key === 'Escape') setEditingCell(null); }}
-                    autoFocus
-                  >
-                    <option value="">—</option>
-                    {statusOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  {/* A company carries several statuses — the record page has
+                      always let a reader toggle as many as apply, and the
+                      column stores them comma-separated — so the editor in the
+                      cell showing those badges offers the same. It was a
+                      single <select>, which could only ever replace the whole
+                      set with one of its members. */}
+                  <InlineMultiSelect
+                    options={statusOptions}
+                    selected={cellDraft.split(',').map(s => s.trim()).filter(Boolean)}
+                    onChange={(values) => setCellDraft(values.join(','))}
+                    onCommit={(values) => saveInlineEdit(company, 'status', values.join(','))}
+                    onCancel={() => setEditingCell(null)}
+                    placeholder="Select statuses…"
+                    emptyMessage="No statuses configured."
+                    defaultOpen
+                  />
               </InlineEditRow>
             ) : (
               <button type="button" onClick={() => startInlineEdit(company, 'status')} title="Click to set status">
