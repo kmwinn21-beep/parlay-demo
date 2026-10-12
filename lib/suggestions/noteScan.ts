@@ -11,6 +11,7 @@
  * Everything here is a suggestion the person confirms. Nothing matched here is
  * written anywhere on its own.
  */
+import { leadFields, leadHead } from '@/lib/noteSplit';
 
 export interface ScannableAttendee {
   id: number;
@@ -276,4 +277,178 @@ export function scanForAction<T extends ActionOption>(text: string, actions: T[]
     if (hit) return hit;
   }
   return null;
+}
+
+// ── Who the lead is for ──────────────────────────────────────────────────────
+
+export interface RepOption { id: number; value: string }
+export interface TerritoryOption { id: number; name: string; assignedUserIds: number[] }
+
+/** One letter wrong, or one missing, or one extra. "Nebreska" is "Nebraska". */
+function withinOneEdit(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let diffs = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++diffs > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return diffs + (a.length - i) + (b.length - j) <= 1;
+}
+
+/**
+ * A rep named the way a note names one.
+ *
+ * Three readings, narrowing: the whole name, a first name and a last initial
+ * ("Mike V" for Mike Vance), and a bare first name — that last one only when
+ * it lands on exactly one person. Two Pauls on the roster and the right answer
+ * is no answer, because the field is about to be shown to someone who knows
+ * which Paul it was.
+ */
+function matchRep(name: string, reps: RepOption[]): number | null {
+  const want = squash(name);
+  if (!want) return null;
+
+  const exact = reps.filter(r => squash(r.value) === want);
+  if (exact.length === 1) return exact[0].id;
+
+  const parts = name.split(/\s+/).filter(Boolean);
+  if (parts.length === 2 && parts[1].replace(/\./g, '').length === 1) {
+    const first = parts[0].toLowerCase();
+    const initial = parts[1][0].toLowerCase();
+    const hits = reps.filter(r => {
+      const w = r.value.split(/\s+/).filter(Boolean);
+      return w.length >= 2
+        && w[0].toLowerCase() === first
+        && w[w.length - 1][0]?.toLowerCase() === initial;
+    });
+    if (hits.length === 1) return hits[0].id;
+  }
+
+  if (parts.length === 1) {
+    const first = parts[0].toLowerCase();
+    const hits = reps.filter(r => r.value.split(/\s+/)[0]?.toLowerCase() === first);
+    if (hits.length === 1) return hits[0].id;
+  }
+  return null;
+}
+
+/**
+ * A region, resolved through the territory map to the rep who covers it.
+ *
+ * Only when exactly one rep sits on the territory. Two and it cannot be read
+ * off the note at all, so the field is left for a person — the same rule the
+ * attendee upload's territory fallback already follows, for the same reason.
+ */
+function matchTerritory(name: string, territories: TerritoryOption[]): number | null {
+  const want = squash(name);
+  if (want.length < 4) return null;
+  const hit = territories.find(t => withinOneEdit(squash(t.name), want));
+  if (!hit) return null;
+  return hit.assignedUserIds.length === 1 ? hit.assignedUserIds[0] : null;
+}
+
+/**
+ * Who a relayed lead belongs to.
+ *
+ * A floor note forwarded from the floor opens each lead with the person it is
+ * for — "Mike V", "Paul", "Henri/Dan" — or with the region that answers the
+ * same question, "Minnesota", "Nebreska". Without this the follow-up falls to
+ * whoever is clearing the queue, which on a relayed note is wrong every single
+ * time, and silently.
+ *
+ * Only ever the HEAD of the lead. A name further along the line is who was
+ * spoken to, not who should chase it, and reading one as the other would hand
+ * an account to a stranger.
+ *
+ * Empty when the head resolves to nothing, which is the correct answer for
+ * "Care Initiatives - need to look up woman's names": the head there is the
+ * company, and nobody is named at all.
+ */
+export function scanForReps(
+  text: string,
+  reps: RepOption[],
+  territories: TerritoryOption[] = [],
+): number[] {
+  const head = leadHead(text);
+  if (!head) return [];
+
+  const out: number[] = [];
+  for (const name of head.split('/').map(s => s.trim()).filter(Boolean)) {
+    const id = matchRep(name, reps) ?? matchTerritory(name, territories);
+    if (id != null && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+// ── What the note says about the person ──────────────────────────────────────
+
+export interface ScannedContact {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+}
+
+const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const PHONE = /(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/;
+
+/**
+ * The contact details a lead states outright.
+ *
+ * The assign modal has had first name, last name and email boxes for creating
+ * someone who is not on the list since it was written, and nothing has ever
+ * filled them in — which is most of the retyping a relayed note costs.
+ *
+ * An address and a phone number are read off their own shape, so they are
+ * never wrong about what they are. A NAME is the careful one, and every clause
+ * of it was put there by a line of the note it got wrong:
+ *
+ *   - exactly two words. Three admitted "The Goodman Group", and no lead in
+ *     the sample carried a three-word person.
+ *   - both capitalised, which declines "Van eyke".
+ *   - no word from WEAK_WORDS, the list of company furniture already used for
+ *     matching companies — "Group", "Care", "Living", "Management". A surname
+ *     is not on that list.
+ *   - no short all-capitals token, which is a state or an abbreviation and
+ *     never a surname: "Hallkeen AL", "SNF", "ED", "VP".
+ *   - no digits, no `@`, and not a company the account already holds.
+ *
+ * It declines "Majestic Care of Toledo", "Kristy/Amy" (two people in one
+ * field) and "Martin" (one name, and no way to tell which half it is).
+ *
+ * Declining is the point. A blank box costs a few seconds; a confidently wrong
+ * name creates a person who does not exist.
+ */
+export function scanForContactDetails<T extends ScannableCompany>(
+  text: string,
+  companies: T[] = [],
+): ScannedContact {
+  const found: ScannedContact = { first_name: '', last_name: '', email: '', phone: '' };
+
+  found.email = text.match(EMAIL)?.[0] ?? '';
+  // Run the phone match on the text with any address removed, so the digits in
+  // a domain or a local part cannot be read as a number.
+  found.phone = text.replace(EMAIL, ' ').match(PHONE)?.[0]?.trim() ?? '';
+
+  for (const field of leadFields(text)) {
+    if (field.includes('@') || /\d/.test(field)) continue;
+    const parts = field.split(/\s+/).filter(Boolean);
+    if (parts.length !== 2) continue;
+    if (!parts.every(w => /^[A-Z][A-Za-z'’.-]*$/.test(w))) continue;
+    if (parts.some(w => WEAK_WORDS.has(w.toLowerCase()))) continue;
+    if (parts.some(w => w.length <= 3 && w === w.toUpperCase())) continue;
+    // A company named where a person would be is still a company.
+    if (companies.length > 0 && scanForCompany(field, companies)) continue;
+    found.first_name = parts[0];
+    found.last_name = parts[1];
+    break;
+  }
+
+  return found;
 }

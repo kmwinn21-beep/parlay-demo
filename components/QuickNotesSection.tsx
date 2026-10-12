@@ -18,8 +18,10 @@ import { ProductRelevanceSection } from './ProductRelevanceSection';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { useFollowUpActions } from '@/lib/useFollowUpActions';
-import { scanForAttendee, scanForCompany, scanForAction } from '@/lib/suggestions/noteScan';
+import { scanForAttendee, scanForCompany, scanForAction, scanForReps, scanForContactDetails, type TerritoryOption } from '@/lib/suggestions/noteScan';
 import { announceNoteSaved } from '@/lib/suggestions/announce';
+import { detectMultiAccount } from '@/lib/noteSplit';
+import { SplitNoteModal } from '@/components/SplitNoteModal';
 
 interface QuickNote {
   id: number;
@@ -149,7 +151,15 @@ function SuggestedPill() {
 }
 
 // ── Assign Note Modal ─────────────────────────────────────────────────────────
-function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClose: () => void; onAssigned: (id: number) => void }) {
+function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
+  note: QuickNote;
+  onClose: () => void;
+  onAssigned: (id: number) => void;
+  /** Where this note sits when the whole queue is being worked through. */
+  queue?: { index: number; total: number } | null;
+  /** Leave this one for later and move to the next. Only offered inside a queue. */
+  onSkip?: () => void;
+}) {
   const { user } = useUser();
   const { activeConference } = useActiveConference();
   const [conferences, setConferences] = useState<Conference[]>([]);
@@ -184,12 +194,34 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
   // the conference load runs asynchronously and rewrites the filtered lists
   // and the selected attendee when it lands, so a one-shot write races it and
   // loses. Keeping the result lets it be re-asserted once things settle.
-  const [scan, setScan] = useState<{ company: Company | null; attendee: Attendee | null; action: string | null } | null>(null);
+  const [scan, setScan] = useState<{
+    company: Company | null;
+    attendee: Attendee | null;
+    action: string | null;
+    /** Rep config ids read from the head of the note, not from who is filing it. */
+    repIds: number[];
+  } | null>(null);
   // Fields the person has decided for themselves. Nothing is ever re-applied
   // over one of these, and the pill comes off.
-  const [touched, setTouched] = useState<{ company: boolean; attendee: boolean; action: boolean }>(
-    { company: false, attendee: false, action: false },
+  const [touched, setTouched] = useState<{ company: boolean; attendee: boolean; action: boolean; reps: boolean }>(
+    { company: false, attendee: false, action: false, reps: false },
   );
+  /*
+   * The territory map, for the notes whose leads are addressed to a region
+   * rather than a person — "Minnesota - Kristy/Amy - The Goodman Group". Read
+   * only; a territory with more than one rep on it resolves to nobody.
+   */
+  const [territories, setTerritories] = useState<TerritoryOption[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/territories')
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: unknown) => setTerritories(Array.isArray(rows)
+        ? rows.map((t: { id: number; name: string; assignedUserIds?: number[] }) => ({
+          id: Number(t.id), name: String(t.name), assignedUserIds: Array.isArray(t.assignedUserIds) ? t.assignedUserIds.map(Number) : [],
+        }))
+        : []))
+      .catch(() => {});
+  }, []);
   const scanned = useRef(false);
 
   // Follow-up, asked rather than assumed: assigning a floor note has never
@@ -385,8 +417,32 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     const comp = named
       ?? (att?.company_id != null ? allCompanies.find(c => c.id === att.company_id) ?? null : null);
     const act = scanForAction(text, followUpActions);
-    setScan({ company: comp, attendee: att, action: act?.value ?? null });
-  }, [loading, confStage, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
+
+    /*
+     * Who the lead is addressed to — the name or region at the head of the
+     * line. Without this the follow-up falls to whoever happens to be clearing
+     * the queue, which on a note relayed from a colleague is wrong on every
+     * single lead, and says nothing about it.
+     */
+    const repIds = scanForReps(text, userOptions, territories);
+
+    /*
+     * And the contact details the note states outright. These boxes have been
+     * on this form since it was written and nothing has ever filled them in;
+     * a relayed lead usually carries an address or a number, and sometimes a
+     * whole name.
+     */
+    if (!att) {
+      const found = scanForContactDetails(text, allCompanies);
+      if (found.first_name && found.last_name) {
+        setManualFirst(prev => prev || found.first_name);
+        setManualLast(prev => prev || found.last_name);
+      }
+      if (found.email) setManualEmail(prev => prev || found.email);
+    }
+
+    setScan({ company: comp, attendee: att, action: act?.value ?? null, repIds });
+  }, [loading, confStage, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions, userOptions, territories]);
 
   /**
    * Put the reading into the form, and keep it there.
@@ -401,6 +457,7 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     if (scan.company && !touched.company && !selCompany && !companyIsOther) selectCompany(scan.company);
     if (scan.attendee && !touched.attendee && !selAttendee && !attendeeIsOther) setSelAttendee(scan.attendee);
     if (scan.action && !touched.action && !followUpAction) setFollowUpAction(scan.action);
+    if (scan.repIds.length > 0 && !touched.reps) setFollowUpRepIds(scan.repIds);
   }, [scan, loadingConf, touched, selCompany, selAttendee, followUpAction, companyIsOther, attendeeIsOther, selectCompany]);
 
   // A suggested record has to be in its own dropdown to be shown as chosen —
@@ -432,12 +489,26 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     company: !touched.company && !!scan?.company && selCompany?.id === scan.company.id,
     attendee: !touched.attendee && !!scan?.attendee && selAttendee?.id === scan.attendee.id,
     action: !touched.action && !!scan?.action && followUpAction === scan.action,
+    reps: !touched.reps && !!scan?.repIds.length
+      && scan.repIds.length === followUpRepIds.length
+      && scan.repIds.every(id => followUpRepIds.includes(id)),
   };
 
-  // The person logging the note owns the follow-up unless they say otherwise.
+  /*
+   * The person logging the note owns the follow-up unless they say otherwise —
+   * unless the note itself says otherwise first.
+   *
+   * A note relayed from the floor names who each lead is for, and defaulting
+   * over that would hand every one of them to whoever is filing. So this waits
+   * until the reading has been attempted: `scan` null means it has not run
+   * yet, and filling the field before then is what a later read would have to
+   * fight.
+   */
   useEffect(() => {
+    if (!scan) return;
+    if (scan.repIds.length > 0) return;
     if (createFollowUp && followUpRepIds.length === 0 && user?.configId) setFollowUpRepIds([user.configId]);
-  }, [createFollowUp, followUpRepIds.length, user?.configId]);
+  }, [scan, createFollowUp, followUpRepIds.length, user?.configId]);
 
   const newCompanyReady = companyIsOther && newCompanyName.trim().length > 0;
   const newAttendeeReady = attendeeIsOther && manualFirst.trim().length > 0 && manualLast.trim().length > 0;
@@ -541,8 +612,13 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-          <h3 className="text-base font-semibold text-brand-primary font-serif">Assign Note</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <h3 className="text-base font-semibold text-brand-primary font-serif">Assign Note</h3>
+            {/* Where you are in the run, so closing the lid is an informed
+                choice rather than losing your place. */}
+            {queue && <span className="text-xs text-gray-400 whitespace-nowrap">{queue.index} of {queue.total}</span>}
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded" aria-label="Close">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -697,13 +773,22 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
                         </select>
                       </div>
                       <div>
-                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 block">Assign To</label>
+                        <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                          Assign To{suggested.reps && <SuggestedPill />}
+                        </label>
                         <RepMultiSelect
                           options={userOptions}
                           selectedIds={followUpRepIds}
-                          onChange={setFollowUpRepIds}
+                          onChange={ids => { setTouched(t => ({ ...t, reps: true })); setFollowUpRepIds(ids); }}
                           triggerClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-brand-secondary bg-white text-left flex items-center justify-between gap-1"
                         />
+                        {/* Said out loud, because the alternative — the field
+                            quietly holding whoever is filing — is what this
+                            replaces, and a reader has no way to tell the two
+                            apart by looking. */}
+                        {suggested.reps && (
+                          <p className="text-[11px] text-gray-500 mt-1">Read from the start of the note.</p>
+                        )}
                       </div>
                       {!selConference && (
                         <p className="text-xs text-amber-600">Pick a conference — a follow-up is created against one.</p>
@@ -726,9 +811,15 @@ function AssignNoteModal({ note, onClose, onAssigned }: { note: QuickNote; onClo
           )}
         </div>
         <div className="flex justify-end gap-2 px-6 pb-5">
-          <button type="button" onClick={onClose} className="btn-secondary text-sm">Cancel</button>
+          <button type="button" onClick={onClose} className="btn-secondary text-sm">
+            {queue ? 'Stop' : 'Cancel'}
+          </button>
+          {/* Skip leaves the note exactly where it was. Nothing in a run is
+              written until its own Assign, so stopping half way through keeps
+              what is done and keeps what is not. */}
+          {onSkip && <button type="button" onClick={onSkip} className="btn-secondary text-sm">Skip</button>}
           <button type="button" onClick={handleSave} disabled={!canSave || saving || loading || !!user?.demoVisitor} className="btn-primary text-sm">
-            {saving ? 'Assigning…' : 'Assign Note'}
+            {saving ? 'Assigning…' : queue ? 'Assign & next' : 'Assign Note'}
           </button>
         </div>
       </div>
@@ -751,6 +842,12 @@ function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceU
   const pillsRef = useRef<HTMLDivElement>(null);
   const isLong = note.content.length > 200;
   const fullTimestamp = fmtDate(note.created_at);
+  /*
+   * Whether this note is really several. Read off the note's own shape — no
+   * fetch, no model, nothing to wait for on a phone in a hall — and memoised
+   * so a screen of notes does not redo it on every keystroke elsewhere.
+   */
+  const multi = useMemo(() => detectMultiAccount(note.content), [note.content]);
   // Cached across every card on the page, so a screen of notes is one request.
   const interaction = interactionLabel(note.secondary_tag, useTouchpointOptions());
   const scrollPills = (dir: -1 | 1) => pillsRef.current?.scrollBy({ left: dir * 120, behavior: 'smooth' });
@@ -854,6 +951,16 @@ function NoteCard({ note, conferences, onDelete, onAssign, onEdit, onConferenceU
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
               </button>
               <div ref={pillsRef} className="flex items-center gap-1.5 min-w-0 overflow-x-auto scrollbar-hide flex-nowrap">
+                {/* First, because it changes what assigning this note will do.
+                    Computed from the note in front of it rather than stored, so
+                    editing a note down to one lead drops the pill on save with
+                    no field left behind to go stale. */}
+                {multi.isMulti && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-50 border border-amber-300 text-[10px] font-semibold text-amber-800 flex-shrink-0">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" /></svg>
+                    {multi.leads} accounts
+                  </span>
+                )}
                 {note.tag === 'card-badge' && (
                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-medium text-blue-600 flex-shrink-0">
                     <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2" /></svg>
@@ -1330,6 +1437,23 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const { isMobile, expanded: sectionExpanded, toggle: toggleSection, expand: expandSection, showBody } = useMobileCollapse();
   const [showAddModal, setShowAddModal] = useState(false);
   const [assigningNote, setAssigningNote] = useState<QuickNote | null>(null);
+  /** The note whose cuts are being chosen, if any. */
+  const [splittingNote, setSplittingNote] = useState<QuickNote | null>(null);
+  /*
+   * Working through the whole list, one note at a time.
+   *
+   * Held as IDS rather than as notes: the list underneath changes while a run
+   * is going — a note is assigned and leaves, a split turns one note into
+   * eleven — and a queue of stale copies would walk straight into a note that
+   * is no longer there. Ids are resolved against the live list at each step,
+   * and one that has gone is simply skipped.
+   *
+   * `done` is only ever counted for the position shown in the header, so
+   * stopping half way through costs nothing: every note already assigned is
+   * assigned, and every one not is still sitting in the list.
+   */
+  const [queueIds, setQueueIds] = useState<number[] | null>(null);
+  const [queueDone, setQueueDone] = useState(0);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
 
@@ -1370,6 +1494,17 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
   const handleConferenceUpdated = useCallback((updated: QuickNote) => {
     setNotes(prev => prev.map(n => n.id === updated.id ? updated : n));
   }, []);
+
+  /*
+   * The list as it is right now, for the queue to read.
+   *
+   * The queue's step runs out of a callback that outlives the render it was
+   * made in — closing over `notes` would have it stepping through the list as
+   * it stood when the run began, which is precisely the list a split has just
+   * changed.
+   */
+  const notesRef = useRef<QuickNote[]>([]);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
 
   useEffect(() => { if (sectionExpanded) requestAnimationFrame(checkScroll); }, [notes, sectionExpanded, loading, checkScroll]);
 
@@ -1532,8 +1667,55 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
     });
   }, [badgeScanRelevance, activeConference, expandSection]);
 
+  /**
+   * Open the next note in a run, or finish.
+   *
+   * Resolved against the live list every time rather than against a snapshot:
+   * assigning removes a note, splitting replaces one with several, and a queue
+   * of stale copies would open a note that no longer exists. An id that has
+   * gone is skipped without comment — it has already been dealt with.
+   */
+  const openNextInQueue = useCallback((remaining: number[]) => {
+    const live = notesRef.current;
+    const next = remaining.find(id => live.some(n => n.id === id));
+    if (next == null) {
+      setQueueIds(null);
+      setQueueDone(0);
+      setAssigningNote(null);
+      toast.success('Queue finished.');
+      return;
+    }
+    setQueueIds(remaining.slice(remaining.indexOf(next) + 1));
+    const note = live.find(n => n.id === next)!;
+    if (note.tag !== 'card-badge' && detectMultiAccount(note.content).isMulti) {
+      setAssigningNote(null);
+      setSplittingNote(note);
+      return;
+    }
+    setSplittingNote(null);
+    setAssigningNote(note);
+  }, []);
+
+  const startQueue = useCallback(() => {
+    const ids = notesRef.current.map(n => n.id);
+    if (ids.length === 0) return;
+    setQueueDone(0);
+    expandSection();
+    openNextInQueue(ids);
+  }, [expandSection, openNextInQueue]);
+
   const handleAssignNote = useCallback(async (note: QuickNote) => {
-    if (note.tag !== 'card-badge') { setAssigningNote(note); return; }
+    if (note.tag !== 'card-badge') {
+      /*
+       * A note covering several accounts is offered the cuts first. Not forced
+       * on it — the split screen's other button hands the note straight to the
+       * ordinary flow, uncut, which is what filing a tagged note has always
+       * done and still should when the reading is wrong.
+       */
+      if (detectMultiAccount(note.content).isMulti) { setSplittingNote(note); return; }
+      setAssigningNote(note);
+      return;
+    }
     const lines = note.content.split('\n');
     const get = (key: string) => { const l = lines.find(ln => ln.startsWith(key + ':')); return l ? l.slice(key.length + 1).trim().replace('—', '').trim() : ''; };
     const nameParts = get('Name').split(' ');
@@ -1625,18 +1807,35 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
               </div>
             )}
           </div>
+          {notes.length > 1 && (
+            <button type="button" onClick={startQueue}
+              className="border border-gray-300 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-gray-500 hover:text-brand-secondary transition-colors" title={`Assign all ${notes.length}`}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7M3 17l4 4L21 7" /></svg>
+            </button>
+          )}
           <button type="button" onClick={() => setShowAddModal(true)}
             className="border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-brand-secondary transition-colors" title="Add floor note">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
           </button>
         </div>
 
-        {/* Desktop: text button */}
-        <button type="button" onClick={() => setShowAddModal(true)}
-          className="hidden lg:flex items-center gap-1.5 text-sm font-medium text-brand-secondary hover:text-brand-primary border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-          Floor Note
-        </button>
+        {/* Desktop: text buttons */}
+        <div className="hidden lg:flex items-center gap-2">
+          {/* Filing the list one note at a time is what everybody does by
+              hand; this just stops them having to find the next one. */}
+          {notes.length > 1 && (
+            <button type="button" onClick={startQueue}
+              className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-brand-primary border border-gray-300 hover:border-brand-secondary hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7M3 17l4 4L21 7" /></svg>
+              Assign all {notes.length}
+            </button>
+          )}
+          <button type="button" onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-1.5 text-sm font-medium text-brand-secondary hover:text-brand-primary border border-brand-secondary/30 hover:border-brand-secondary hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+            Floor Note
+          </button>
+        </div>
       </div>
 
       <input ref={badgeFileRef} type="file" accept="image/*" capture="environment" className="hidden"
@@ -1690,8 +1889,40 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
 
       {showAddModal && <AddNoteModal onClose={() => setShowAddModal(false)} onSave={async (content) => { const note = await handleSaveNote(content); if (note) setShowAddModal(false); }} />}
       {assigningNote && (
-        <AssignNoteModal note={assigningNote} onClose={() => setAssigningNote(null)}
-          onAssigned={id => { setNotes(prev => prev.filter(n => n.id !== id)); setAssigningNote(null); }} />
+        <AssignNoteModal
+          note={assigningNote}
+          queue={queueIds ? { index: queueDone + 1, total: queueDone + 1 + queueIds.length } : null}
+          onClose={() => { setAssigningNote(null); setQueueIds(null); setQueueDone(0); }}
+          onSkip={queueIds ? () => openNextInQueue(queueIds) : undefined}
+          onAssigned={id => {
+            setNotes(prev => prev.filter(n => n.id !== id));
+            notesRef.current = notesRef.current.filter(n => n.id !== id);
+            if (queueIds) { setQueueDone(d => d + 1); openNextInQueue(queueIds); }
+            else setAssigningNote(null);
+          }}
+        />
+      )}
+      {splittingNote && (
+        <SplitNoteModal
+          note={splittingNote}
+          onClose={() => { setSplittingNote(null); setQueueIds(null); setQueueDone(0); }}
+          onKeepWhole={() => { setAssigningNote(splittingNote); setSplittingNote(null); }}
+          onSplit={created => {
+            const parentId = splittingNote.id;
+            const pieces = created as QuickNote[];
+            /*
+             * The pieces take the parent's place where it stood, so a run
+             * carries straight on into the first of them rather than jumping
+             * to the end of the list.
+             */
+            const next = notesRef.current.flatMap(n => (n.id === parentId ? pieces : [n]));
+            notesRef.current = next;
+            setNotes(next);
+            setSplittingNote(null);
+            if (queueIds) openNextInQueue([...pieces.map(p => p.id), ...queueIds]);
+            else setAssigningNote(pieces[0] ?? null);
+          }}
+        />
       )}
       {showScanModal && badgeScanCards.length > 0 && (
         <BadgeScanResultsModal cards={badgeScanCards} onClose={() => setShowScanModal(false)}
