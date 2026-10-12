@@ -22,6 +22,10 @@ import { scanForAttendee, scanForCompany, scanForAction, scanForReps, scanForCon
 import { announceNoteSaved } from '@/lib/suggestions/announce';
 import { detectMultiAccount } from '@/lib/noteSplit';
 import { SplitNoteModal } from '@/components/SplitNoteModal';
+import {
+  getAssignLists, getCompanyTypeOptions, getConferenceAttendees,
+  rememberCreatedAttendee, rememberCreatedCompany,
+} from '@/lib/assignListCache';
 
 interface QuickNote {
   id: number;
@@ -198,9 +202,15 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
     company: Company | null;
     attendee: Attendee | null;
     action: string | null;
-    /** Rep config ids read from the head of the note, not from who is filing it. */
-    repIds: number[];
   } | null>(null);
+  /**
+   * Rep config ids read from the head of the note, not from who is filing it.
+   *
+   * Null until the reading has been attempted at all, which is what the
+   * self-default below waits for — filling the field before then is a value a
+   * later read would have to fight.
+   */
+  const [scannedRepIds, setScannedRepIds] = useState<number[] | null>(null);
   // Fields the person has decided for themselves. Nothing is ever re-applied
   // over one of these, and the pill comes off.
   const [touched, setTouched] = useState<{ company: boolean; attendee: boolean; action: boolean; reps: boolean }>(
@@ -241,41 +251,29 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
   const [manualEmail, setManualEmail] = useState('');
 
   useEffect(() => {
-    fetch('/api/config?category=company_type')
-      .then(r => (r.ok ? r.json() : []))
-      .then((opts: { value: string }[]) => setCompanyTypeOptions(Array.isArray(opts) ? opts.map(o => o.value).filter(Boolean) : []))
-      .catch(() => {});
+    getCompanyTypeOptions().then(setCompanyTypeOptions).catch(() => {});
   }, []);
 
+  /*
+   * The lists this form chooses from.
+   *
+   * Held outside the component, because the form is remounted for every note
+   * in a queue run — that remount is what makes a new note a new form rather
+   * than the previous one with its fields still in it — and seven thousand
+   * rows should not be fetched twelve times to achieve that. See
+   * lib/assignListCache.
+   */
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const [confRes, compRes, attRes] = await Promise.all([
-          fetch('/api/conferences?nav=1').then(r => r.ok ? r.json() : []),
-          fetch('/api/companies?limit=2000').then(r => r.ok ? r.json() : []),
-          fetch('/api/attendees?limit=5000').then(r => r.ok ? r.json() : []),
-        ]);
-        const confs: Conference[] = Array.isArray(confRes) ? confRes.map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })) : [];
-        // company_type has to survive the mapping — the company dropdown groups on it.
-        const comps: Company[] = Array.isArray(compRes)
-          ? compRes.map((c: { id: number; name: string; company_type?: string | null }) => ({
-              id: c.id, name: c.name, company_type: c.company_type ?? null,
-            }))
-          : [];
-        const atts: Attendee[] = Array.isArray(attRes)
-          ? attRes.map((a: { id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }) => ({
-              id: a.id, first_name: a.first_name, last_name: a.last_name,
-              company_id: a.company_id != null ? Number(a.company_id) : null,
-              company_name: a.company_name ?? null,
-            }))
-          : [];
+    let live = true;
+    getAssignLists()
+      .then(({ conferences: confs, companies: comps, attendees: atts }) => {
+        if (!live) return;
         setConferences(confs); setAllCompanies(comps); setAllAttendees(atts);
         setFilteredConferences(confs); setFilteredCompanies(comps); setFilteredAttendees(atts);
-      } catch { toast.error('Failed to load options.'); }
-      setLoading(false);
-    };
-    load();
+      })
+      .catch(() => { if (live) toast.error('Failed to load options.'); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
   }, []);
 
   // Pre-populate the conference: the one this note is tagged with, and only
@@ -309,12 +307,7 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
     setLoadingConf(true);
     setFilteredAttendees([]);
     try {
-      const data = await fetch(`/api/conferences/${conf.id}`).then(r => r.ok ? r.json() : { attendees: [] });
-      const confAtts: Attendee[] = (data.attendees ?? []).map((a: { id: number; first_name: string; last_name: string; company_id?: number; company_name?: string }) => ({
-        id: a.id, first_name: a.first_name, last_name: a.last_name,
-        company_id: a.company_id != null ? Number(a.company_id) : null,
-        company_name: a.company_name ?? null,
-      }));
+      const confAtts: Attendee[] = await getConferenceAttendees(conf.id);
       setConferenceAttendees(confAtts);
       const filtered = selCompany ? confAtts.filter(a => a.company_id === selCompany.id) : confAtts;
       setFilteredAttendees(filtered);
@@ -419,14 +412,6 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
     const act = scanForAction(text, followUpActions);
 
     /*
-     * Who the lead is addressed to — the name or region at the head of the
-     * line. Without this the follow-up falls to whoever happens to be clearing
-     * the queue, which on a note relayed from a colleague is wrong on every
-     * single lead, and says nothing about it.
-     */
-    const repIds = scanForReps(text, userOptions, territories);
-
-    /*
      * And the contact details the note states outright. These boxes have been
      * on this form since it was written and nothing has ever filled them in;
      * a relayed lead usually carries an address or a number, and sometimes a
@@ -441,8 +426,32 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
       if (found.email) setManualEmail(prev => prev || found.email);
     }
 
-    setScan({ company: comp, attendee: att, action: act?.value ?? null, repIds });
-  }, [loading, confStage, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions, userOptions, territories]);
+    setScan({ company: comp, attendee: att, action: act?.value ?? null });
+  }, [loading, confStage, note.tag, note.content, allCompanies, allAttendees, conferenceAttendees, followUpActions]);
+
+  /**
+   * Who the lead is addressed to — the name or region at the head of the line.
+   *
+   * Its own effect, and re-run rather than run once, because the two lists it
+   * reads against arrive on their own schedule. The scan above fires as soon
+   * as the companies land and never again; when the rep roster or the
+   * territory map was still in flight at that moment — which is most of the
+   * time on a cold load — the head resolved against nothing and the field
+   * stayed empty for good.
+   *
+   * Writing only while the field is untouched is what makes re-running safe:
+   * a rep chosen by hand is never written over, however late a list arrives.
+   */
+  useEffect(() => {
+    if (note.tag === 'card-badge') return;
+    if (userOptions.length === 0 && territories.length === 0) return;
+    const ids = scanForReps(note.content ?? '', userOptions, territories);
+    setScannedRepIds(ids);
+    if (ids.length > 0 && !touched.reps) setFollowUpRepIds(ids);
+    // Only when the reading itself changes: `touched` is read, not depended on,
+    // or ticking any other field would re-assert this one.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.tag, note.content, userOptions, territories]);
 
   /**
    * Put the reading into the form, and keep it there.
@@ -457,7 +466,6 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
     if (scan.company && !touched.company && !selCompany && !companyIsOther) selectCompany(scan.company);
     if (scan.attendee && !touched.attendee && !selAttendee && !attendeeIsOther) setSelAttendee(scan.attendee);
     if (scan.action && !touched.action && !followUpAction) setFollowUpAction(scan.action);
-    if (scan.repIds.length > 0 && !touched.reps) setFollowUpRepIds(scan.repIds);
   }, [scan, loadingConf, touched, selCompany, selAttendee, followUpAction, companyIsOther, attendeeIsOther, selectCompany]);
 
   // A suggested record has to be in its own dropdown to be shown as chosen —
@@ -489,9 +497,9 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
     company: !touched.company && !!scan?.company && selCompany?.id === scan.company.id,
     attendee: !touched.attendee && !!scan?.attendee && selAttendee?.id === scan.attendee.id,
     action: !touched.action && !!scan?.action && followUpAction === scan.action,
-    reps: !touched.reps && !!scan?.repIds.length
-      && scan.repIds.length === followUpRepIds.length
-      && scan.repIds.every(id => followUpRepIds.includes(id)),
+    reps: !touched.reps && !!scannedRepIds?.length
+      && scannedRepIds.length === followUpRepIds.length
+      && scannedRepIds.every(id => followUpRepIds.includes(id)),
   };
 
   /*
@@ -505,10 +513,10 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
    * fight.
    */
   useEffect(() => {
-    if (!scan) return;
-    if (scan.repIds.length > 0) return;
+    if (scannedRepIds === null) return;
+    if (scannedRepIds.length > 0) return;
     if (createFollowUp && followUpRepIds.length === 0 && user?.configId) setFollowUpRepIds([user.configId]);
-  }, [scan, createFollowUp, followUpRepIds.length, user?.configId]);
+  }, [scannedRepIds, createFollowUp, followUpRepIds.length, user?.configId]);
 
   const newCompanyReady = companyIsOther && newCompanyName.trim().length > 0;
   const newAttendeeReady = attendeeIsOther && manualFirst.trim().length > 0 && manualLast.trim().length > 0;
@@ -540,6 +548,12 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
         const created = await res.json();
         companyId = Number(created.id);
         companyName = String(created.name ?? newCompanyName.trim());
+        /*
+         * So the next note in the run matches it rather than offering to
+         * create it again. Two leads at one account in a single thread is
+         * ordinary, and the lists were fetched before either existed.
+         */
+        rememberCreatedCompany({ id: companyId, name: companyName, company_type: newCompanyType || null });
       }
 
       if (newAttendeeReady && selConference) {
@@ -560,6 +574,18 @@ function AssignNoteModal({ note, onClose, onAssigned, queue, onSkip }: {
         attendeeName = `${manualFirst.trim()} ${manualLast.trim()}`;
         if (created.company_id != null) companyId = Number(created.company_id);
         if (created.company_name) companyName = String(created.company_name);
+        rememberCreatedAttendee({
+          id: attendeeId,
+          first_name: manualFirst.trim(),
+          last_name: manualLast.trim(),
+          company_id: companyId,
+          company_name: companyName,
+        }, selConference.id);
+        // The add endpoint creates the company too when the name is new, so
+        // that one has to be remembered from here rather than above.
+        if (companyId != null && companyName) {
+          rememberCreatedCompany({ id: companyId, name: companyName, company_type: newCompanyType || null });
+        }
       }
 
       // A follow-up needs both an attendee and a conference to hang off, so
@@ -1890,10 +1916,30 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
       {showAddModal && <AddNoteModal onClose={() => setShowAddModal(false)} onSave={async (content) => { const note = await handleSaveNote(content); if (note) setShowAddModal(false); }} />}
       {assigningNote && (
         <AssignNoteModal
+          /*
+           * A new note is a new form.
+           *
+           * Without this React keeps the same instance when the queue moves on
+           * — truthy to truthy, same type, same place in the tree — and every
+           * field keeps the last note's answer. The company and attendee from
+           * lead one sat there as lead two's, which in an account with nothing
+           * matching is a text box reading somebody else's name. Worse, the
+           * ref that guards the reading of the note is set once per instance,
+           * so from the second note on the text was never read at all.
+           *
+           * Resetting the fields by hand instead would mean listing them, and
+           * the next field added to this form would be the one forgotten. The
+           * lists the form needs are cached outside it, so the remount costs
+           * nothing — see lib/assignListCache.
+           */
+          key={assigningNote.id}
           note={assigningNote}
           queue={queueIds ? { index: queueDone + 1, total: queueDone + 1 + queueIds.length } : null}
           onClose={() => { setAssigningNote(null); setQueueIds(null); setQueueDone(0); }}
-          onSkip={queueIds ? () => openNextInQueue(queueIds) : undefined}
+          /* Skipping is still dealing with a note, so the position moves on.
+             Without this the counter sat at "1 of 3" while the total shrank
+             instead, which reads as the run going backwards. */
+          onSkip={queueIds ? () => { setQueueDone(d => d + 1); openNextInQueue(queueIds); } : undefined}
           onAssigned={id => {
             setNotes(prev => prev.filter(n => n.id !== id));
             notesRef.current = notesRef.current.filter(n => n.id !== id);

@@ -243,24 +243,80 @@ console.log('\n— nothing else about assigning changed —');
   eq('a tagged note is offered the cuts', /if \(detectMultiAccount\(note\.content\)\.isMulti\) \{ setSplittingNote\(note\); return; \}/.test(notes), true);
   eq('  and can still be filed whole', /onKeepWhole=\{\(\) => \{ setAssigningNote\(splittingNote\); setSplittingNote\(null\); \}\}/.test(notes), true);
 
-  /*
-   * The thing the old default got wrong on every relayed lead. The note names
-   * who each one is for; defaulting to whoever is clearing the queue buried
-   * that, silently.
-   */
-  eq('the note decides the assignee', /if \(scan\.repIds\.length > 0 && !touched\.reps\) setFollowUpRepIds\(scan\.repIds\);/.test(notes), true);
-  eq('  and the self-default waits for it to have tried',
-    /if \(!scan\) return;\n\s*if \(scan\.repIds\.length > 0\) return;/.test(notes), true);
-
-  // A run reads the live list, not the one it started with.
+  // A run reads the live list, not the one it started with. (Who the lead is
+  // for, and the state between cards, are the section below.)
   eq('the queue walks ids against the live list', /const live = notesRef\.current;/.test(notes), true);
   eq('  so a split carries straight on into its pieces',
     /openNextInQueue\(\[\.\.\.pieces\.map\(p => p\.id\), \.\.\.queueIds\]\)/.test(notes), true);
-  eq('  and skipping leaves the note where it was', /onSkip=\{queueIds \? \(\) => openNextInQueue\(queueIds\) : undefined\}/.test(notes), true);
 
   // One screen, not a split-or-keep gate followed by an auto-or-manual one.
   eq('the preview is the choice', /onKeepWhole/.test(split) && /Create \$\{keep\.length\} notes/.test(split), true);
   eq('  and it says whether the pieces still rebuild the note', /nothing is reworded or lost/.test(split), true);
+}
+
+console.log('\n— and a new note is a new form —');
+{
+  const notes = strip('components/QuickNotesSection.tsx');
+  const cache = strip('lib/assignListCache.ts');
+
+  /*
+   * Reported from a test account holding none of the companies in the note:
+   * the company and attendee from one lead were still sitting in the fields
+   * on the next. The modal was never unmounted between notes — truthy to
+   * truthy, same type, same place in the tree — so React kept the instance and
+   * every field with it. Worse, the ref guarding the reading of the note is
+   * set once per instance, so from the second note on the text was never read.
+   *
+   * Driven in Chromium over a three-note run: card 2 carries three suggestion
+   * pills (company, attendee, assignee); card 3 carries none, and none of
+   * card 2's values.
+   */
+  eq('the modal is keyed by the note', /key=\{assigningNote\.id\}/.test(notes), true);
+
+  /*
+   * Which is only affordable because the lists are not fetched again. Opening
+   * this form costs five requests — conferences, companies, attendees, the
+   * conference's own attendees, and the company types — and a twelve-note run
+   * would have been sixty. That burst is what gets a client challenged by the
+   * host's bot protection.
+   */
+  eq('the lists come from the cache', /getAssignLists\(\)/.test(notes), true);
+  eq('  including the conference’s attendees', /await getConferenceAttendees\(conf\.id\)/.test(notes), true);
+  eq('  and the company types', /getCompanyTypeOptions\(\)\.then\(setCompanyTypeOptions\)/.test(notes), true);
+  // The two heavy ones specifically. A one-row warm-up elsewhere in the file
+  // is not a list load and is left alone.
+  eq('  with neither heavy list fetched directly any more',
+    /limit=2000|limit=5000/.test(notes), false);
+  // Built on the deduplicating cache that already exists rather than a new one.
+  eq('the cache is the shared one', /import \{ getCached, getConfigCategory \} from '@\/lib\/configCache';/.test(cache), true);
+
+  /*
+   * A thread with two leads at one account is ordinary, and the lists were
+   * fetched before either existed. Throwing the cache away on every create
+   * would be no cache at all in a run where every lead is a new account, so
+   * what was created is kept beside what was fetched.
+   */
+  eq('a company created mid-run is remembered', /rememberCreatedCompany\(\{ id: companyId/.test(notes), true);
+  eq('  and so is an attendee', /rememberCreatedAttendee\(\{/.test(notes), true);
+  eq('  merged by id, so the server’s copy wins once it refreshes',
+    /function mergeById/.test(cache) && /const known = new Set\(fetched\.map\(r => r\.id\)\);/.test(cache), true);
+
+  /*
+   * The rep read runs on its own and re-runs, because the roster and the
+   * territory map arrive on their own schedule. The note scan fires as soon as
+   * the companies land and never again; when either list was still in flight
+   * then — most of the time on a cold load — the head resolved against nothing
+   * and the field stayed empty for good.
+   */
+  eq('the rep read is its own effect',
+    /const ids = scanForReps\(note\.content \?\? '', userOptions, territories\);/.test(notes), true);
+  eq('  re-running when either list lands', /\}, \[note\.tag, note\.content, userOptions, territories\]\);/.test(notes), true);
+  eq('  and never over a rep chosen by hand', /if \(ids\.length > 0 && !touched\.reps\) setFollowUpRepIds\(ids\);/.test(notes), true);
+  eq('  with the self-default waiting for it to have tried', /if \(scannedRepIds === null\) return;/.test(notes), true);
+
+  // Skipping is still dealing with a note.
+  eq('skipping advances the counter',
+    /onSkip=\{queueIds \? \(\) => \{ setQueueDone\(d => d \+ 1\); openNextInQueue\(queueIds\); \} : undefined\}/.test(notes), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
