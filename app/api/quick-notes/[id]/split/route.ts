@@ -1,23 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { getDb } from '@/lib/getDb';
-import { reassembles, segmentsFrom } from '@/lib/noteSplit';
+import { groupText, groupsFrom, ownGroups, reassembles, segmentsFrom, validAssignment } from '@/lib/noteSplit';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * Cut one floor note into the several it is made of.
  *
- * Takes POSITIONS, never text. The caller says where the cuts go and which of
- * the resulting pieces to throw away; the server reads the note out of the
- * database and slices it. So a client — or, later, a model placing the cuts —
- * cannot reword a sentence, drop one, or add one that was never written: the
- * worst it can do is cut in the wrong place, which is visible and undoable.
+ * Takes POSITIONS and a grouping, never text. The caller says where the cuts
+ * go and which note each resulting piece belongs to; the server reads the note
+ * out of the database and slices it. So a client — or, later, a model placing
+ * the cuts — cannot reword a sentence, drop one, or add one that was never
+ * written: the worst it can do is cut or group wrongly, which is visible and
+ * undoable.
  *
- * The pieces are checked against the original before anything is written. That
- * check is redundant for cuts this codebase produces, because slicing at
- * sorted offsets partitions the string by construction. It is here for the
- * source that is not written yet, and it is cheap.
+ * Two checks before anything is written, and between them they are the whole
+ * guarantee. The pieces must tile the original character for character, and
+ * every piece must carry exactly one note number. The first is redundant for
+ * cuts this codebase produces, since slicing at sorted offsets partitions the
+ * string by construction; it is here for the source that is not written yet,
+ * and it is cheap.
  *
  * The parent is deleted and its pieces take its place, in one batch. The note
  * is not duplicated into a parent and eleven children, and the queue does not
@@ -34,9 +37,9 @@ export async function POST(
   const { id } = await params;
 
   try {
-    const body = await request.json() as { breaks?: unknown; drop?: unknown };
+    const body = await request.json() as { breaks?: unknown; assign?: unknown };
     const breaks = Array.isArray(body.breaks) ? body.breaks.map(Number).filter(Number.isInteger) : [];
-    const drop = new Set(Array.isArray(body.drop) ? body.drop.map(Number).filter(Number.isInteger) : []);
+    const sentAssign = Array.isArray(body.assign) ? body.assign.map(Number) : null;
 
     /*
      * Scoped to the caller's own notes, like every other quick-note route: a
@@ -66,14 +69,24 @@ export async function POST(
     }
 
     /*
-     * Empty once trimmed is a piece with nothing in it — the blank run between
-     * two leads, kept by the slicing so the note could be rebuilt, and of no
-     * use as a note of its own.
+     * Which piece goes to which note. Absent means the old shape — every piece
+     * its own note — which is what the splitter proposes before anybody joins
+     * anything.
      */
-    const keep = segments
-      .map((s, i) => ({ ...s, i }))
-      .filter(s => !drop.has(s.i) && s.text.trim().length > 0);
+    const assign = sentAssign ?? ownGroups(segments.length);
+    if (!validAssignment(segments, assign)) {
+      return NextResponse.json(
+        { error: 'That grouping does not account for every piece exactly once. Nothing was changed.' },
+        { status: 400 },
+      );
+    }
 
+    /*
+     * Groups with nothing in them once trimmed are dropped by groupsFrom — a
+     * blank run between two leads is kept by the slicing so the note can be
+     * rebuilt, and is no use as a note of its own.
+     */
+    const keep = groupsFrom(segments, assign);
     if (keep.length === 0) {
       return NextResponse.json({ error: 'Every piece was dropped.' }, { status: 400 });
     }
@@ -84,12 +97,12 @@ export async function POST(
      * read as the note having been duplicated.
      */
     const written = await db.batch([
-      ...keep.map(s => ({
+      ...keep.map(group => ({
         sql: `INSERT INTO quick_notes (content, created_by, tag, secondary_tag, conference_id)
               VALUES (?, ?, ?, ?, ?)
               RETURNING id`,
         args: [
-          s.text.trim(),
+          groupText(group),
           user.email ?? null,
           note.tag != null ? String(note.tag) : null,
           note.secondary_tag != null ? String(note.secondary_tag) : null,

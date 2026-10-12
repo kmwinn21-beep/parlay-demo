@@ -168,6 +168,76 @@ export function reassembles(text: string, segments: NoteSegment[]): boolean {
   return at === text.length;
 }
 
+/**
+ * Which note each piece goes to.
+ *
+ * One entry per piece: the index of its group's FIRST piece, or -1 to throw it
+ * away. A piece on its own holds its own index.
+ *
+ * One number per piece is what keeps the guarantee. A piece cannot be in two
+ * notes, because it has one number; it cannot be in none, because it has one
+ * number. Grouping by lists of indices allows both, and would need checking
+ * for both.
+ */
+export type Assignment = number[];
+
+export interface NoteGroup {
+  /** The index of the first piece, which is also the group's id. */
+  leader: number;
+  members: NoteSegment[];
+}
+
+/** Every piece its own note — what a fresh split starts as. */
+export function ownGroups(count: number): Assignment {
+  return Array.from({ length: count }, (_, i) => i);
+}
+
+/**
+ * Is this a legal assignment?
+ *
+ * The rule that matters is the last one: a piece named as a leader has to lead
+ * itself. It forbids chains (A joined to B joined to C), which would otherwise
+ * need following and could loop, and it forbids a group whose leader has been
+ * thrown away.
+ */
+export function validAssignment(segments: NoteSegment[], assign: Assignment): boolean {
+  if (!Array.isArray(assign) || assign.length !== segments.length) return false;
+  for (const v of assign) {
+    if (!Number.isInteger(v)) return false;
+    if (v !== -1 && (v < 0 || v >= segments.length)) return false;
+  }
+  return assign.every(v => v === -1 || assign[v] === v);
+}
+
+/**
+ * The notes an assignment makes, in the order the note wrote them.
+ *
+ * Groups are ordered by their first piece and members by their position, so a
+ * joined note reads down the page the way the original did — the reader is
+ * checking it against a note they have in front of them.
+ */
+export function groupsFrom(segments: NoteSegment[], assign: Assignment): NoteGroup[] {
+  const groups: NoteGroup[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    if (assign[i] !== i) continue;
+    const members = segments.filter((_, j) => assign[j] === i);
+    if (members.some(m => m.text.trim())) groups.push({ leader: i, members });
+  }
+  return groups;
+}
+
+/**
+ * The text a group becomes.
+ *
+ * Each piece keeps its own words exactly. Two pieces that were not neighbours
+ * cannot be one continuous slice of the note, so they are separated by a blank
+ * line — the one place a new note is not byte-for-byte a span of the old one,
+ * and the reason `reassembles` checks the PIECES rather than the result.
+ */
+export function groupText(group: NoteGroup): string {
+  return group.members.map(m => m.text.trim()).filter(Boolean).join('\n\n');
+}
+
 export interface MultiAccountResult {
   /** How many pieces the note would be cut into. */
   segments: number;

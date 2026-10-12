@@ -20,7 +20,10 @@
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
 import { readFileSync } from 'node:fs';
-import { autoBreaks, detectMultiAccount, leadHead, looksLikeLead, reassembles, segmentsFrom } from '@/lib/noteSplit';
+import {
+  autoBreaks, detectMultiAccount, groupText, groupsFrom, leadHead, looksLikeLead,
+  ownGroups, reassembles, segmentsFrom, validAssignment,
+} from '@/lib/noteSplit';
 import { scanForContactDetails, scanForReps } from '@/lib/suggestions/noteScan';
 
 let pass = 0;
@@ -213,11 +216,17 @@ console.log('\n— the split is positions, never text —');
    * database and slices it, so no client — and no model placing cuts later —
    * can reword a sentence, drop one, or add one that was never written.
    */
-  eq('the route takes breaks and drops', /breaks\?: unknown; drop\?: unknown/.test(route), true);
+  eq('the route takes breaks and a grouping', /breaks\?: unknown; assign\?: unknown/.test(route), true);
   eq('  and slices the stored note', /segmentsFrom\(content, breaks\)/.test(route), true);
   eq('  never text from the request', /body\.(text|content|segments)/.test(route), false);
   eq('the guard runs again on the server', /if \(!reassembles\(content, segments\)\)/.test(route), true);
   eq('  and refuses rather than writing', /Those cuts do not rebuild the note/.test(route), true);
+  // The second half of the guarantee, once a note can be several pieces.
+  eq('the grouping is checked too', /if \(!validAssignment\(segments, assign\)\)/.test(route), true);
+  eq('  with every piece accounted for exactly once',
+    /does not account for every piece exactly once/.test(route), true);
+  eq('  and a missing grouping means one note per piece',
+    /const assign = sentAssign \?\? ownGroups\(segments\.length\);/.test(route), true);
   // A floor note is private until it is assigned, so the id alone is never enough.
   eq('scoped to the caller’s own notes', /WHERE id = \? AND created_by = \?/.test(route), true);
   /*
@@ -227,6 +236,57 @@ console.log('\n— the split is positions, never text —');
   eq('written in one batch', /await db\.batch\(\[/.test(route), true);
   eq('  with the original deleted in it', /DELETE FROM quick_notes WHERE id = \? AND created_by = \?/.test(route), true);
   eq('  and the new ids taken from the inserts themselves', /RETURNING id/.test(route), true);
+}
+
+console.log('\n— two pieces that are not neighbours, one note —');
+{
+  /*
+   * The same account can turn up twice in one thread with other leads in
+   * between. The rails handle neighbours; this handles the rest.
+   *
+   * A note stops being one piece and becomes a SET of them, stored as one
+   * number per piece: which note it goes to, or -1 for the bin. That shape is
+   * what keeps the guarantee — a piece cannot be in two notes, because it has
+   * one number, and it cannot be in none, for the same reason.
+   */
+  eq('every piece starts in a note of its own', ownGroups(4), [0, 1, 2, 3]);
+
+  const three = segmentsFrom('aaa\n\nbbb\n\nccc', [0, 5, 10]);
+  eq('  which is three pieces here', three.length, 3);
+
+  eq('a legal grouping passes', validAssignment(three, [0, 1, 0]), true);
+  eq('  and discarding is legal too', validAssignment(three, [0, -1, 0]), true);
+  /*
+   * The rule that does the work: a piece named as a leader has to lead itself.
+   * It forbids chains, which would need following and could loop, and it
+   * forbids a group whose leader has been thrown away.
+   */
+  eq('a chain is refused', validAssignment(three, [0, 0, 1]), false);
+  eq('  as is following a leader that was discarded', validAssignment(three, [-1, 0, 2]), false);
+  eq('  a number no piece has', validAssignment(three, [0, 9, 2]), false);
+  eq('  and a grouping of the wrong length', validAssignment(three, [0, 1]), false);
+
+  const grouped = groupsFrom(three, [0, 1, 0]);
+  eq('the far pieces come back as one note', grouped.length, 2);
+  eq('  carrying both halves', grouped[0].members.map(m => m.text.trim()), ['aaa', 'ccc']);
+  eq('  in the order the note wrote them', grouped[0].leader, 0);
+  eq('  and the piece in between is its own', grouped[1].members.map(m => m.text.trim()), ['bbb']);
+  eq('a discarded piece makes no note', groupsFrom(three, [0, -1, 0]).length, 1);
+  // Whitespace kept by the slicing so the note could be rebuilt is no note.
+  eq('  and nor does one with nothing in it',
+    groupsFrom(segmentsFrom('aaa\n\n   \n\nbbb', [0, 5, 10]), [0, 1, 2]).length, 2);
+
+  /*
+   * The one place a new note is not byte-for-byte a span of the old one: two
+   * pieces that were not neighbours cannot be one continuous slice, so they
+   * are separated by a blank line. Every word is still the note's own.
+   */
+  eq('joined pieces keep their own words', groupText(grouped[0]), 'aaa\n\nccc');
+  eq('  and a single piece is unchanged', groupText(grouped[1]), 'bbb');
+
+  // The tiling check is untouched by grouping — it is about the PIECES.
+  eq('grouping cannot affect whether the pieces still tile the note',
+    reassembles('aaa\n\nbbb\n\nccc', three), true);
 }
 
 console.log('\n— nothing else about assigning changed —');
@@ -250,8 +310,39 @@ console.log('\n— nothing else about assigning changed —');
     /openNextInQueue\(\[\.\.\.pieces\.map\(p => p\.id\), \.\.\.queueIds\]\)/.test(notes), true);
 
   // One screen, not a split-or-keep gate followed by an auto-or-manual one.
-  eq('the preview is the choice', /onKeepWhole/.test(split) && /Create \$\{keep\.length\} notes/.test(split), true);
+  eq('the preview is the choice', /onKeepWhole/.test(split) && /Create \$\{groups\.length\} notes/.test(split), true);
   eq('  and it says whether the pieces still rebuild the note', /nothing is reworded or lost/.test(split), true);
+
+  /*
+   * Joining, driven in Chromium against the real note. Dragging piece 6 onto
+   * piece 3, three rows apart, takes it from seven notes to six and numbers
+   * both halves 3; the menu does the same without a drag; skip takes the whole
+   * joined note and keep gives all of it back; separate on either half returns
+   * one piece. The payload is breaks plus [-1,1,2,3,4,5,3,7] and no text.
+   */
+  eq('the grouping travels as one number per piece', /body: JSON\.stringify\(\{ breaks, assign \}\)/.test(split), true);
+  // The menu is the mechanism; the drag is the shortcut. It is the only one
+  // that works one-handed or with a keyboard.
+  eq('a piece can be joined from a list', /Join this into…/.test(split), true);
+  eq('  and by dragging it onto another', /onDrop=\{e => \{/.test(split) && /draggable=\{!isDropped\}/.test(split), true);
+  eq('  but never onto a piece that is being thrown away',
+    /if \(dragging !== null && !isDropped\) joinInto\(dragging, seg\);/.test(split), true);
+
+  /*
+   * Membership and discarding are two pieces of state. As one, skipping a
+   * joined note overwrote which pieces belonged to it — so skip took both
+   * halves and keep gave back one.
+   */
+  eq('membership and the bin are held apart',
+    /const \[groupOf, setGroupOf\]/.test(split) && /const \[skipped, setSkipped\]/.test(split), true);
+  eq('  so skip and keep are each other’s opposite', /const key = segments\[leaderIndex\[i\]\]\.start;/.test(split), true);
+  /*
+   * The first piece of a note holds no entry — the others point at it — so
+   * removing its entry did nothing, and separate on the top half was dead.
+   */
+  eq('separating the first piece hands the note on', /const heir = segments\[others\[0\]\]\.start;/.test(split), true);
+  // And a whole group moves when it is joined, rather than leaving members behind.
+  eq('joining moves every piece of a note', /const moving = membersOf\(from\)\.map\(s => s\.start\);/.test(split), true);
 }
 
 console.log('\n— and a new note is a new form —');
