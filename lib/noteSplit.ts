@@ -46,8 +46,14 @@ export interface NoteSegment {
 /** The dash that separates a floor note's fields, in the spellings it is written. */
 const FIELD_SEP = /\s+-\s*|\s*-\s+|\s+·\s*|\s*\|\s*/;
 
-/** A run of blank lines: where one lead ends and the next begins. */
-const BLANK_RUN = /\n[ \t]*(?:\n[ \t]*)+/g;
+/**
+ * A run of blank lines: where one lead ends and the next begins.
+ *
+ * `\r` counts as blank between the newlines. A thread pasted out of an email
+ * client arrives with CRLF endings, sometimes only on some of its lines, and
+ * without this a blank line written `\r\n\r\n` is not a blank line at all.
+ */
+const BLANK_RUN = /\n[ \t\r]*(?:\n[ \t\r]*)+/g;
 
 /**
  * Does this read as the opening of a lead?
@@ -105,29 +111,37 @@ export function leadFields(segment: string): string[] {
  * Always starts at 0 — the first segment begins where the note does.
  */
 export function autoBreaks(text: string): number[] {
-  const breaks = [0];
-
+  const byBlankLine = [0];
   BLANK_RUN.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = BLANK_RUN.exec(text)) !== null) {
     const at = m.index + m[0].length;
-    if (at > 0 && at < text.length) breaks.push(at);
+    if (at > 0 && at < text.length) byBlankLine.push(at);
   }
 
-  if (breaks.length > 2) return breaks;
-
-  /*
-   * No blank lines to go on. Cut before each line that opens like a lead —
-   * but only when that finds several, since one or two is just a note with a
-   * dash in it.
-   */
-  const lineBreaks = [0];
+  // Cut before each line that opens like a lead.
+  const byLeadLine = [0];
   let at = 0;
   for (const line of text.split('\n')) {
-    if (at > 0 && looksLikeLead(line)) lineBreaks.push(at);
+    if (at > 0 && looksLikeLead(line)) byLeadLine.push(at);
     at += line.length + 1;
   }
-  return lineBreaks.length > 2 ? lineBreaks : breaks;
+
+  /*
+   * Whichever reads more leads out of the note wins.
+   *
+   * Blank lines used to win outright whenever there were more than a couple of
+   * them, which is wrong whenever only SOME of them survived the paste. A real
+   * thread arrived with eight leads and four blank lines between them — the
+   * rest were CRLF — so it cut into five pieces, three leads to a piece, and
+   * the splitter looked broken on exactly the note it was built for.
+   *
+   * Counting the result rather than trusting either rule means a half-lost
+   * blank line cannot beat a lead the other rule can see.
+   */
+  const leadsIn = (breaks: number[]) =>
+    segmentsFrom(text, breaks).filter(s => looksLikeLead(s.text)).length;
+  return leadsIn(byLeadLine) > leadsIn(byBlankLine) ? byLeadLine : byBlankLine;
 }
 
 /**

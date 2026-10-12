@@ -103,6 +103,30 @@ console.log('\n— twelve pieces, eleven of them a lead —');
   ]);
 }
 
+console.log('\n— however the thread was pasted —');
+{
+  /*
+   * Reported from a real split: eight leads came out as five pieces, three
+   * leads to a piece. The note had arrived with only SOME of its blank lines
+   * as CRLF, and `\n[ \t]*\n` does not see `\n\r\n` as a blank line — so four
+   * of the eight were found, which was enough for the blank-line rule to win
+   * outright and the lead-line rule never to run.
+   *
+   * Two changes, and the second is the one that generalises: `\r` counts as
+   * blank between newlines, and neither rule is trusted over the other — the
+   * one that reads more leads out of the note wins.
+   */
+  const leads = body.map(s => s.text.trim());
+  const cuts = (text) => segmentsFrom(text, autoBreaks(text)).filter(s => s.text.trim()).length;
+
+  eq('blank lines', cuts(leads.join('\n\n')), 12);
+  eq('  the same, written CRLF', cuts(leads.join('\r\n\r\n')), 12);
+  eq('  half of them CRLF, which is what arrived',
+    cuts(leads.map((l, i) => l + (i % 2 ? '\r\n\r\n' : '\n\n')).join('')), 12);
+  eq('  and no blank lines at all', cuts(leads.join('\n')), 12);
+  eq('  CRLF, no blank lines', cuts(leads.join('\r\n')), 12);
+}
+
 console.log('\n— and the pieces rebuild the note —');
 {
   /*
