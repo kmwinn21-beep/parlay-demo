@@ -349,6 +349,23 @@ console.log('\n— nothing else about assigning changed —');
   // that works one-handed or with a keyboard.
   eq('a piece can be joined from a list', /Join this into…/.test(split), true);
   eq('  and by dragging it onto another', /onDrop=\{e => \{/.test(split) && /draggable=\{!isDropped\}/.test(split), true);
+
+  /*
+   * And both can be SEEN, which the first build of this could not claim.
+   *
+   * It shipped with no grip at all — a row that could be dragged looked
+   * exactly like one that could not — and the join was two words of 10px grey
+   * in the right margin, 36 by 15 pixels. "I don't see any way to join" was
+   * the entirely correct reading of it. Measured after: a grip on every row
+   * and a 135 by 26 button in gray-600.
+   */
+  eq('every row shows a grip', /<circle cx="3" cy="3" r="1\.4" \/>/.test(split), true);
+  eq('  and says it can be grabbed', /cursor-grab/.test(split), true);
+  eq('the join is a button, not a hint', /Join to another note/.test(split), true);
+  eq('  sized to be hit', /min-h-\[30px\] px-2\.5 py-1 rounded-md border/.test(split), true);
+  eq('  and legible against white', /text-\[11px\] font-medium text-gray-600/.test(split), true);
+  eq('nothing is left at 10px grey in the margin',
+    /text-\[10px\] font-medium text-gray-400/.test(split), false);
   eq('  but never onto a piece that is being thrown away',
     /if \(dragging !== null && !isDropped\) joinInto\(dragging, seg\);/.test(split), true);
 

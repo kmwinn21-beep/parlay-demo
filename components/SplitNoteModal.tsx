@@ -328,11 +328,24 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
                           : ''
                   } ${dragging === seg ? 'opacity-40' : ''}`}
                 >
-                  {/* The handle doubles as the rail: solid for a piece in a
-                      joined note, dashed where such a note merely spans this
-                      line. */}
+                  {/* The grip.
+                      Shipped without one, which made a row that can be dragged
+                      look exactly like a row that cannot — and "I don't see
+                      any way to join" was the entirely correct reading. */}
                   <span
-                    className={`flex-shrink-0 w-3 self-stretch ${
+                    className={`flex-shrink-0 pt-1 ${isDropped ? 'text-gray-200' : 'text-gray-300 cursor-grab'}`}
+                    aria-hidden="true"
+                  >
+                    <svg className="w-3 h-4" viewBox="0 0 12 16" fill="currentColor">
+                      <circle cx="3" cy="3" r="1.4" /><circle cx="9" cy="3" r="1.4" />
+                      <circle cx="3" cy="8" r="1.4" /><circle cx="9" cy="8" r="1.4" />
+                      <circle cx="3" cy="13" r="1.4" /><circle cx="9" cy="13" r="1.4" />
+                    </svg>
+                  </span>
+                  {/* The rail: solid for a piece in a joined note, dashed where
+                      such a note merely spans this line. */}
+                  <span
+                    className={`flex-shrink-0 w-2 self-stretch ${
                       joined ? 'border-l-2 border-amber-700'
                         : spanned ? 'border-l-2 border-dashed border-amber-300'
                           : ''}`}
@@ -350,10 +363,48 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
                       {line.text}
                     </p>
                     {joined && !isDropped && (
-                      <p className="text-[10px] text-amber-800 mt-1">
+                      <p className="text-[11px] font-medium text-amber-800 mt-1">
                         Note {number} · {assign.filter(v => v === assign[seg]).length} pieces
                       </p>
                     )}
+
+                    {/* The actions, as controls you can see.
+                        These were two words of 10px grey in the right margin,
+                        which is how a feature ships and nobody finds it. */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleSkip(seg)}
+                        className="inline-flex items-center min-h-[30px] px-2.5 py-1 rounded-md border border-gray-200 bg-white text-[11px] font-medium text-gray-600 hover:border-gray-400 hover:text-gray-800 transition-colors"
+                      >
+                        {isDropped ? 'Keep' : 'Skip'}
+                      </button>
+                      {!isDropped && (joined ? (
+                        <button
+                          type="button"
+                          onClick={() => separate(seg)}
+                          className="inline-flex items-center gap-1 min-h-[30px] px-2.5 py-1 rounded-md border border-amber-300 bg-amber-50 text-[11px] font-medium text-amber-800 hover:border-amber-500 transition-colors"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                          Separate
+                        </button>
+                      ) : groups.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setJoinMenuFor(joinMenuFor === seg ? null : seg)}
+                          className={`inline-flex items-center gap-1 min-h-[30px] px-2.5 py-1 rounded-md border text-[11px] font-medium transition-colors ${
+                            joinMenuFor === seg
+                              ? 'border-brand-secondary bg-blue-50 text-brand-secondary'
+                              : 'border-gray-200 bg-white text-gray-600 hover:border-brand-secondary hover:text-brand-secondary'
+                          }`}
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                          </svg>
+                          Join to another note
+                        </button>
+                      ))}
+                    </div>
 
                     {joinMenuFor === seg && (
                       <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
@@ -378,22 +429,6 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
                     )}
                   </div>
 
-                  <div className="flex-shrink-0 flex flex-col items-end gap-1 pt-0.5">
-                    <button type="button" onClick={() => toggleSkip(seg)} className="text-[10px] font-medium text-gray-400 hover:text-brand-secondary">
-                      {isDropped ? 'keep' : 'skip'}
-                    </button>
-                    {!isDropped && (joined
-                      ? <button type="button" onClick={() => separate(seg)} className="text-[10px] font-medium text-amber-700 hover:underline">separate</button>
-                      : groups.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setJoinMenuFor(joinMenuFor === seg ? null : seg)}
-                          className="text-[10px] font-medium text-gray-400 hover:text-brand-secondary"
-                        >
-                          join to…
-                        </button>
-                      ))}
-                  </div>
                 </div>
               </div>
             );
