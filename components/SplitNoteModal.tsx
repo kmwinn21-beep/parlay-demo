@@ -255,11 +255,22 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 sm:p-4" onClick={onClose}>
+      {/*
+        The list scrolls, not the sheet.
+
+        Both were true before: the sheet scrolled AND the list carried
+        overflow-hidden for its rounded corners. As a flex child with no
+        min-h-0 the list was then squashed to whatever was left over and clipped
+        its own contents, so a note long enough to overflow simply lost its
+        last few leads with no way to reach them. Pinning the header and the
+        buttons also keeps "Create N notes" on screen, which is the thing a
+        reader is scrolling towards.
+      */}
       <div
-        className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto flex flex-col p-6"
+        className="modal-sheet-mobile bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-3xl max-h-[92vh] flex flex-col p-6"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-start justify-between gap-3 mb-4 flex-shrink-0">
           <div>
             <h3 className="text-base font-semibold text-brand-primary font-serif">This note covers several accounts</h3>
             <p className="text-xs text-gray-500 mt-1">
@@ -271,7 +282,7 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-shrink-0">
           <p className="text-xs text-gray-500">
             {groups.length} note{groups.length === 1 ? '' : 's'} · cut between lines, or join two that belong together
           </p>
@@ -280,7 +291,7 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
           </button>
         </div>
 
-        <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-lg">
           {lines.map((line, i) => {
             const seg = segmentOf(line.start);
             const number = noteNumberOf[seg];
@@ -440,7 +451,7 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
           the note character for character, and every piece carries exactly one
           note number. The server checks both again before writing a row.
         */}
-        <p className={`text-xs mt-3 flex items-center gap-1.5 ${whole ? 'text-green-700' : 'text-red-600'}`}>
+        <p className={`text-xs mt-3 flex items-center gap-1.5 flex-shrink-0 ${whole ? 'text-green-700' : 'text-red-600'}`}>
           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={whole ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'} />
           </svg>
@@ -449,7 +460,7 @@ export function SplitNoteModal({ note, onClose, onKeepWhole, onSplit }: {
             : 'These cuts do not account for the whole note. Nothing will be written.'}
         </p>
 
-        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-5">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 mt-5 flex-shrink-0">
           <button type="button" onClick={onKeepWhole} className="btn-secondary text-sm">Keep as one note</button>
           <button type="button" onClick={handleSplit} disabled={!canSplit} className="btn-primary text-sm">
             {saving ? 'Splitting…' : `Create ${groups.length} notes`}

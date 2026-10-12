@@ -366,6 +366,23 @@ console.log('\n— nothing else about assigning changed —');
   eq('  and legible against white', /text-\[11px\] font-medium text-gray-600/.test(split), true);
   eq('nothing is left at 10px grey in the margin',
     /text-\[10px\] font-medium text-gray-400/.test(split), false);
+
+  /*
+   * And the list scrolls rather than being clipped.
+   *
+   * The sheet scrolled AND the list carried overflow-hidden for its rounded
+   * corners. As a flex child with no min-h-0 the list was squashed to whatever
+   * height was left over and clipped its own contents — so an eleven-lead note
+   * lost its last few with no way to reach them. Measured at 1100x760: 475px
+   * of list showing 1344px of content, lead eleven reachable, Create pinned.
+   */
+  eq('the list is the scroll region',
+    /className="flex-1 min-h-0 overflow-y-auto border border-gray-200 rounded-lg"/.test(split), true);
+  eq('  and the sheet itself does not scroll',
+    /max-h-\[92vh\] flex flex-col p-6/.test(split) && !/max-h-\[92vh\] overflow-y-auto/.test(split), true);
+  // Which is also what keeps "Create N notes" on screen while you read.
+  eq('  so the buttons stay put', /sm:justify-end gap-2 mt-5 flex-shrink-0/.test(split), true);
+  eq('  as does the header', /justify-between gap-3 mb-4 flex-shrink-0/.test(split), true);
   eq('  but never onto a piece that is being thrown away',
     /if \(dragging !== null && !isDropped\) joinInto\(dragging, seg\);/.test(split), true);
 
