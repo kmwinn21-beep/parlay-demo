@@ -199,5 +199,37 @@ console.log('\n— inline only where the drawer is the viewport —');
     /useState\(false\)/.test(hook), true);
 }
 
+console.log('\n— and a drawer opened from a modal opens above it —');
+{
+  /*
+   * Reported: the quick view opened from the global search palette arrived
+   * BLURRED. It was opening correctly — a backdrop filter blurs everything
+   * painted beneath it, and the drawer's default z-50 is beneath the palette's
+   * z-[200]. So the drawer was rendered, in focus, underneath the frosting.
+   *
+   * Measured in Chromium after: blur layer at 200, drawer at 250, drawer
+   * above. The palette stays open underneath on purpose — peeking at a result
+   * without losing the search is what the eye icon is for.
+   */
+  const drawer = strip('components/QuickViewDrawer.tsx');
+  eq('the drawer clears the page by default', /zClass = 'z-50'/.test(drawer), true);
+  eq('  and says a modal has to raise it', /has to say so, or this opens behind/.test(readFileSync('components/QuickViewDrawer.tsx', 'utf8')), true);
+
+  /*
+   * Every caller that is ITSELF an overlay has to say so. These are the two
+   * z-[200] modals that open one of these, and they are the two the rule
+   * exists for.
+   */
+  for (const f of ['components/GlobalSearch.tsx', 'components/RelationshipMapModal.tsx']) {
+    const src = strip(f);
+    const name = f.split('/').pop();
+    eq(`${name} is itself an overlay`, /z-\[200\]/.test(src), true);
+    eq(`  so it raises the drawer above its own layer`, /zClass="z-\[250\]"/.test(src), true);
+  }
+  // The blur is the reason it matters rather than merely the order looking odd.
+  eq('the palette frosts what is under it',
+    /bg-black\/40 backdrop-blur-sm/.test(strip('components/GlobalSearch.tsx')), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

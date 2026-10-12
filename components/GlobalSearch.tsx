@@ -72,8 +72,20 @@ export function GlobalSearchModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
+      {/*
+        Above the palette, which is z-[200] and carries a backdrop-blur.
+
+        A backdrop filter blurs everything painted beneath it, so the drawer's
+        default z-50 put it under the blur — it opened, correctly, and arrived
+        out of focus. The palette stays open underneath on purpose: peeking at
+        a result without losing the search is what the eye icon is for, and
+        Escape still comes back to it.
+
+        Same layer RelationshipMapModal gives it, which is the other z-[200]
+        modal that opens one of these.
+      */}
       {quickView && (
-        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} />
+        <QuickViewDrawer target={quickView} onClose={() => setQuickView(null)} zClass="z-[250]" />
       )}
     </>
   );
