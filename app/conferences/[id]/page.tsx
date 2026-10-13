@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { RecordQuickViewBody } from '@/components/RecordQuickViewBody';
+import { QuickViewIcon } from '@/components/QuickViewDrawer';
 import { createPortal } from 'react-dom';
 import { attendeeDisplayName, isPlaceholderAttendee } from '@/lib/attendeeDisplay';
 import { BULK_CLEAR, BULK_CLEAR_LABEL, bulkFieldValue } from '@/lib/bulkEdit';
@@ -2792,24 +2793,41 @@ export default function ConferenceDetailPage() {
                       every character right by its own width plus a gap, which
                       is what put this tier's text to the right of the tier
                       below it. */}
-                  <button
-                    type="button"
-                    onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
-                    aria-expanded={expanded}
-                    className="relative flex items-start min-w-0 w-full text-left"
-                  >
-                    <svg className={`absolute left-[-14px] top-1 w-3 h-3 flex-shrink-0 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-gray-800 leading-snug break-words">
-                        {node.companyName}
+                  {/* The expander and the quick view are SIBLINGS, not nested.
+                      The name sits inside a button that collapses the group, and
+                      a button inside a button is invalid markup whose inner
+                      click the outer one swallows — the group would have folded
+                      shut every time the eye was pressed. */}
+                  <div className="relative flex items-start gap-1.5 min-w-0">
+                    <button
+                      type="button"
+                      onClick={() => setAttendeeCollapse(s => toggleCompany(s, node.companyId))}
+                      aria-expanded={expanded}
+                      /* No flex-1: the button takes the width of the name, so
+                         the eye sits against it rather than parked at a fixed
+                         distance out in the empty part of the cell. */
+                      className="flex items-start min-w-0 text-left"
+                    >
+                      <svg className={`absolute left-[-14px] top-1 w-3 h-3 flex-shrink-0 text-gray-400 transition-transform ${expanded ? '' : '-rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-gray-800 leading-snug break-words">
+                          {node.companyName}
+                        </span>
+                        <span className="block text-[10px] text-gray-500 mt-0.5">
+                          {node.attendees.length} {node.attendees.length === 1 ? 'attendee' : 'attendees'}
+                        </span>
                       </span>
-                      <span className="block text-[10px] text-gray-500 mt-0.5">
-                        {node.attendees.length} {node.attendees.length === 1 ? 'attendee' : 'attendees'}
+                    </button>
+                    {/* Only where there is a company to open. A group can be
+                        assembled from attendees carrying a name and no record. */}
+                    {node.companyId > 0 && (
+                      <span className="flex-shrink-0 pt-0.5">
+                        <QuickViewIcon onClick={() => { setQuickViewId(node.companyId); setQuickViewType('company'); }} />
                       </span>
-                    </span>
-                  </button>
+                    )}
+                  </div>
                   {node.isFamilyParent && (
                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 leading-4 mt-1 rounded-full text-[10px] font-medium whitespace-nowrap ${getPreset(colorMaps.entity_structure?.[attendeeParentLabel]).badgeClass}`}>
                       <EntityStructureIcon structure="Parent" />

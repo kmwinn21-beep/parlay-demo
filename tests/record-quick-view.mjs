@@ -231,5 +231,35 @@ console.log('\n— and a drawer opened from a modal opens above it —');
     /bg-black\/40 backdrop-blur-sm/.test(strip('components/GlobalSearch.tsx')), true);
 }
 
+console.log('\n— a company group can be peeked at from the attendee table —');
+{
+  const page = strip('app/conferences/[id]/page.tsx');
+
+  eq('the group row offers a quick view', /<QuickViewIcon onClick=\{\(\) => \{ setQuickViewId\(node\.companyId\); setQuickViewType\('company'\); \}\} \/>/.test(page), true);
+  // A group can be assembled from attendees carrying a company name and no
+  // company record, and there is nothing to open for one of those.
+  eq('  only where there is a record to open', /\{node\.companyId > 0 && \(/.test(page), true);
+
+  /*
+   * The hazard this shape exists for: the company name lives inside a button
+   * that collapses the group. A button inside a button is invalid markup, and
+   * the outer one swallows the inner click — so the group would have folded
+   * shut every time the eye was pressed. They are siblings.
+   *
+   * Driven in Chromium: three group rows, one eye each, and clicking it leaves
+   * the group exactly as expanded as it was while the company drawer opens.
+   */
+  eq('the expander and the eye are siblings',
+    /<div className="relative flex items-start gap-1\.5 min-w-0">/.test(page), true);
+  eq('  and the name button no longer fills the cell',
+    /className="flex items-start min-w-0 text-left"/.test(page), true);
+
+  // Non-text wants 3:1; gray-400 on white is 2.5:1, and this is the only mark
+  // saying a row can be peeked at.
+  const drawer = strip('components/QuickViewDrawer.tsx');
+  eq('the icon is dark enough to see', /text-gray-500 hover:text-brand-secondary/.test(drawer), true);
+  eq('  and nothing is left at gray-400', /text-gray-400 hover:text-brand-secondary/.test(drawer), false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
