@@ -107,7 +107,10 @@ export function QuickViewIcon({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }}
-      className="flex-shrink-0 text-gray-400 hover:text-brand-secondary transition-colors"
+      /* gray-500, not gray-400. An icon is non-text, which wants 3:1 against
+         its background, and gray-400 on white is 2.5:1 — under it. This is the
+         only mark saying a row can be peeked at, so it has to be seen. */
+      className="flex-shrink-0 text-gray-500 hover:text-brand-secondary transition-colors"
       title="Quick view"
     >
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

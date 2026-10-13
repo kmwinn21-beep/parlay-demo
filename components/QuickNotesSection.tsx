@@ -1835,7 +1835,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
           </div>
           {notes.length > 1 && (
             <button type="button" onClick={startQueue}
-              className="border border-gray-300 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-gray-500 hover:text-brand-secondary transition-colors" title={`Assign all ${notes.length}`}>
+              className="border border-gray-300 hover:border-brand-secondary hover:bg-blue-50 p-1.5 rounded-lg text-gray-500 hover:text-brand-secondary transition-colors" title={`Assign All (${notes.length})`}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7M3 17l4 4L21 7" /></svg>
             </button>
           )}
@@ -1853,7 +1853,7 @@ export function QuickNotesSection({ className = '' }: { className?: string }) {
             <button type="button" onClick={startQueue}
               className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-brand-primary border border-gray-300 hover:border-brand-secondary hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7M3 17l4 4L21 7" /></svg>
-              Assign all {notes.length}
+              Assign All ({notes.length})
             </button>
           )}
           <button type="button" onClick={() => setShowAddModal(true)}
