@@ -201,6 +201,14 @@ export function CompanyDetailView({ embedId, embedParentOf, onEmbeddedLeave }: {
    */
   const parentOfChild = embedParentOf !== undefined ? embedParentOf : searchParams.get('parent_of');
   const id = embedId ?? (params.id as string);
+  /**
+   * Whether this is a drawer rather than its own page.
+   *
+   * Two ways in, because a quick view is rendered two ways: inline on a phone,
+   * which passes `embedId`, and in a frame above it, which does not — that one
+   * arrives as ?embed=true on the URL. Both are drawers to a reader.
+   */
+  const isEmbed = embedId != null || searchParams.get('embed') === 'true';
   const colorMaps = useConfigColors();
   // Named by the account: the Related Entities pills read their labels from
   // Entity Structure rather than saying "Parent"/"Child" whatever it is called
@@ -909,7 +917,18 @@ export function CompanyDetailView({ embedId, embedParentOf, onEmbeddedLeave }: {
       {/* Phone only: the record is long enough that scrolling to a section is
           a chore, and this row already carries the page's other navigation. */}
       <div className="flex items-center justify-between gap-3">
-        <BackButton />
+        {/*
+          No Back inside a drawer.
+
+          The drawer has its own way out — its close button and its "Go to
+          record" link — so this was a third one, and the only one that lied:
+          BackButton calls router.back(), which in a drawer rendered inline
+          navigates the HOST page away behind the drawer that is still open.
+
+          With it gone the jump menu falls into the row's first slot, which is
+          where Back was.
+        */}
+        {!isEmbed && <BackButton />}
         {/* Phone gets both controls inside the Jump To menu; there's no room
             for a second button beside Back. */}
         <SectionJumpMenu className="sm:hidden" />
