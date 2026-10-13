@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const {
       entity_type, entity_id, content, conference_name, rep,
       attendee_name, company_name, skip_notification, tagged_users,
-      note_type, meeting_id, insight_counts, touchpoint_type,
+      note_type, meeting_id, insight_counts, touchpoint_type, cascade,
     } = await request.json();
 
     if (!entity_type || !entity_id || !content?.trim()) {
@@ -143,6 +143,45 @@ export async function POST(request: NextRequest) {
       } catch { /* non-fatal — the name is still stored */ }
     }
 
+    /*
+     * Who the note is about, when the caller could not say.
+     *
+     * A note on an attendee belongs on their company and on the conference as
+     * well — that is what makes it readable from any of the three. Every
+     * caller has done that fan-out for itself, in nine different files, and
+     * one of them could not: the notes popover on a row is handed an attendee
+     * id and a conference NAME, and has no company at all. Its notes landed on
+     * the attendee and nowhere else.
+     *
+     * So the server does it when asked. The attendee's company comes from the
+     * attendee, and the conference from the name that was already being
+     * resolved for conference_id, which means a caller needs nothing it does
+     * not already have.
+     *
+     * Opt-in rather than automatic, because the other eight callers post the
+     * copies themselves and would otherwise write each note twice. They can
+     * move over to this one at a time; this is the shape they would move to.
+     */
+    let cascadeCompanyId: number | null = null;
+    let resolvedAttendeeName: string | null = attendee_name || null;
+    let resolvedCompanyName: string | null = company_name || null;
+    if (cascade && entity_type === 'attendee') {
+      try {
+        const att = await db.execute({
+          sql: `SELECT a.first_name, a.last_name, a.company_id, c.name AS company_name
+                FROM attendees a LEFT JOIN companies c ON c.id = a.company_id
+                WHERE a.id = ? LIMIT 1`,
+          args: [entity_id],
+        });
+        if (att.rows.length > 0) {
+          const r = att.rows[0];
+          cascadeCompanyId = r.company_id != null ? Number(r.company_id) : null;
+          resolvedAttendeeName ||= `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || null;
+          resolvedCompanyName ||= r.company_name != null ? String(r.company_name) : null;
+        }
+      } catch { /* non-fatal — the note still lands on the attendee */ }
+    }
+
     const result = await db.execute({
       sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, conference_id, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, meeting_id, insight_counts, touchpoint_type)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -151,12 +190,42 @@ export async function POST(request: NextRequest) {
         entity_type, entity_id, content.trim(),
         conference_name || null, resolvedConferenceId,
         resolvedRep,
-        attendee_name || null, company_name || null,
+        resolvedAttendeeName, resolvedCompanyName,
         tagged_users || null, user.id,
         note_type || 'note', meeting_id ?? null, insight_counts ?? null,
         touchpoint_type || null,
       ],
     });
+
+    /*
+     * The copies. Written after the attendee's own row, so a failure here
+     * cannot cost the note itself — the thing that must not be lost is the
+     * note, and a missing copy is recoverable where a missing note is not.
+     *
+     * They carry no notification: the primary row has already sent one, and a
+     * reader does not want three for one note.
+     */
+    if (cascade && entity_type === 'attendee') {
+      const copies: Array<{ type: string; id: number }> = [];
+      if (cascadeCompanyId) copies.push({ type: 'company', id: cascadeCompanyId });
+      if (resolvedConferenceId) copies.push({ type: 'conference', id: resolvedConferenceId });
+      if (copies.length > 0) {
+        await db.batch(copies.map(c => ({
+          sql: `INSERT INTO entity_notes (entity_type, entity_id, content, conference_name, conference_id, rep, attendee_name, company_name, tagged_users, author_user_id, note_type, touchpoint_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            c.type, c.id, content.trim(),
+            conference_name || null, resolvedConferenceId,
+            resolvedRep,
+            resolvedAttendeeName, resolvedCompanyName,
+            tagged_users || null, user.id,
+            note_type || 'note', touchpoint_type || null,
+          ],
+        })), 'write').catch(err => {
+          console.error('POST /api/notes cascade failed:', err);
+        });
+      }
+    }
 
     const row = result.rows[0];
     const response = {
