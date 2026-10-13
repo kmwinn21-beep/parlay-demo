@@ -261,5 +261,45 @@ console.log('\n— a company group can be peeked at from the attendee table —'
   eq('  and nothing is left at gray-400', /text-gray-400 hover:text-brand-secondary/.test(drawer), false);
 }
 
+console.log('\n— and a drawer has no Back button in it —');
+{
+  const company = strip('components/records/CompanyDetailView.tsx');
+  const attendee = strip('components/records/AttendeeDetailView.tsx');
+
+  /*
+   * A drawer already has a close button and a link to the record. Back was a
+   * third way out and the only one that lied: BackButton calls router.back(),
+   * which from a view rendered INLINE navigates the host page away behind the
+   * drawer still sitting open on top of it.
+   *
+   * Driven in Chromium over seven cases — both records, drawer and page,
+   * 1280, 480 and 390: Back is present on every page and on no drawer, and in
+   * the company's drawer the jump menu falls to x=0, the row's first slot,
+   * which is where Back was.
+   */
+  eq('the company drawer drops Back', /\{!isEmbed && <BackButton \/>\}/.test(company), true);
+  eq('  and so does the attendee drawer', /\{!isEmbed && <BackButton \/>\}/.test(attendee), true);
+  eq('  while a page keeps it', /<BackButton \/>/.test(company) && /<BackButton \/>/.test(attendee), true);
+
+  /*
+   * Both ways in count as a drawer. A quick view is rendered inline on a
+   * phone, which passes embedId, and framed above it, which does not — that
+   * one arrives as ?embed=true on the URL.
+   */
+  eq('the company knows it is embedded either way',
+    /const isEmbed = embedId != null \|\| searchParams\.get\('embed'\) === 'true';/.test(company), true);
+  eq('  as the attendee already did',
+    /const isEmbed = embedded \?\? \(searchParams\.get\('embed'\) === 'true'\);/.test(attendee), true);
+
+  // Nothing had to move: the row is justify-between, so losing its first child
+  // puts the jump menu there.
+  // `{}` is what stripping a JSX comment leaves behind between the two.
+  eq('the jump menu takes the empty slot',
+    /\{!isEmbed && <BackButton \/>\}\s*(\{\}\s*)?<SectionJumpMenu/.test(company), true);
+  // The attendee record has no jump menu to move: SectionJumpMenu reads
+  // [data-company-section] markers and the attendee's sections carry none.
+  eq('and the attendee has no jump menu to move', /SectionJumpMenu/.test(attendee), false);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

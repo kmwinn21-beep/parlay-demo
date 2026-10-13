@@ -1024,7 +1024,17 @@ export function AttendeeDetailView({ embedId, embedded, onEmbeddedLeave }: {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <BackButton />
+      {/*
+        No Back inside a drawer — see the same guard on CompanyDetailView. The
+        drawer already has a close button and a link to the record, and
+        router.back() from inside one rendered inline navigates the HOST page
+        out from behind it.
+
+        Nothing moves up into its place here: this record has no jump menu,
+        because SectionJumpMenu reads [data-company-section] markers and the
+        attendee's sections carry none.
+      */}
+      {!isEmbed && <BackButton />}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column (2/3 width) — profile + follow ups */}
         <div className="lg:col-span-2 space-y-6">
