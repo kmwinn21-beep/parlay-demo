@@ -201,6 +201,19 @@ export function NotesPopoverCard({
           content: noteText.trim(),
           conference_name: selectedConference || 'General Note',
           rep: selectedUser || null,
+          /*
+           * Put it on the company and the conference too.
+           *
+           * Every other way of writing a note posts those copies itself, and
+           * this card cannot: it is handed an attendee id and a conference
+           * name, and has no company at all. Notes written here landed on the
+           * attendee and nowhere else — missing from the company's notes and
+           * from the conference's, which is where they are looked for.
+           *
+           * The server has what this does not, so it does the fan-out. See
+           * POST /api/notes.
+           */
+          cascade: true,
         }),
       });
       if (!res.ok) throw new Error();
