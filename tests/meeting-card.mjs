@@ -277,7 +277,7 @@ console.log('\n— what must not scroll away —');
     /onSelect=\{hasSelection && !anySelected \? \(\) => toggleSelect\(m\.id\) : undefined\}/.test(card), true);
   const menu = table.slice(table.indexOf('function MeetingActionsMenu'), table.indexOf('\nfunction ', table.indexOf('function MeetingActionsMenu') + 1));
   eq('  as the first thing in the menu',
-    menu.indexOf('Select\n') < menu.indexOf('View Notes'), true);
+    menu.indexOf('Select\n') < menu.indexOf('Company Notes'), true);
   eq('  with an icon beside it, like every other entry',
     /onSelect\(\); \}\} className=\{itemCls\}>\s*\n\s*<svg/.test(menu), true);
   // The menu decides whether to open upward by counting its own entries.

@@ -180,8 +180,10 @@ console.log('\n— and the table says which row it is about —');
    * Measured at 1440px: the notes row stays at opacity 1 while every other
    * drops to 0.2.
    */
+  // The pre-meeting notes panel opens in the same slot and emphasises its row
+  // the same way, so the expression now names both — this one is the tail.
   eq('opening the notes emphasises that row',
-    /const emphasisedMeetingId = \(notesView && !isPhone\) \? notesView\.meeting\.id : focusedMeetingId;/.test(table), true);
+    /: \(notesView && !isPhone\) \? notesView\.meeting\.id : focusedMeetingId;/.test(table), true);
   eq('  through the emphasis the table already has',
     /focused: emphasisedMeetingId === m\.id,[\s\S]{0,120}otherFocused: emphasisedMeetingId != null && emphasisedMeetingId !== m\.id,/.test(table), true);
   eq('  and the row carries the picked-out fill too',

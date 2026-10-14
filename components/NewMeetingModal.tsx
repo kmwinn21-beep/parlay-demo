@@ -349,6 +349,15 @@ export function NewMeetingModal({
   // guest rather than as a meeting of their own.
   const [additionalAttendeeIds, setAdditionalAttendeeIds] = useState<number[]>([]);
   const [showAttendeePicker, setShowAttendeePicker] = useState(false);
+  /*
+   * A note about the meeting itself, written as it is booked.
+   *
+   * Kept on the meeting — entity_type 'meeting' — and not copied to the
+   * attendee, the company or the conference the way every other note is.
+   * That is the point of it: what to bring, who not to say it in front of.
+   */
+  const [showMeetingNote, setShowMeetingNote] = useState(false);
+  const [meetingNote, setMeetingNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [companyTypeLookup, setCompanyTypeLookup] = useState<Map<number, string | null>>(new Map());
   const [showFullCalendar, setShowFullCalendar] = useState(false);
@@ -629,6 +638,27 @@ export function NewMeetingModal({
         throw new Error(err.error || 'Failed to schedule meeting');
       }
       const created = await res.json();
+
+      /*
+       * The meeting's own note. Empty is empty — a box opened and left blank
+       * writes nothing, rather than an empty note that gives the row a count
+       * of one.
+       */
+      if (meetingNote.trim()) {
+        await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity_type: 'meeting',
+            entity_id: Number(created.id),
+            content: meetingNote.trim(),
+            conference_name: conferences.find(c => c.id === Number(selectedConferenceId))?.name ?? null,
+            // Nobody is notified: this is a note to the team about a meeting,
+            // not something said to the person it is with.
+            skip_notification: true,
+          }),
+        }).catch(() => toast.error('The meeting was saved, but its note was not.'));
+      }
 
       // Logging: the meeting is created Scheduled like any other, then moved to
       // its real outcome through the same PATCH the outcome pill uses — which
@@ -1018,20 +1048,65 @@ export function NewMeetingModal({
               </div>
             )}
 
-            {/* Meeting Location + Additional Attendees */}
+            {/*
+              Meeting Location keeps the half-width field it always had. The
+              two buttons take the line below it rather than sharing a column
+              with it: at this modal's width a third of the row is 158px, and
+              "Pre-Meeting Notes" wrapped onto two lines in it, which made one
+              button 46px tall beside a 30px one and read as two rows.
+            */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelClass}>Meeting Location</label>
                 <input type="text" className={inputClass} value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Room 201, Lobby Bar" />
               </div>
-              <div>
-                <label className={labelClass}>Additional Attendees</label>
+            </div>
+
+            <div>
+              <label className={labelClass}>Additional Attendees</label>
+              <div className="flex flex-wrap items-center gap-2">
                 <AdditionalAttendeesButton
                   count={additionalAttendeeIds.length + additionalInternalUserIds.length + additionalAttendees.length}
                   onClick={() => setShowAttendeePicker(true)}
                 />
+                {/* Built to AdditionalAttendeesButton's measurements so the two
+                    sit on one line rather than at two different heights. */}
+                <button
+                  type="button"
+                  onClick={() => setShowMeetingNote(v => !v)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-dashed text-xs font-medium transition-colors ${
+                    showMeetingNote
+                      ? 'border-brand-secondary bg-brand-secondary/5 text-brand-secondary'
+                      : 'border-gray-300 text-brand-secondary hover:border-brand-secondary hover:bg-brand-secondary/5'
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showMeetingNote ? 'M20 12H4' : 'M12 4v16m8-8H4'} />
+                  </svg>
+                  {isLog ? 'Meeting Notes' : 'Pre-Meeting Notes'}
+                </button>
               </div>
             </div>
+
+            {/*
+              One box, not a thread: the meeting does not exist yet, so there
+              is nothing to reply to. The thread opens from the row afterwards.
+            */}
+            {showMeetingNote && (
+              <div>
+                <label className={labelClass}>{isLog ? 'Meeting Note' : 'Pre-Meeting Note'}</label>
+                <textarea
+                  value={meetingNote}
+                  onChange={e => setMeetingNote(e.target.value)}
+                  rows={3}
+                  placeholder="Anything the team should know walking in…"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-secondary resize-none"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Stays on this meeting. Not added to the attendee, the company or the conference.
+                </p>
+              </div>
+            )}
           </form>
 
           {/* Sidebar — conference meetings (desktop: always visible, mobile: hidden — use sheet) */}

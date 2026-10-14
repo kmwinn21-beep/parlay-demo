@@ -194,6 +194,24 @@ export async function DELETE(
       });
     }
 
+    /*
+     * The meeting's own notes go with it.
+     *
+     * These are written against the meeting — entity_type 'meeting' — rather
+     * than copied out to the attendee, the company and the conference the way
+     * every other note is. So nothing else holds them, and left behind they
+     * would be rows pointing at a meeting that no longer exists.
+     *
+     * entity_notes is polymorphic, so no foreign key can do this: the column
+     * holding the id does not know which table it names. It has to be said
+     * out loud, and before the meeting goes, so a failure here leaves the
+     * meeting and its notes together rather than the notes alone.
+     */
+    await db.execute({
+      sql: `DELETE FROM entity_notes WHERE entity_type = 'meeting' AND entity_id = ?`,
+      args: [id],
+    });
+
     // Delete the meeting
     await db.execute({
       sql: 'DELETE FROM meetings WHERE id = ?',
