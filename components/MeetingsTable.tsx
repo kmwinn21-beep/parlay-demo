@@ -96,10 +96,10 @@ type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'con
 /**
  * The tooltip on a meeting's notes button.
  *
- * "Meeting notes", not "Notes": the kebab a few pixels away already offers
- * View Notes, and that means the attendee's notes for this conference. Two
- * buttons on one row, two different things, and the only thing telling them
- * apart is the words.
+ * "Meeting notes", not "Notes": the kebab a few pixels away offers Company
+ * Notes, and that means the attendee's notes for this conference. Two buttons
+ * on one row, two different things, and the only thing telling them apart is
+ * the words.
  */
 function meetingNoteTitle(count: number): string {
   if (count === 0) return 'Meeting notes';
@@ -709,7 +709,7 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
                 </svg>
                 {hasConferenceNotes && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-green-600" />}
               </span>
-              View Notes
+              Company Notes
             </button>
           )}
           {onQuickNote && (
@@ -1610,6 +1610,30 @@ export function MeetingsTable({
     panelRef: notesPanelRef,
     findAnchor: (wrap, key) => wrap.querySelector<HTMLElement>(`tr[data-meeting-id="${CSS.escape(key)}"]`),
   });
+  /*
+   * The pre-meeting notes panel, anchored the same way.
+   *
+   * Its own panel ref but the same wrap: the two never open together — see
+   * openMeetingNotes below — so they are measured against the same list and
+   * land in the same slot.
+   */
+  const [notesMeetingId, setNotesMeetingId] = useState<number | null>(null);
+  const [meetingNoteCounts, setMeetingNoteCounts] = useState<Record<number, number>>({});
+
+  /** Opening the meeting's notes closes the attendee's, and the other way round. */
+  const openMeetingNotes = useCallback((id: number) => {
+    setNotesView(null);
+    setNotesMeetingId(id);
+  }, []);
+  const meetingNotesPanelRef = useRef<HTMLDivElement>(null);
+  const { offset: meetingNotesOffset, overhang: meetingNotesOverhang } = useAnchoredDrawer({
+    open: notesMeetingId != null && !isPhone,
+    anchorKey: notesMeetingId != null ? String(notesMeetingId) : null,
+    wrapRef: notesWrapRef,
+    panelRef: meetingNotesPanelRef,
+    findAnchor: (wrap, key) => wrap.querySelector<HTMLElement>(`tr[data-meeting-id="${CSS.escape(key)}"]`),
+  });
+
   // What the card actually found, so adding a note lights the row's badge
   // without waiting for the list to be fetched again.
   const [noteCounts, setNoteCounts] = useState<Record<number, number>>({});
@@ -1684,8 +1708,6 @@ export function MeetingsTable({
    * counts that person's notes for the conference. Two counts, two meanings,
    * and sharing one map would have shown one row's number on another.
    */
-  const [notesMeetingId, setNotesMeetingId] = useState<number | null>(null);
-  const [meetingNoteCounts, setMeetingNoteCounts] = useState<Record<number, number>>({});
 
   // One request for every meeting on screen, the way the social event cards
   // fetch theirs.
@@ -1705,7 +1727,16 @@ export function MeetingsTable({
     return () => { cancelled = true; };
   }, [meetingIdKey]);
 
-  const emphasisedMeetingId = (notesView && !isPhone) ? notesView.meeting.id : focusedMeetingId;
+  /*
+   * Which row is lit while a panel is open, and the others dimmed.
+   *
+   * Either panel does it — they are the same slot showing two different kinds
+   * of note, and a reader needs to know which row they are reading about
+   * whichever one is open.
+   */
+  const emphasisedMeetingId = notesMeetingId != null && !isPhone
+    ? notesMeetingId
+    : (notesView && !isPhone) ? notesView.meeting.id : focusedMeetingId;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
   const avgCostPerUnit = useAvgCostPerUnit();
@@ -1950,6 +1981,36 @@ export function MeetingsTable({
       : null;
   const mobileConference = (m: Meeting) => (showConferencePill ? m.conference_name : null);
 
+  /*
+   * The pre-meeting notes panel, built once and placed twice.
+   *
+   * The table view anchors it to its row (below); the kanban and cards-only
+   * views have no rows to measure, so there it is rendered on its own at the
+   * end. One element, one of the two places — the button that opens it is on
+   * the mobile card as well as the row, and a panel that only renders beside
+   * a table would answer that tap with nothing.
+   */
+  const notesMeeting = notesMeetingId != null
+    ? meetings.find(x => x.id === notesMeetingId) ?? null
+    : null;
+  const meetingNotesDrawer = notesMeeting && (
+    <EntityNotesDrawer
+      entityType="meeting"
+      entityId={notesMeeting.id}
+      title={`${notesMeeting.first_name ?? ''} ${notesMeeting.last_name ?? ''}`.trim() || notesMeeting.company_name || 'Meeting'}
+      /* The date as well as the company: two meetings with the same person at
+         one conference are ordinary, and the header is the only thing saying
+         which one these notes are on. */
+      subtitle={[notesMeeting.company_name, formatMeetingDate(notesMeeting.meeting_date)].filter(Boolean).join(' · ')}
+      conferenceName={notesMeeting.conference_name}
+      tabLabel="Pre-Meeting Notes"
+      onClose={() => setNotesMeetingId(null)}
+      onCountChange={(id, count) => setMeetingNoteCounts(prev => ({ ...prev, [id]: count }))}
+    />
+  );
+  /** Whether the table — and so the row the panel anchors to — is on screen. */
+  const notesAnchorable = !cardsOnly && viewMode === 'table';
+
   const renderMobileCard = (m: Meeting) => (
       <div key={m.id} className="p-4 bg-white">
         {editingId === m.id && onEdit ? (
@@ -2019,7 +2080,7 @@ export function MeetingsTable({
                       something the menu also offers. */}
                   <CardNotesButton
                     count={meetingNoteCounts[m.id] ?? 0}
-                    onClick={() => setNotesMeetingId(m.id)}
+                    onClick={() => openMeetingNotes(m.id)}
                     onPhone
                     title={meetingNoteTitle(meetingNoteCounts[m.id] ?? 0)}
                   />
@@ -2028,7 +2089,7 @@ export function MeetingsTable({
                     hasConferenceNotes={noteCount(m) > 0}
                     onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
                     onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-                    onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
+                    onViewNotes={anchor => { setNotesMeetingId(null); setNotesView({ meeting: m, anchor }); }}
                     onEdit={() => setEditingId(m.id)}
                     onSelect={hasSelection && !anySelected ? () => toggleSelect(m.id) : undefined}
                   />
@@ -2512,7 +2573,7 @@ export function MeetingsTable({
                 cards put theirs, and what the request asked for. */}
             <CardNotesButton
               count={meetingNoteCounts[m.id] ?? 0}
-              onClick={() => setNotesMeetingId(m.id)}
+              onClick={() => openMeetingNotes(m.id)}
               title={meetingNoteTitle(meetingNoteCounts[m.id] ?? 0)}
             />
           <MeetingActionsMenu
@@ -2520,7 +2581,7 @@ export function MeetingsTable({
             hasConferenceNotes={noteCount(m) > 0}
             onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
             onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
-            onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
+            onViewNotes={anchor => { setNotesMeetingId(null); setNotesView({ meeting: m, anchor }); }}
             onEdit={() => setEditingId(m.id)}
           />
           </div>
@@ -2827,26 +2888,22 @@ export function MeetingsTable({
         Below lg the drawer draws itself as a bottom sheet, so the wrapper's
         positioning only applies where there is room beside the table.
       */}
-      {notesMeetingId != null && (() => {
-        const m = meetings.find(x => x.id === notesMeetingId);
-        if (!m) return null;
-        return (
-          <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-2 lg:z-20 lg:pt-2">
-            <EntityNotesDrawer
-              entityType="meeting"
-              entityId={m.id}
-              title={`${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || m.company_name || 'Meeting'}
-              /* The date as well as the company: two meetings with the same
-                 person at one conference are ordinary, and the header is the
-                 only thing saying which one these notes are on. */
-              subtitle={[m.company_name, formatMeetingDate(m.meeting_date)].filter(Boolean).join(' · ')}
-              conferenceName={m.conference_name}
-              onClose={() => setNotesMeetingId(null)}
-              onCountChange={(id, count) => setMeetingNoteCounts(prev => ({ ...prev, [id]: count }))}
-            />
+      {meetingNotesDrawer && (
+        <>
+          {/* Below the list, so the panel can be scrolled to in full even when
+              its row is near the bottom — and outside it, so growing this
+              cannot move the row the offset was measured against. */}
+          <div className="hidden lg:block" style={{ height: meetingNotesOverhang }} aria-hidden />
+          <div
+            className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-2 lg:z-20 lg:pointer-events-none"
+            style={{ paddingTop: meetingNotesOffset }}
+          >
+            <div ref={meetingNotesPanelRef} className="lg:pointer-events-auto">
+              {meetingNotesDrawer}
+            </div>
           </div>
-        );
-      })()}
+        </>
+      )}
       </div>
       )}
       {quickView && (
@@ -2886,6 +2943,12 @@ export function MeetingsTable({
           sheet, and that over the meeting card's own sheet is a worse answer
           than the card already there. The desktop panel is rendered beside the
           table above. */}
+      {/* And where there is no table, the same panel on its own: below sm the
+          drawer is a bottom sheet of its own making, and wider than that it
+          sits under the cards it was opened from. */}
+      {meetingNotesDrawer && !notesAnchorable && (
+        <div className="sm:px-4 sm:pb-4 sm:max-w-md sm:ml-auto">{meetingNotesDrawer}</div>
+      )}
       {notesView && isPhone && (
         <NotesPopoverCard
           attendeeId={notesView.meeting.attendee_id}

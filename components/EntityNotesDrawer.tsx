@@ -56,7 +56,7 @@ function toThreadNote(r: EntityNoteRow, currentUserId: number | null | undefined
 }
 
 export function EntityNotesDrawer({
-  entityType, entityId, title, subtitle, conferenceName, onClose, onCountChange,
+  entityType, entityId, title, subtitle, conferenceName, tabLabel = 'Notes', onClose, onCountChange,
 }: {
   /** The `entity_notes.entity_type` these belong to — 'social_event', 'meeting'. */
   entityType: string;
@@ -67,6 +67,13 @@ export function EntityNotesDrawer({
   subtitle?: string | null;
   /** Stored on each note, as every other note surface stores it. */
   conferenceName?: string | null;
+  /**
+   * What the panel calls these notes.
+   *
+   * A social event's are just its notes. A meeting's share a row with the
+   * kebab's Company Notes, so the panel has to say which of the two is open.
+   */
+  tabLabel?: string;
   onClose: () => void;
   onCountChange?: (entityId: number, count: number) => void;
 }) {
@@ -226,7 +233,7 @@ export function EntityNotesDrawer({
 
         <div className="flex border-b border-gray-100 flex-shrink-0">
           <span className="flex-1 py-2 text-xs font-medium text-center border-b-2 border-brand-secondary text-brand-secondary">
-            Notes
+            {tabLabel}
           </span>
         </div>
 

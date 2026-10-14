@@ -80,10 +80,66 @@ console.log('\n— a button where the request asked for one —');
 
   /*
    * And the tooltip says which notes these are. The kebab a few pixels away
-   * already offers View Notes, which means the attendee's.
+   * offers Company Notes, which means the attendee's.
    */
   eq('the tooltip names them', /return 'Meeting notes';/.test(table), true);
   eq('  and counts them', /\$\{count\} meeting note\$\{count === 1 \? '' : 's'\}/.test(table), true);
+}
+
+console.log('\n— and the two are told apart by name —');
+{
+  /*
+   * One row, two ways in: the button on the row opens this meeting's own
+   * notes, the kebab opens the attendee's notes for the conference. Both used
+   * to say "Notes" somewhere, which is the one thing that makes them
+   * indistinguishable.
+   */
+  eq('the panel says which notes it is showing', /tabLabel="Pre-Meeting Notes"/.test(table), true);
+  eq('  because the panel takes its own label', /tabLabel = 'Notes'/.test(drawer), true);
+  eq('  and renders it instead of a fixed word', /\{tabLabel\}/.test(drawer), true);
+  eq('the kebab says whose notes it opens', /\n\s*Company Notes\n/.test(table), true);
+  eq('  and nothing is left saying just View Notes', /^\s*View Notes$/m.test(table), false);
+}
+
+console.log('\n— opening it anchors to the row, like the other panel —');
+{
+  /*
+   * The requested behaviour, which the attendee panel already had: the panel's
+   * top edge meets the top edge of its row, the row lights and the rest dim.
+   * Measured rather than computed — the rows are not all one height.
+   */
+  eq('the panel is anchored to its row',
+    /useAnchoredDrawer\(\{\n\s*open: notesMeetingId != null && !isPhone,/.test(table), true);
+  eq('  against the row carrying that meeting’s id',
+    /anchorKey: notesMeetingId != null \? String\(notesMeetingId\) : null,/.test(table), true);
+  eq('  with its own panel to measure', /panelRef: meetingNotesPanelRef,/.test(table), true);
+  eq('  offset so its top meets the row’s', /paddingTop: meetingNotesOffset/.test(table), true);
+  eq('  and room below so a low row can still be scrolled to',
+    /style=\{\{ height: meetingNotesOverhang \}\}/.test(table), true);
+
+  // The row lights for EITHER panel: they are one slot showing two kinds of
+  // note, and the reader needs to know which row they are reading about.
+  eq('the row is emphasised while it is open',
+    /const emphasisedMeetingId = notesMeetingId != null && !isPhone\n\s*\? notesMeetingId/.test(table), true);
+  eq('  and the others dim', /otherFocused: emphasisedMeetingId != null && emphasisedMeetingId !== m\.id,/.test(table), true);
+
+  /*
+   * Which only works because they are never both open. They share one wrap and
+   * one slot on screen; two panels there would overlap, and two lit rows would
+   * answer the same question twice.
+   */
+  eq('opening this one closes the other',
+    /openMeetingNotes = useCallback\(\(id: number\) => \{\n\s*setNotesView\(null\);\n\s*setNotesMeetingId\(id\);/.test(table), true);
+  eq('  and the button on the row goes through it', /onClick=\{\(\) => openMeetingNotes\(m\.id\)\}/.test(table), true);
+
+  /*
+   * Built once and placed twice. The button is on the mobile card as well as
+   * the row, and the kanban and cards-only views have no row to anchor to — a
+   * panel rendered only beside the table answers that tap with nothing.
+   */
+  eq('the panel itself is built once', (table.match(/<EntityNotesDrawer/g) ?? []).length, 1);
+  eq('  anchored where there is a table', /const notesAnchorable = !cardsOnly && viewMode === 'table';/.test(table), true);
+  eq('  and on its own where there is not', /\{meetingNotesDrawer && !notesAnchorable && \(/.test(table), true);
 }
 
 console.log('\n— written as the meeting is booked —');
