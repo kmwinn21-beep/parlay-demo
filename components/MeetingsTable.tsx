@@ -2766,7 +2766,13 @@ export function MeetingsTable({
       {!cardsOnly && viewMode === 'table' && (
       /* relative, so the notes panel's column can be absolutely placed inside
          it — the same shape the follow-ups table wraps its own drawer in. */
-      <div ref={notesWrapRef} className="relative">
+      <div className="relative">
+      {/* What the panel is measured against: the list ALONE.
+          The spacer below is deliberately a sibling of this rather than a
+          child — inside it, the spacer would grow the thing whose height
+          decides how tall the spacer should be, and the two would chase each
+          other forever instead of settling. */}
+      <div ref={notesWrapRef}>
       <div
         ref={meetingTableRef}
         className={`hidden lg:block ${CARD_TABLE_WRAP}`}
@@ -2849,11 +2855,13 @@ export function MeetingsTable({
         </table>
       </div>
       </div>
+      </div>
 
       {/* The notes panel, in a column at the table's right and level with the
           row that opened it. The spacer below gives a panel anchored near the
-          bottom somewhere to scroll to; it sits outside the table so growing
-          it cannot move the row the offset was measured against. */}
+          bottom somewhere to scroll to; it sits outside the measured list so
+          growing it cannot move the row the offset was measured against — or
+          shrink the overhang that put it there. */}
       {notesView && !isPhone && (
         <>
           <div className="hidden lg:block" style={{ height: notesOverhang }} aria-hidden />

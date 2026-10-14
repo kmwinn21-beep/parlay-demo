@@ -160,6 +160,30 @@ console.log('\n— opened beside the row that asked for it —');
   eq('  with room below for a panel near the end', /style=\{\{ height: notesOverhang \}\}/.test(table), true);
 
   /*
+   * And the spacer is OUTSIDE what the hook measures.
+   *
+   * The overhang is how far the panel hangs past the end of the list, so it
+   * is measured against the list's height. Put the spacer inside the measured
+   * element and it grows that height, which shrinks the overhang, which
+   * shrinks the spacer, which grows the overhang again: measured in Chromium
+   * at 1440px, it flipped between 387px and 36px about four times a second
+   * and never settled. The scroll that brings the panel into view is debounced
+   * off the same value, so it was cancelled every time and a panel opened from
+   * the bottom row hung off the end of a page that would not scroll.
+   *
+   * Hence: `relative` for the absolute column on the outside, the measured
+   * wrap holding the list alone, and the spacer a sibling of it — the shape
+   * the follow-ups table and the outreach tab already use.
+   */
+  eq('  and the measured wrap holds the list alone',
+    /<div ref=\{notesWrapRef\}>\s*<div\s*\n\s*ref=\{meetingTableRef\}/.test(table), true);
+  eq('  with the positioning on a wrapper outside it',
+    /<div className="relative">[\s\S]{0,600}<div ref=\{notesWrapRef\}>/.test(table), true);
+  eq('  and nothing measured carrying a spacer',
+    /<div ref=\{notesWrapRef\}>[\s\S]*?style=\{\{ height: notesOverhang \}\}/.test(
+      table.slice(table.indexOf('<div ref={notesWrapRef}>'), table.indexOf('</table>'))), false);
+
+  /*
    * Desktop only. SlideInPanel's mobile form is a 75vh bottom sheet, and that
    * over the meeting card's own sheet is a worse answer than the popover that
    * is already there.
