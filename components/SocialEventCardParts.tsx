@@ -387,13 +387,27 @@ export function CardGuestListButton({ count, onClick }: { count: number; onClick
   );
 }
 
-export function CardNotesButton({ count, onClick }: { count: number; onClick: () => void }) {
+export function CardNotesButton({ count, onClick, onPhone = false, title }: {
+  count: number;
+  onClick: () => void;
+  /**
+   * Shown below sm as well.
+   *
+   * A social event's card hides this on a phone because its menu offers the
+   * same thing a few pixels away. A meeting's card has no notes entry in its
+   * menu, so there the button IS the way in and has to be on screen.
+   */
+  onPhone?: boolean;
+  /** Overrides the tooltip, for a surface where "Notes" means something else. */
+  title?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title={count > 0 ? `${count} note${count === 1 ? '' : 's'}` : 'Notes'}
-      className="relative hidden sm:flex flex-shrink-0 w-8 h-8 rounded-full border border-gray-200 text-gray-500 hover:text-brand-secondary hover:border-brand-secondary/40 hover:bg-brand-secondary/5 transition-colors items-center justify-center"
+      title={title ?? (count > 0 ? `${count} note${count === 1 ? '' : 's'}` : 'Notes')}
+      className={`relative ${onPhone ? 'flex' : 'hidden sm:flex'} flex-shrink-0 w-8 h-8 rounded-full border text-gray-500 hover:text-brand-secondary hover:border-brand-secondary/40 hover:bg-brand-secondary/5 transition-colors items-center justify-center ${
+        count > 0 ? 'border-brand-secondary/40 text-brand-secondary' : 'border-gray-200'}`}
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h8m-8 4h5m1 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

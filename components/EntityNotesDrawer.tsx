@@ -10,9 +10,17 @@ import {
 } from './ThreadNoteRow';
 
 /**
- * Notes for one social event, shaped like the outreach tab's notes drawer: a
- * panel that reveals itself beside the cards on desktop and a bottom sheet
- * below sm, with the same threaded note rows and @mention composer.
+ * The notes on one record, as a panel beside it.
+ *
+ * Reveals itself from the right on desktop and rises as a bottom sheet below
+ * sm, with threaded note rows and an @mention composer. Written for social
+ * events and generalised when meetings wanted the same thing — the second
+ * caller got the component rather than a copy of it, which is how the note
+ * fan-out came to be wrong in nine places.
+ *
+ * The entity decides everything: a social event's notes and a meeting's are
+ * the same rows in the same table under a different `entity_type`, so neither
+ * this nor /api/notes has to know which it is looking at.
  */
 
 const ANIMATION_MS = 220;
@@ -47,14 +55,20 @@ function toThreadNote(r: EntityNoteRow, currentUserId: number | null | undefined
   };
 }
 
-export function SocialEventNotesDrawer({
-  eventId, eventName, conferenceName, onClose, onCountChange,
+export function EntityNotesDrawer({
+  entityType, entityId, title, subtitle, conferenceName, onClose, onCountChange,
 }: {
-  eventId: number;
-  eventName: string;
-  conferenceName: string;
+  /** The `entity_notes.entity_type` these belong to — 'social_event', 'meeting'. */
+  entityType: string;
+  entityId: number;
+  /** The record's name, in the panel's header. */
+  title: string;
+  /** A second line under it, where the record has one worth showing. */
+  subtitle?: string | null;
+  /** Stored on each note, as every other note surface stores it. */
+  conferenceName?: string | null;
   onClose: () => void;
-  onCountChange?: (eventId: number, count: number) => void;
+  onCountChange?: (entityId: number, count: number) => void;
 }) {
   const { user } = useUser();
   const userOptions = useUserOptions();
@@ -98,19 +112,19 @@ export function SocialEventNotesDrawer({
   useEffect(() => {
     let cancelled = false;
     setNotes(null);
-    fetch(`/api/notes?entity_type=social_event&entity_id=${eventId}`)
+    fetch(`/api/notes?entity_type=${entityType}&entity_id=${entityId}`)
       .then(r => (r.ok ? r.json() : Promise.reject()))
       .then((rows: EntityNoteRow[]) => {
         if (cancelled) return;
         const list = Array.isArray(rows) ? rows.map(r => toThreadNote(r, user?.id)) : [];
         setNotes(list);
-        onCountChange?.(eventId, list.length);
+        onCountChange?.(entityId, list.length);
       })
       .catch(() => { if (!cancelled) setNotes([]); });
     return () => { cancelled = true; };
     // onCountChange is a parent callback; keying on it would refetch every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId, user?.id]);
+  }, [entityType, entityId, user?.id]);
 
   const handlePostNote = async () => {
     const body = noteDraft.trim();
@@ -121,10 +135,10 @@ export function SocialEventNotesDrawer({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          entity_type: 'social_event',
-          entity_id: eventId,
+          entity_type: entityType,
+          entity_id: entityId,
           content: body,
-          conference_name: conferenceName,
+          conference_name: conferenceName ?? null,
           rep: user?.displayName || null,
           tagged_users: taggedUserIds.length > 0 ? taggedUserIds.join(',') : null,
         }),
@@ -133,7 +147,7 @@ export function SocialEventNotesDrawer({
       const created = await res.json() as EntityNoteRow;
       setNotes(prev => {
         const next = [...(prev ?? []), toThreadNote(created, user?.id)];
-        onCountChange?.(eventId, next.length);
+        onCountChange?.(entityId, next.length);
         return next;
       });
       setNoteDraft('');
@@ -199,7 +213,12 @@ export function SocialEventNotesDrawer({
           : 'drawer-mobile-responsive fixed inset-x-0 bottom-0 z-50 h-[75vh] w-full rounded-t-2xl border border-gray-200 bg-white overflow-hidden flex flex-col'}
       >
         <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-gray-100 flex-shrink-0">
-          <p className="text-xs font-semibold text-gray-700 truncate">{eventName}</p>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-gray-700 truncate">{title}</p>
+            {/* A meeting needs its time to be told from the next one with the
+                same person on it; a social event's name stands alone. */}
+            {subtitle && <p className="text-[11px] text-gray-400 truncate">{subtitle}</p>}
+          </div>
           <button type="button" onClick={handleClose} className="text-gray-300 hover:text-gray-600 transition-colors flex-shrink-0" title="Close">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
@@ -235,7 +254,7 @@ export function SocialEventNotesDrawer({
                     onUpdated={updated => setNotes(prev => (prev ?? []).map(x => x.id === updated.id ? updated : x))}
                     onDeleted={noteId => setNotes(prev => {
                       const next = (prev ?? []).filter(x => x.id !== noteId);
-                      onCountChange?.(eventId, next.length);
+                      onCountChange?.(entityId, next.length);
                       return next;
                     })}
                   />

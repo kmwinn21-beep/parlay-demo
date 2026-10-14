@@ -19,7 +19,7 @@ import { useTableColumnConfig, useCustomColumns } from '@/lib/useTableColumnConf
 import { CustomColumnCell } from './CustomColumnCell';
 import { CardActionMenu, CardField, CardGuestListButton, CardNotesButton, SocialEventCardBody } from './SocialEventCardParts';
 import { ConferenceDatePicker } from './ConferenceDatePicker';
-import { SocialEventNotesDrawer } from './SocialEventNotesDrawer';
+import { EntityNotesDrawer } from './EntityNotesDrawer';
 import { AttendeeInitialsAvatar } from './AttendeePhoto';
 import {
   EMPTY_RANK, RANK_VALUES, rankBadgeClass, sortByRank,
@@ -1760,9 +1760,10 @@ export function SocialEventsTable({
         </div>
           {notesEventId != null && (
             <div className="sm:w-[300px] sm:flex-shrink-0">
-              <SocialEventNotesDrawer
-                eventId={notesEventId}
-                eventName={events.find(e => e.id === notesEventId)?.event_name || 'Social Event'}
+              <EntityNotesDrawer
+                entityType="social_event"
+                entityId={notesEventId}
+                title={events.find(e => e.id === notesEventId)?.event_name || 'Social Event'}
                 conferenceName={conferenceName}
                 onClose={() => setNotesEventId(null)}
                 onCountChange={(id, count) => setNoteCounts(prev => ({ ...prev, [id]: count }))}

@@ -17,6 +17,8 @@ import { useUser } from '@/components/UserContext';
 import { OverlappingRepPills, OverlappingStatusBadges } from '@/components/OverlappingRepPills';
 import { NotesPopoverCard } from '@/components/NotesPopoverCard';
 import { MeetingNotesPanel } from '@/components/MeetingNotesPanel';
+import { EntityNotesDrawer } from '@/components/EntityNotesDrawer';
+import { CardNotesButton } from '@/components/SocialEventCardParts';
 import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
 import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
@@ -90,6 +92,19 @@ function AdditionalAttendeeBadge() {
 }
 
 type SortKey = 'name' | 'title' | 'scheduled_by' | 'company' | 'datetime' | 'conference' | 'meeting_type' | 'outcome';
+
+/**
+ * The tooltip on a meeting's notes button.
+ *
+ * "Meeting notes", not "Notes": the kebab a few pixels away already offers
+ * View Notes, and that means the attendee's notes for this conference. Two
+ * buttons on one row, two different things, and the only thing telling them
+ * apart is the words.
+ */
+function meetingNoteTitle(count: number): string {
+  if (count === 0) return 'Meeting notes';
+  return `${count} meeting note${count === 1 ? '' : 's'}`;
+}
 
 function formatMeetingDate(d: string) {
   if (!d) return '';
@@ -1661,6 +1676,35 @@ export function MeetingsTable({
    * them belonged to both. On a phone there is no panel, so it is just the
    * clicked card as before.
    */
+  /*
+   * The meeting's own notes — the thread kept ON the meeting rather than on
+   * the person it is with.
+   *
+   * Deliberately not `noteCounts` above, which is keyed by ATTENDEE id and
+   * counts that person's notes for the conference. Two counts, two meanings,
+   * and sharing one map would have shown one row's number on another.
+   */
+  const [notesMeetingId, setNotesMeetingId] = useState<number | null>(null);
+  const [meetingNoteCounts, setMeetingNoteCounts] = useState<Record<number, number>>({});
+
+  // One request for every meeting on screen, the way the social event cards
+  // fetch theirs.
+  const meetingIdKey = meetings.map(m => m.id).join(',');
+  useEffect(() => {
+    if (!meetingIdKey) { setMeetingNoteCounts({}); return; }
+    let cancelled = false;
+    fetch(`/api/notes?entity_type=meeting&entity_ids=${meetingIdKey}`)
+      .then(res => (res.ok ? res.json() : []))
+      .then((rows: Array<{ entity_id: number }>) => {
+        if (cancelled || !Array.isArray(rows)) return;
+        const counts: Record<number, number> = {};
+        for (const r of rows) counts[Number(r.entity_id)] = (counts[Number(r.entity_id)] ?? 0) + 1;
+        setMeetingNoteCounts(counts);
+      })
+      .catch(() => { /* the badge just stays at zero */ });
+    return () => { cancelled = true; };
+  }, [meetingIdKey]);
+
   const emphasisedMeetingId = (notesView && !isPhone) ? notesView.meeting.id : focusedMeetingId;
   const hasSelection = !!(onBulkDelete || onBulkUpdate);
   const { user } = useUser();
@@ -1969,7 +2013,16 @@ export function MeetingsTable({
               {/* Opaque, and the name scrolls underneath: a long company name
                   slides out of sight behind this rather than being cut off. */}
               {(onEdit || onNotesClick) && (
-                <div className="absolute right-0 top-0 pl-1.5 bg-white">
+                <div className="absolute right-0 top-0 pl-1.5 bg-white flex items-center gap-1.5">
+                  {/* onPhone: the meeting card's menu has no notes entry, so
+                      here the button IS the way in rather than a shortcut to
+                      something the menu also offers. */}
+                  <CardNotesButton
+                    count={meetingNoteCounts[m.id] ?? 0}
+                    onClick={() => setNotesMeetingId(m.id)}
+                    onPhone
+                    title={meetingNoteTitle(meetingNoteCounts[m.id] ?? 0)}
+                  />
                   <MeetingActionsMenu
                     hasNotes={!!m.has_notes}
                     hasConferenceNotes={noteCount(m) > 0}
@@ -2454,6 +2507,14 @@ export function MeetingsTable({
       ))}
       {hasActions && (
         <td className="px-3 py-2">
+          <div className="flex items-center gap-1.5">
+            {/* Between the outcome and the kebab — where the social event
+                cards put theirs, and what the request asked for. */}
+            <CardNotesButton
+              count={meetingNoteCounts[m.id] ?? 0}
+              onClick={() => setNotesMeetingId(m.id)}
+              title={meetingNoteTitle(meetingNoteCounts[m.id] ?? 0)}
+            />
           <MeetingActionsMenu
             hasNotes={!!m.has_notes}
             hasConferenceNotes={noteCount(m) > 0}
@@ -2462,6 +2523,7 @@ export function MeetingsTable({
             onViewNotes={anchor => setNotesView({ meeting: m, anchor })}
             onEdit={() => setEditingId(m.id)}
           />
+          </div>
         </td>
       )}
     </tr>
@@ -2756,6 +2818,35 @@ export function MeetingsTable({
           </div>
         </>
       )}
+
+      {/*
+        The meeting's own notes, in the same right-hand slot the attendee's
+        notes use — so the two never share the screen and a reader is only
+        ever looking at one kind of note.
+
+        Below lg the drawer draws itself as a bottom sheet, so the wrapper's
+        positioning only applies where there is room beside the table.
+      */}
+      {notesMeetingId != null && (() => {
+        const m = meetings.find(x => x.id === notesMeetingId);
+        if (!m) return null;
+        return (
+          <div className="lg:absolute lg:inset-y-0 lg:right-0 lg:w-96 lg:pr-2 lg:z-20 lg:pt-2">
+            <EntityNotesDrawer
+              entityType="meeting"
+              entityId={m.id}
+              title={`${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || m.company_name || 'Meeting'}
+              /* The date as well as the company: two meetings with the same
+                 person at one conference are ordinary, and the header is the
+                 only thing saying which one these notes are on. */
+              subtitle={[m.company_name, formatMeetingDate(m.meeting_date)].filter(Boolean).join(' · ')}
+              conferenceName={m.conference_name}
+              onClose={() => setNotesMeetingId(null)}
+              onCountChange={(id, count) => setMeetingNoteCounts(prev => ({ ...prev, [id]: count }))}
+            />
+          </div>
+        );
+      })()}
       </div>
       )}
       {quickView && (
