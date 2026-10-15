@@ -1,17 +1,19 @@
 /**
- * The conference tabs as a strip of tiles, and the dots under it.
+ * The conference tabs as a grid of tiles.
  *
  *   node --experimental-strip-types --import ./tests/register-ts.mjs \
  *        tests/conference-tab-strip.mjs
  *
  * Eleven tabs rendered as words showed four of them on a 390px screen and
  * gave no sign that seven more existed. They are now tiles — a coloured glyph
- * over a label, the shape the dashboard's Quick Views uses — with dots
- * underneath saying how much more there is in items rather than in pixels.
+ * over a label, the shape the dashboard's Quick Views uses.
  *
- * The dot rule is RUN. One dot to three tiles, and the dot for the group in
- * view grows while the one you left shrinks, continuously rather than in
- * steps — which is the part that cannot be read off the markup.
+ * They were one scrolling row with dots under it counting the groups you had
+ * not reached. Four to a row and a row to a card instead: every tab is on
+ * screen, so there is nothing left for an indicator to indicate.
+ *
+ * The rows are RUN, over the page's own eleven and over the edges either
+ * side of a full row — the part that cannot be read off the markup.
  *
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
@@ -25,59 +27,29 @@ const eq = (label, got, want) => {
   if (g === w) { pass++; console.log(`  ok   ${label}`); }
   else { fail++; console.log(`  FAIL ${label}\n       got  ${g}\n       want ${w}`); }
 };
-const near = (label, got, want, tol = 0.001) => {
-  if (Math.abs(got - want) <= tol) { pass++; console.log(`  ok   ${label}`); }
-  else { fail++; console.log(`  FAIL ${label}\n       got  ${got}\n       want ${want}`); }
-};
-
 const strip = (f) => readFileSync(f, 'utf8')
-  .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  .replace(/(^|[\s{(,;])\/\*[\s\S]*?\*\//g, '$1').replace(/^\s*\/\/.*$/gm, '');
 
-const { dotCount, activeDotPosition, dotScale, TILES_PER_DOT } = await import('@/lib/scrollDots');
+const { tileRows, TILES_PER_ROW } = await import('@/lib/tileRows');
 
-console.log('\n— one dot to three tiles —');
+console.log('\n— four to a row —');
 {
-  eq('three to a dot', TILES_PER_DOT, 3);
-  // The page's own eleven.
-  eq('eleven tabs get four dots', dotCount(11), 4);
-  eq('  nine get three', dotCount(9), 3);
-  eq('  ten get four', dotCount(10), 4);
-  eq('  one gets one', dotCount(1), 1);
-  eq('  and none gets none', dotCount(0), 0);
-}
+  const n = (count) => tileRows(Array.from({ length: count }, (_, i) => i)).map(r => r.length);
 
-console.log('\n— where the strip says it is —');
-{
-  // Measured from scroll progress, not from a tile width: the tiles are not
-  // all the same width because their labels differ, so counting three tiles
-  // along in pixels would drift and never quite reach the last dot.
-  near('at the start, the first dot', activeDotPosition(0, 1200, 390, 4), 0);
-  near('  at the end, the last', activeDotPosition(810, 1200, 390, 4), 3);
-  near('  halfway, between the middle two', activeDotPosition(405, 1200, 390, 4), 1.5);
+  eq('four to a row', TILES_PER_ROW, 4);
+  // The page's own eleven: two full rows and a short one.
+  eq('eleven tabs make 4, 4 and 3', n(11), [4, 4, 3]);
+  // The edges either side of a full row, where an off-by-one would show.
+  eq('  four make one row', n(4), [4]);
+  eq('  five make two', n(5), [4, 1]);
+  eq('  eight make two full ones', n(8), [4, 4]);
+  eq('  one makes one', n(1), [1]);
+  eq('  and none makes none', n(0), []);
 
-  // Nothing to scroll, and a single dot, both resolve rather than dividing
-  // by zero.
-  near('nothing to scroll is the first dot', activeDotPosition(0, 390, 390, 4), 0);
-  near('  and a lone dot is always itself', activeDotPosition(500, 1200, 390, 1), 0);
-  // A rubber-band overscroll must not push it past either end.
-  near('overscrolling past the end clamps', activeDotPosition(2000, 1200, 390, 4), 3);
-  near('  and past the start', activeDotPosition(-80, 1200, 390, 4), 0);
-}
-
-console.log('\n— and how big each dot is —');
-{
-  eq('the dot you are on is full size', dotScale(2, 2), 1);
-  eq('  its neighbours are at their smallest', dotScale(1, 2), 0);
-  eq('  and anything further too', dotScale(0, 2), 0);
-
-  /*
-   * The part that makes it read as a position rather than a counter: half way
-   * between two groups, both dots are half way between the two sizes. A
-   * stepped version would have one dot at full size the whole way and snap.
-   */
-  near('half way between two, both are half', dotScale(1, 1.5), 0.5);
-  near('  and so is the other', dotScale(2, 1.5), 0.5);
-  near('  a quarter of the way, three quarters', dotScale(1, 1.25), 0.75);
+  // Order is the order given: the rows are a wrap of the tab list, not a
+  // regrouping of it, so the tabs read left to right and top to bottom in
+  // the order the page lists them.
+  eq('the order is kept', tileRows(['a', 'b', 'c', 'd', 'e']), [['a', 'b', 'c', 'd'], ['e']]);
 }
 
 console.log('\n— the tiles —');
@@ -89,9 +61,9 @@ console.log('\n— the tiles —');
    *
    * At this size a 36px circle is a small target to aim at and a small thing
    * to tell apart; the tint reaching the tile's edge gives both the colour
-   * and the tap area the full 88x76.
+   * and the tap area the whole tile.
    */
-  eq('the tint is the tile', /w-\[88px\] h-\[76px\] rounded-xl[\s\S]{0,120}\$\{\s*style\.tint\}/.test(strip_), true);
+  eq('the tint is the tile', /w-full h-\[76px\] rounded-xl[\s\S]{0,140}\$\{\s*style\.tint\}/.test(strip_), true);
   eq('  with the glyph over the label', /<p className=\{`text-\[11px\]/.test(strip_), true);
 
   /*
@@ -123,21 +95,24 @@ console.log('\n— the tiles —');
   eq('  and a ring', (style.match(/ring: 'ring-/g) ?? []).length, 12);
 
   /*
-   * Room below the tiles as well as above, and it is not decoration.
+   * Four to a row, laid out rather than scrolled.
    *
-   * `overflow-x-auto` clips the vertical axis too, and two things paint
-   * outside a tile's box: the badge above the top edge, and `ring-offset-1`,
-   * which pushes the open tab's ring 3px past every edge. With the tiles
-   * flush against the scroller the ring's bottom was shaved off. Measured at
-   * 390px: clip box 49.5-141.5, ring paint 54.5-136.5.
+   * The row used to scroll sideways with dots under it counting the groups
+   * out of view — so seven of eleven tabs were a swipe away and the dots were
+   * the only sign of them. Nothing scrolls now and nothing clips: the badge
+   * sits above the tile's top edge and `ring-offset-1` pushes the open tab's
+   * ring 3px past every edge, both of which the scroller cut off.
+   *
+   * Measured at 480px, the drawer's width, over the page's eleven: three
+   * cards of 4, 4 and 3, every tile 100px, every gap 8px, no scroller, no
+   * dots, and no badge past the edge of the frame. At 390px the same, at
+   * 77px a tile.
    */
-  eq('the scroller leaves room for the ring it would otherwise clip',
-    /overflow-x-auto scrollbar-hide px-3 pt-2 pb-2/.test(strip_), true);
-
-  // Now that the tint fills the tile, 4px between two solid blocks of colour
-  // read as one two-tone shape, and a badge sat close enough to its neighbour
-  // to look as though it belonged to it.
-  eq('  and the tiles are set 8px apart, not 4', /flex gap-2 overflow-x-auto/.test(strip_), true);
+  eq('the tiles are a grid of four', /<div className="grid grid-cols-4 gap-2">/.test(strip_), true);
+  eq('  cut into rows by the shared rule', /tileRows\(tabs\)\.map\(\(row, i\) =>/.test(strip_), true);
+  eq('  and nothing scrolls sideways', /overflow-x-auto/.test(strip_), false);
+  eq('there are no dots under it', /dotCount|dotScale|activeDotPosition/.test(strip_), false);
+  eq('  and nothing left to measure for them', /ResizeObserver|onScroll/.test(strip_), false);
 
   /*
    * The count is a badge in the tab's own colour, not a parenthesis.
@@ -152,10 +127,8 @@ console.log('\n— the tiles —');
   eq('  and the digits do not jitter', /tabular-nums/.test(strip_), true);
   eq('  no badge at all when there is nothing to count', /count !== null && \(/.test(strip_), true);
 
-  // No scrollbar and no chevrons: the dots are the indicator, and two of them
-  // in different units would be worse than one.
-  eq('the row hides its scrollbar', /overflow-x-auto scrollbar-hide/.test(strip_), true);
-  eq('  and offers no chevrons', /Scroll (left|right)/.test(strip_), false);
+  // Nothing to scroll means nothing to steer it with either.
+  eq('the strip offers no chevrons', /Scroll (left|right)/.test(strip_), false);
 
   /*
    * In a card, like the dashboard's Quick Views.
@@ -165,19 +138,43 @@ console.log('\n— the tiles —');
    * against the conference card above it: same background, same 12px radius,
    * same 1px gray-100 border, same 358px width.
    *
-   * Only the padding differs. A scroller inside a 24px gutter stops short of
-   * the card's own edge and reads as cut off, so the sides come off and the
-   * row carries its own inset instead.
+   * Only the padding differs, and a card per ROW: the gap between the rows is
+   * the gap between the cards, and the page's own stack spaces this component
+   * rather than what is inside it.
    */
-  eq('the strip sits in a card', /lg:hidden card !px-0 !py-2/.test(strip_), true);
-  eq('  with the row holding the inset', /overflow-x-auto scrollbar-hide px-3/.test(strip_), true);
+  eq('each row sits in a card', /<div key=\{i\} className="card !px-3 !py-3">/.test(strip_), true);
+  eq('  and the rows are spaced as a stack', /<div className="lg:hidden space-y-3">/.test(strip_), true);
 
   // An account can add a tab the table has never heard of.
   eq('an unknown tab still gets a tile',
     /CONFERENCE_TAB_STYLE\[key\] \?\? CONFERENCE_TAB_FALLBACK/.test(style), true);
-  // lg:hidden on the card itself, so the whole section goes on a pointer —
-  // where the tab row is the row of words it always was.
-  eq('  and the strip is mobile only', /lg:hidden card/.test(strip_), true);
+  // lg:hidden on the stack, so the whole section goes on a pointer — where
+  // the tab row is the row of words it always was.
+  eq('  and the strip is mobile only', /lg:hidden space-y-3/.test(strip_), true);
+}
+
+console.log('\n— and the drawer meets the header above it —');
+{
+  const page = strip('app/conferences/[id]/page.tsx');
+
+  /*
+   * Whichever header that is.
+   *
+   * On the page it is the app's mobile header, and --mobile-header-h carries
+   * the safe-area inset with it. Framed in a quick-view drawer there is no
+   * app header inside the frame — the frame's top edge IS the drawer header's
+   * bottom edge — so the variable left 85px of nothing above the panel, with
+   * the report row showing through it. Measured in Chromium in a 480px frame:
+   * the old value put the panel's top at 85, the new one at 0.
+   */
+  eq('the drawer stops at the header it is under',
+    /top: isEmbed \? 0 : 'var\(--mobile-header-h\)',/.test(page), true);
+  eq('  knowing when it is framed',
+    /const isEmbed = searchParams\.get\('embed'\) === 'true';/.test(page), true);
+  // A rounded sheet edge against a header reads as two things that failed to
+  // line up, so the radius goes where the seam is.
+  eq('  and squares its top where it meets one',
+    /isEmbed \? ' !rounded-t-none' : ''/.test(page), true);
 }
 
 console.log('\n— and it is what the page shows at rest —');
