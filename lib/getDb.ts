@@ -1,5 +1,6 @@
 import { createClient, type Client } from '@libsql/client';
 import { db, ensureDbReady, migrateTenantDb } from '@/lib/db';
+import { withRetries } from '@/lib/dbRetry';
 
 export class DatabaseUnavailableError extends Error {
   readonly status = 503;
@@ -63,10 +64,12 @@ export async function getDb(accountId: string | undefined): Promise<Client> {
     if (!r?.turso_db_url) {
       throw new Error(`[getDb] No turso_db_url found for account ${accountId} — tenant database not provisioned correctly`);
     }
-    const client = createClient({
+    // withRetries, because a pooled connection the server has already closed
+    // fails the next request written into it — see lib/dbRetry.ts.
+    const client = withRetries(createClient({
       url: String(r.turso_db_url),
       authToken: String(r.turso_auth_token),
-    });
+    }));
     await migrateTenantDb(client);
     registerTenantClient(client, accountId);
     tenantCache.set(accountId, client);
@@ -117,10 +120,10 @@ export async function findDbByToken(
     const accountId = String(account.id);
     let tenantClient = tenantCache.get(accountId);
     if (!tenantClient) {
-      tenantClient = createClient({
+      tenantClient = withRetries(createClient({
         url: String(account.turso_db_url),
         authToken: String(account.turso_auth_token),
-      });
+      }));
       tenantCache.set(accountId, tenantClient);
     }
     try {

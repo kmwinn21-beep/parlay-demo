@@ -1,11 +1,14 @@
 import { createClient, type Client } from '@libsql/client';
 import { migrations } from '@/lib/db-migrations';
 import { reconcileOnce } from '@/lib/schemaReconcile';
+import { withRetries } from '@/lib/dbRetry';
 
-export const db = createClient({
+// withRetries, because a pooled connection the server has already closed
+// fails the next request written into it — see lib/dbRetry.ts.
+export const db = withRetries(createClient({
   url: process.env.TURSO_DATABASE_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN!,
-});
+}));
 
 async function ensureConfigOptionsColumns(client: Client): Promise<void> {
   const configCols = await client.execute({ sql: 'PRAGMA table_info(config_options)', args: [] });
