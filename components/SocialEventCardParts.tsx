@@ -387,7 +387,7 @@ export function CardGuestListButton({ count, onClick }: { count: number; onClick
   );
 }
 
-export function CardNotesButton({ count, onClick, onPhone = false, title }: {
+export function CardNotesButton({ count, onClick, onPhone = false, compact = false, title }: {
   count: number;
   onClick: () => void;
   /**
@@ -398,6 +398,14 @@ export function CardNotesButton({ count, onClick, onPhone = false, title }: {
    * menu, so there the button IS the way in and has to be on screen.
    */
   onPhone?: boolean;
+  /**
+   * 25px rather than 32, for a card where this shares a line with the kebab.
+   *
+   * The kebab is 24px, and two circles of noticeably different sizes beside
+   * each other read as one control and one decoration. The badge shrinks with
+   * it — at full size it hung a third of its width outside the button.
+   */
+  compact?: boolean;
   /** Overrides the tooltip, for a surface where "Notes" means something else. */
   title?: string;
 }) {
@@ -406,14 +414,22 @@ export function CardNotesButton({ count, onClick, onPhone = false, title }: {
       type="button"
       onClick={onClick}
       title={title ?? (count > 0 ? `${count} note${count === 1 ? '' : 's'}` : 'Notes')}
-      className={`relative ${onPhone ? 'flex' : 'hidden sm:flex'} flex-shrink-0 w-8 h-8 rounded-full border text-gray-500 hover:text-brand-secondary hover:border-brand-secondary/40 hover:bg-brand-secondary/5 transition-colors items-center justify-center ${
+      className={`relative ${onPhone ? 'flex' : 'hidden sm:flex'} flex-shrink-0 ${
+        compact ? 'w-[25px] h-[25px]' : 'w-8 h-8'
+      } rounded-full border text-gray-500 hover:text-brand-secondary hover:border-brand-secondary/40 hover:bg-brand-secondary/5 transition-colors items-center justify-center ${
         count > 0 ? 'border-brand-secondary/40 text-brand-secondary' : 'border-gray-200'}`}
     >
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h8m-8 4h5m1 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
       {count > 0 && (
-        <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-brand-secondary text-white text-[9px] font-bold flex items-center justify-center">
+        <span className={`absolute rounded-full bg-brand-secondary text-white font-bold flex items-center justify-center ${
+          compact
+            // Far enough out to clear the glyph: a 13px badge tucked against a
+            // 25px circle covers a quarter of the icon inside it, where on a
+            // 32px one it only clipped the rim.
+            ? '-top-1.5 -left-1.5 min-w-[13px] h-[13px] px-[3px] text-[8px] ring-1 ring-white'
+            : '-top-1 -left-1 min-w-[16px] h-4 px-1 text-[9px]'}`}>
           {count > 99 ? '99+' : count}
         </span>
       )}

@@ -71,6 +71,36 @@ console.log('\n— a button where the request asked for one —');
   eq('the button can be told to show on a phone', /onPhone \? 'flex' : 'hidden sm:flex'/.test(parts), true);
 
   /*
+   * And on a card it stands in the row rather than over it.
+   *
+   * It used to be absolutely placed at the line's top-right so a long company
+   * name could scroll out of sight behind it. But a 32px button hung off a
+   * 20px line, so it crossed the rule under it and landed on the people
+   * below — and on the attendee drawer's card, which hides the company name,
+   * it had nothing to sit beside at all and simply covered them. Measured at
+   * 420px: 25x25, level with the 24px kebab, nine pixels clear of the rule.
+   */
+  eq('the actions take their own place in the row',
+    /\{\(onEdit \|\| onNotesClick\) && \(\s*\n\s*<div className="flex-shrink-0 flex items-center gap-1\.5">/.test(table), true);
+  eq('  nothing floating over the line', /absolute right-0 top-0 pl-1\.5 bg-white/.test(table), false);
+  eq('  nor a gap reserved for what used to', /scrollbar-hide pr-9/.test(table), false);
+  eq('  and the line is as tall as they are',
+    /<div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100/.test(table), true);
+
+  // 25px beside the 24px kebab. Two circles of visibly different sizes beside
+  // each other read as one control and one ornament.
+  eq('the card’s button is the smaller one', /onPhone\n\s*compact\n/.test(table), true);
+  eq('  which the button knows how to be', /compact \? 'w-\[25px\] h-\[25px\]' : 'w-8 h-8'/.test(parts), true);
+  eq('  with the glyph scaled to it', /compact \? 'w-3\.5 h-3\.5' : 'w-4 h-4'/.test(parts), true);
+  // The badge too: at full size it covered a quarter of the smaller glyph.
+  eq('  and a badge scaled and moved clear of it',
+    /-top-1\.5 -left-1\.5 min-w-\[13px\] h-\[13px\]/.test(parts), true);
+  eq('  while the table row keeps the one it had',
+    /-top-1 -left-1 min-w-\[16px\] h-4 px-1 text-\[9px\]/.test(parts), true);
+  // And the kebab is a flex box, or its line box drops it 1.5px below.
+  eq('the kebab sits level with it', /<div ref=\{wrapRef\} className="relative flex items-center">/.test(table), true);
+
+  /*
    * Two counts with two meanings. `noteCounts` in this file is keyed by
    * ATTENDEE id and counts that person's notes for the conference; sharing one
    * map would have shown one row's number on another.

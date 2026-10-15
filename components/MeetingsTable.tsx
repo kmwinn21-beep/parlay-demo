@@ -654,7 +654,10 @@ function MeetingActionsMenu({ hasNotes, hasConferenceNotes, onNotes, onQuickNote
   const itemCls = 'w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 text-gray-700 hover:bg-gray-50 transition-colors';
 
   return (
-    <div ref={wrapRef} className="relative">
+    // flex, so the wrapper is the button's height rather than the button's
+    // height plus a line box — otherwise the kebab sits 1.5px low beside the
+    // notes button it shares a row with.
+    <div ref={wrapRef} className="relative flex items-center">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -2027,12 +2030,15 @@ export function MeetingsTable({
             {/* Eyebrow: whose company this meeting is with, and the actions
                 for it. The attendees below then read as people at that
                 company rather than the company trailing them. */}
-            {/* A long company name scrolls sideways under the kebab rather
-                than being cut off by it — the kebab sits on the card's own
-                background, so the name slides out of sight behind it. */}
+            {/* A long company name scrolls sideways in the space left over,
+                rather than running under the buttons: they used to float over
+                this line, which on a card with no company name at all — the
+                attendee drawer hides it — left them sitting on the people
+                below instead. They take their own place in the row now, and
+                the row is as tall as they are. */}
             {/* Ruled off from the people below it, so the card reads as a
                 company and then who from it was in the room. */}
-            <div className="relative flex items-start gap-2 mb-2 pb-2 border-b border-gray-100 min-h-[1.25rem]">
+            <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100 min-h-[1.25rem]">
               {/* Selecting a card is a thing you do TO the card, so it leads
                   the line the card is titled with rather than riding the row
                   of facts at the bottom. */}
@@ -2055,10 +2061,10 @@ export function MeetingsTable({
                   checked={selectedIds.has(m.id)}
                   onChange={() => toggleSelect(m.id)}
                   onClick={e => e.stopPropagation()}
-                  className="flex-shrink-0 mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
+                  className="flex-shrink-0 h-4 w-4 rounded border-gray-300 text-brand-secondary focus:ring-brand-secondary cursor-pointer"
                 />
               )}
-              <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide pr-9">
+              <div className="min-w-0 flex-1 overflow-x-auto scrollbar-hide">
                 {!hideCompany && (m.company_name && m.company_id ? (
                   <button
                     type="button"
@@ -2071,17 +2077,19 @@ export function MeetingsTable({
                   <p className="text-sm font-semibold text-gray-500 whitespace-nowrap">{m.company_name}</p>
                 ) : null)}
               </div>
-              {/* Opaque, and the name scrolls underneath: a long company name
-                  slides out of sight behind this rather than being cut off. */}
+              {/* The end of the row, in the flow — nothing of the card passes
+                  beneath them and nothing of them passes below the rule. */}
               {(onEdit || onNotesClick) && (
-                <div className="absolute right-0 top-0 pl-1.5 bg-white flex items-center gap-1.5">
+                <div className="flex-shrink-0 flex items-center gap-1.5">
                   {/* onPhone: the meeting card's menu has no notes entry, so
                       here the button IS the way in rather than a shortcut to
-                      something the menu also offers. */}
+                      something the menu also offers. compact: 25px, to sit
+                      level with the 24px kebab beside it. */}
                   <CardNotesButton
                     count={meetingNoteCounts[m.id] ?? 0}
                     onClick={() => openMeetingNotes(m.id)}
                     onPhone
+                    compact
                     title={meetingNoteTitle(meetingNoteCounts[m.id] ?? 0)}
                   />
                   <MeetingActionsMenu

@@ -299,6 +299,32 @@ console.log('\n— and a drawer has no Back button in it —');
   // The attendee record has no jump menu to move: SectionJumpMenu reads
   // [data-company-section] markers and the attendee's sections carry none.
   eq('and the attendee has no jump menu to move', /SectionJumpMenu/.test(attendee), false);
+
+  /*
+   * And the list it opens follows it there.
+   *
+   * It hung from the button's right edge, which was right while the button
+   * sat at the end of the row. In the drawer the button is now the row's
+   * first child, 16px in, so a 224px list hanging leftwards from it started
+   * at -208 and most of it was off the side of the phone.
+   *
+   * So the side is measured when the menu opens. Driven in Chromium at 320,
+   * 390 and 430px, drawer and page: in the drawer it hangs from the left and
+   * opens rightwards (16..240), on the page the button is at the right and it
+   * keeps the old edge (390px: 150..374). On screen in all six.
+   */
+  const jump = strip('components/SectionJumpMenu.tsx');
+  eq('the list picks the side with room for it',
+    /setAnchor\(r\.left \+ MENU_WIDTH <= window\.innerWidth - EDGE \? 'left' : 'right'\)/.test(jump), true);
+  eq('  measured as it opens, not guessed', /const openMenu = \(\) => \{/.test(jump), true);
+  eq('  and nothing opens it without measuring',
+    /onClick=\{\(\) => \{ if \(open\) setOpen\(false\); else openMenu\(\); \}\}/.test(jump), true);
+  eq('  hanging from whichever edge that is', /anchor === 'left' \? 'left-0' : 'right-0'/.test(jump), true);
+  eq('  and no longer always the right one', /absolute right-0 z-40 w-56/.test(jump), false);
+  // And a screen narrower than the list shrinks it rather than letting an
+  // edge hang off: the measurement can only choose the better side, not
+  // conjure room that is not there.
+  eq('  with a list no wider than the screen', /max-w-\[calc\(100vw-1rem\)\]/.test(jump), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

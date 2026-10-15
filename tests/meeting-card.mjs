@@ -188,7 +188,7 @@ console.log('\n— the faces, down the right edge —');
 
   // Ruled off from the people below it, so the card reads as a company and
   // then who from it was in the room.
-  const header = card.slice(card.indexOf('relative flex items-start gap-2'), card.indexOf('AttendeeInitialsAvatar'));
+  const header = card.slice(card.indexOf('flex items-center gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
   eq('the company line is ruled off', /mb-2 pb-2 border-b border-gray-100/.test(header), true);
 }
 
@@ -246,7 +246,7 @@ console.log('\n— what must not scroll away —');
    * sat beside a ScrollRow and had to be kept out of it by hand; on the title
    * line there is nothing to scroll and nothing to keep it out of.
    */
-  const header = card.slice(card.indexOf('relative flex items-start gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
+  const header = card.slice(card.indexOf('flex items-center gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
   eq('the checkbox leads the title line', /type="checkbox"/.test(header), true);
   eq('  ahead of the company name',
     header.indexOf('type="checkbox"') < header.indexOf('m.company_name'), true);
@@ -337,7 +337,7 @@ console.log('\n— the size of the company, among the facts —');
   // It was in the title line, wedged beside the kebab. It is a fact about the
   // account like Value is, and it now sits with the facts — immediately before
   // Value, which is computed from it.
-  const header = card.slice(card.indexOf('relative flex items-start gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
+  const header = card.slice(card.indexOf('flex items-center gap-2 mb-2'), card.indexOf('AttendeeInitialsAvatar'));
   eq('the title line carries no unit count', /company_wse/.test(header), false);
   eq('  nor any offset left over from it', /right-7|pr-24/.test(table), false);
 

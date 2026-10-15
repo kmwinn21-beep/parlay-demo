@@ -373,6 +373,8 @@ export default function ConferenceDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  /** Framed inside a quick-view drawer, which renders this page with no app chrome. */
+  const isEmbed = searchParams.get('embed') === 'true';
   const id = params.id as string;
   const colorMaps = useConfigColors();
   const configOptions = useConfigOptions('conference_detail');
@@ -4212,9 +4214,21 @@ export default function ConferenceDetailPage() {
       )}
 
       <div
-        className={tabDrawerOpen === null ? 'contents' : TAB_DRAWER_CLS}
+        /* Square across the top when it meets the drawer's header rather than
+           rising off a page: a rounded sheet edge against a header reads as
+           two things that failed to line up. */
+        className={tabDrawerOpen === null ? 'contents' : `${TAB_DRAWER_CLS}${isEmbed ? ' !rounded-t-none' : ''}`}
         style={tabDrawerOpen === null ? undefined : {
-          top: 'var(--mobile-header-h)',
+          /*
+           * The header this stops at is whichever one is above it.
+           *
+           * On the page that is the app's mobile header, and the variable
+           * carries the safe-area inset with it. Framed in a quick-view
+           * drawer there is no app header inside the frame — the frame's top
+           * edge IS the drawer header's bottom edge — so 85px of nothing was
+           * left above the panel, with the report row showing through it.
+           */
+          top: isEmbed ? 0 : 'var(--mobile-header-h)',
           transform: tabDrawerOpen ? 'translateY(0)' : 'translateY(100%)',
           // The bulk bars pin under the tab row, which in the drawer is not in
           // the same scroller as them — so the offset they were given is zero
