@@ -30,7 +30,7 @@ const eq = (label, got, want) => {
 };
 
 const strip = (f) => readFileSync(f, 'utf8')
-  .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  .replace(/(^|[\s{(,;])\/\*[\s\S]*?\*\//g, '$1').replace(/^\s*\/\/.*$/gm, '');
 
 const page = strip('app/conferences/[id]/page.tsx');
 
@@ -48,7 +48,7 @@ console.log('\n— there is a drawer, and only on a phone —');
 
   // display:contents, so above sm the DOM lays out exactly as before.
   eq('the wrapper vanishes from layout on a pointer',
-    /className=\{tabDrawerOpen === null \? 'contents' : TAB_DRAWER_CLS\}/.test(page), true);
+    /className=\{tabDrawerOpen === null \? 'contents' : `\$\{TAB_DRAWER_CLS\}/.test(page), true);
   eq('  and so does the panels’ scroller',
     /className=\{tabDrawerOpen === null \? 'contents' : 'flex-1 min-h-0 overflow-y-auto/.test(page), true);
 }
@@ -56,7 +56,14 @@ console.log('\n— there is a drawer, and only on a phone —');
 console.log('\n— it meets the header, and nothing else —');
 {
   eq('the top is the shared header variable',
-    /top: 'var\(--mobile-header-h\)'/.test(page), true);
+    /top: isEmbed \? 0 : 'var\(--mobile-header-h\)',/.test(page), true);
+  /*
+   * Unless there is no header above it. Framed in a quick-view drawer the
+   * page has no app chrome, and the frame's top edge IS the drawer header's
+   * bottom edge — the variable left 85px of nothing above the panel there.
+   */
+  eq('  and zero where the frame is the header',
+    /const isEmbed = searchParams\.get\('embed'\) === 'true';/.test(page), true);
   // A fraction of the viewport cannot clear a safe-area inset it knows
   // nothing about; this is the anchor the other drawers already use.
   eq('  not a fraction of the viewport', /top: '\d+vh'/.test(page), false);
