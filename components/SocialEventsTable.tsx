@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { LocationAutocompleteInput } from './LocationAutocompleteInput';
 import Link from 'next/link';
@@ -25,6 +25,7 @@ import {
   EMPTY_RANK, RANK_VALUES, rankBadgeClass, sortByRank,
   type GuestRank,
 } from '@/lib/guestRank';
+import { sortSocialEvents } from '@/lib/socialEventOrder';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -1138,6 +1139,16 @@ export function SocialEventsTable({
   // every width rather than expanding an inline table.
   const toggleEvent = (id: number) => setGuestListEventId(v => (v === id ? null : id));
 
+  /*
+   * Ours first, then everyone else's, each run in time order — see
+   * lib/socialEventOrder.
+   *
+   * Sorted here rather than relied on from the query: the list changes without
+   * being fetched again, so an event added, or one that has just had Company
+   * Hosted ticked, takes its place on the click rather than at the next load.
+   */
+  const ordered = useMemo(() => sortSocialEvents(events), [events]);
+
   /* note counts for the card badges — one request for all events */
   const eventIdKey = events.map(e => e.id).join(',');
   useEffect(() => {
@@ -1706,7 +1717,7 @@ export function SocialEventsTable({
         // cards, the way the outreach tab's drawer does.
         <div className="flex gap-3 items-start">
         <div className="flex-1 min-w-0 space-y-2">
-          {events.map(ev => {
+          {ordered.map(ev => {
             const { invited, rsvpMap } = getEventData(ev);
             // Seats left = the cap minus everyone who said yes. Counted from
             // the same effective RSVP map the drawer renders, so accepting an
