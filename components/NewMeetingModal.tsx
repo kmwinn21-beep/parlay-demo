@@ -232,6 +232,17 @@ interface NewMeetingModalProps {
   onClose: () => void;
   prefillCompanyId?: number;
   prefillAttendeeId?: number;
+  /**
+   * A slot picked off the availability board: when, how long, and whose gap
+   * it was. The person is added as an additional internal attendee, because
+   * booking into somebody's time without putting them on the meeting is how
+   * a double booking is made — unless they are the one booking it, and then
+   * the board sends nobody.
+   */
+  prefillDate?: string;
+  prefillTime?: string;
+  prefillDuration?: number;
+  prefillInternalUserIds?: number[];
   onSuccess?: (meeting: Meeting) => void;
   availableConferences?: Array<{ id: number; name: string; start_date: string; end_date?: string }>;
   defaultConferenceId?: number;
@@ -306,6 +317,10 @@ export function NewMeetingModal({
   onClose,
   prefillCompanyId,
   prefillAttendeeId,
+  prefillDate,
+  prefillTime,
+  prefillDuration,
+  prefillInternalUserIds,
   onSuccess,
   availableConferences,
   defaultConferenceId,
@@ -397,6 +412,26 @@ export function NewMeetingModal({
   const isPrefilling = useRef(false);
 
   // Fetch users and conferences on open
+  /*
+   * What a chosen slot brings with it.
+   *
+   * Set on open rather than as initial state: the modal is mounted the whole
+   * time and only its `isOpen` changes, so a prefill applied once would be
+   * the first slot ever picked forever after.
+   */
+  useEffect(() => {
+    if (!isOpen) return;
+    if (prefillDate) setMeetingDate(prefillDate);
+    if (prefillTime) setMeetingTime(prefillTime);
+    if (prefillDuration) setDurationMinutes(prefillDuration);
+    if (prefillInternalUserIds && prefillInternalUserIds.length > 0) {
+      setAdditionalInternalUserIds(prev => Array.from(new Set([...prev, ...prefillInternalUserIds])));
+    }
+    // The ids are a fresh array on every render of the caller; the string is
+    // what actually changes when a different slot is picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, prefillDate, prefillTime, prefillDuration, (prefillInternalUserIds ?? []).join(',')]);
+
   useEffect(() => {
     if (!isOpen) return;
     if (user?.configId) setSelectedRepIds([user.configId]);

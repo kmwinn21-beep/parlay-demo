@@ -49,6 +49,9 @@ import {
 import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
 import { MeetingsCalendar } from '@/components/MeetingsCalendar';
+import { AvailabilityModal } from '@/components/AvailabilityModal';
+import { additionalAttendeesFor } from '@/lib/availability';
+import { defaultCalendarDay } from '@/lib/meetingCalendar';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
@@ -586,6 +589,28 @@ export default function ConferenceDetailPage() {
   const [meetingCollapseAll, setMeetingCollapseAll] = useState({ token: 0, collapse: false });
   const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
   const [meetingViewMode, setMeetingViewMode] = useState<'table' | 'kanban' | 'calendar'>('table');
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  /** The calendar drawn as people rather than days — one day at a time. */
+  const calendarByRep = meetingViewMode === 'calendar' && meetingGroupMode === 'rep';
+  /*
+   * Entering that view with no day chosen lights one.
+   *
+   * The board itself falls back to the same day either way, but the picker
+   * above it would be showing nothing chosen while a day was plainly drawn —
+   * so the row is set to the day the board is about, and leaving the view
+   * hands the filter back exactly as it was.
+   */
+  useEffect(() => {
+    if (!calendarByRep || !conference || meetingFilterDates.length > 0) return;
+    const today = new Date();
+    const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const day = defaultCalendarDay(getConferenceDates(conference.start_date, conference.end_date), ymd);
+    if (day) setMeetingFilterDates([day]);
+  }, [calendarByRep, conference, meetingFilterDates.length]);
+  /** A slot picked off the availability board, waiting for the meeting form. */
+  const [meetingPrefill, setMeetingPrefill] = useState<{
+    date: string; time: string; duration: number; internalUserIds: number[];
+  } | null>(null);
 
   /**
    * Where the frozen Name column starts: the checkbox column plus any visible
@@ -5222,17 +5247,6 @@ export default function ConferenceDetailPage() {
                     </span>
                   )}
                 </h2>
-                <div className="hidden lg:flex flex-1 min-w-0">
-                  <MeetingDateFilterBar
-                    dates={conferenceDates}
-                    selected={meetingFilterDates}
-                    onChange={setMeetingFilterDates}
-                    variant="short"
-                    showBoothHours={hasBoothHoursMeetings}
-                    boothHoursOnly={boothHoursOnly}
-                    onBoothHoursChange={setBoothHoursOnly}
-                  />
-                </div>
                 <div className="ml-auto flex-shrink-0 flex items-center gap-2">
                   {/* Grouping toggle, then the actions. Filters and + Meeting
                       live in the kebab at every width now, which keeps this row
@@ -5310,17 +5324,40 @@ export default function ConferenceDetailPage() {
                 </div>
               </div>
 
-              {/* Mobile row 2 — day filters, one scrolling line */}
-              <div className="lg:hidden mt-3">
-                <MeetingDateFilterBar
-                  dates={conferenceDates}
-                  selected={meetingFilterDates}
-                  onChange={setMeetingFilterDates}
-                  variant="short"
-                  showBoothHours={hasBoothHoursMeetings}
-                  boothHoursOnly={boothHoursOnly}
-                  onBoothHoursChange={setBoothHoursOnly}
-                />
+              {/* Row 2 — the day filters, on a line of their own at every
+                  width, with Availability at its end.
+
+                  They used to share row one with the title and the toggles,
+                  which left no room for a button that opens something rather
+                  than narrowing what is already on screen. */}
+              <div className="mt-3 flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <MeetingDateFilterBar
+                    dates={conferenceDates}
+                    selected={meetingFilterDates}
+                    onChange={setMeetingFilterDates}
+                    variant="short"
+                    /* A calendar of people is one day at a time, so the row
+                       stops being a filter that can be cleared and becomes
+                       the picker that chooses which day is drawn. */
+                    requireOne={calendarByRep}
+                    showBoothHours={hasBoothHoursMeetings}
+                    boothHoursOnly={boothHoursOnly}
+                    onBoothHoursChange={setBoothHoursOnly}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAvailabilityOpen(true)}
+                  title="Where the team has room"
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary transition-colors"
+                >
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 7v5l3 2" />
+                  </svg>
+                  Availability
+                </button>
               </div>
 
               {/* Mobile row 3 — the grouping toggle, on its own scrolling line,
@@ -5428,6 +5465,11 @@ export default function ConferenceDetailPage() {
               viewMode={meetingViewMode}
               conferenceStart={conference.start_date}
               conferenceEnd={conference.end_date}
+              conferenceInternalAttendees={conference.internal_attendees ?? null}
+              /* The day the rep axis draws: whichever the picker above is on,
+                 and the fallback is the calendar's own (today while the
+                 conference is running, else its first day). */
+              calendarRepDay={meetingFilterDates[0] ?? null}
               onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}
@@ -5531,11 +5573,42 @@ export default function ConferenceDetailPage() {
 
       <NewMeetingModal
         isOpen={newMeetingOpen}
-        onClose={() => setNewMeetingOpen(false)}
+        onClose={() => { setNewMeetingOpen(false); setMeetingPrefill(null); }}
         availableConferences={conference ? [{ id: conference.id, name: conference.name, start_date: conference.start_date, end_date: conference.end_date }] : []}
         defaultConferenceId={conference?.id}
+        prefillDate={meetingPrefill?.date}
+        prefillTime={meetingPrefill?.time}
+        prefillDuration={meetingPrefill?.duration}
+        prefillInternalUserIds={meetingPrefill?.internalUserIds}
         onSuccess={addMeetingOptimistically}
       />
+
+      {/* Where the team has room, and a way to take some of it.
+
+          The board hands back the slot; the form it opens is the same one the
+          + Meeting button opens, with the day, the time, the length and the
+          person whose gap it was already in it. */}
+      {availabilityOpen && conference && (
+        <AvailabilityModal
+          meetings={confMeetings}
+          conferenceName={conference.name}
+          conferenceStart={conference.start_date}
+          conferenceEnd={conference.end_date}
+          internalAttendees={conference.internal_attendees ?? null}
+          userOptions={userOptions}
+          onClose={() => setAvailabilityOpen(false)}
+          onPick={pick => {
+            setMeetingPrefill({
+              date: pick.day,
+              time: pick.time,
+              duration: pick.durationMinutes,
+              internalUserIds: additionalAttendeesFor(pick.personId, currentUser?.configId ?? null),
+            });
+            setAvailabilityOpen(false);
+            setNewMeetingOpen(true);
+          }}
+        />
+      )}
 
       {/* Quick note from a meeting row. Everything it needs is already on the
           row, so nothing has to be re-entered; note_type gives it the Meeting

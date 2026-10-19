@@ -264,6 +264,79 @@ function initialsOf(name: string): string {
 }
 
 /**
+ * Everyone this conference's calendar can draw a column for.
+ *
+ * The conference's own internal attendees first, in the order it lists them —
+ * they are the people who are AT this thing, and a board that opened on a
+ * different set would answer a different question. Then anyone else on a
+ * meeting here: a rep booked in without being on the attendee list still has
+ * a day worth reading.
+ *
+ * The conference stores names rather than ids, so they are matched back to
+ * the user list; a name matching nobody is dropped rather than drawn as a
+ * column nothing can be booked into.
+ */
+export function conferencePeople(
+  internalAttendees: string | null | undefined,
+  meetings: CalendarMeeting[],
+  userOptions: Array<{ id: number; value: string }>,
+): CalendarPerson[] {
+  const byName = new Map(userOptions.map(u => [u.value.trim().toLowerCase(), u]));
+  const byId = new Map(userOptions.map(u => [u.id, u]));
+  const counts = new Map<number, number>();
+  for (const m of meetings) {
+    for (const id of internalIdsOn(m)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  const people: CalendarPerson[] = [];
+  const seen = new Set<number>();
+  const add = (option: { id: number; value: string } | undefined) => {
+    if (!option || seen.has(option.id)) return;
+    seen.add(option.id);
+    people.push({
+      id: option.id,
+      name: option.value,
+      initials: initialsOf(option.value),
+      count: counts.get(option.id) ?? 0,
+    });
+  };
+
+  for (const name of String(internalAttendees ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
+    add(byName.get(name.toLowerCase()));
+  }
+  for (const m of meetings) for (const id of internalIdsOn(m)) add(byId.get(id));
+  return people;
+}
+
+/** The ones a person is on, for their column. */
+export function meetingsOfPerson<T extends CalendarMeeting>(meetings: T[], personId: number): T[] {
+  return meetings.filter(m => internalIdsOn(m).includes(personId));
+}
+
+/**
+ * The ones with nobody from the team on them.
+ *
+ * A meeting with no rep belongs to the conference rather than to nobody, so
+ * the rep view gives it a column of its own rather than dropping it — it
+ * would otherwise be hidden from the only board that shows the whole team.
+ */
+export function unassignedMeetings<T extends CalendarMeeting>(meetings: T[]): T[] {
+  return meetings.filter(m => internalIdsOn(m).length === 0);
+}
+
+/**
+ * Which day a board of people opens on.
+ *
+ * Today while the conference is running — that is the day somebody standing
+ * at it wants — and its first day otherwise. A board of people with no day
+ * cannot be drawn, so this never returns nothing when there are days.
+ */
+export function defaultCalendarDay(days: string[], today: string): string | null {
+  if (days.length === 0) return null;
+  return days.includes(today) ? today : days[0];
+}
+
+/**
  * The people to offer as filters: everyone on at least one of these meetings.
  *
  * Built from the meetings rather than from the whole user list, so the row is
@@ -287,6 +360,31 @@ export function calendarPeople(
       return { id, name, initials: initialsOf(name), count };
     })
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}
+
+/**
+ * The meetings more than one of these people is on.
+ *
+ * On the rep axis those are the ones drawn in several columns at once, and
+ * the only ones worth tracing: pointing at a meeting one person is on would
+ * dim the whole board to say nothing. Counted against the people who HAVE a
+ * column — somebody on a meeting who is not on the board cannot make it
+ * appear twice.
+ */
+export function sharedMeetingIds(
+  meetings: CalendarMeeting[],
+  people: Array<{ id: number }>,
+): Set<number> {
+  const columned = new Set(people.map(p => p.id));
+  const shared = new Set<number>();
+  for (const meeting of meetings) {
+    let seen = 0;
+    for (const id of internalIdsOn(meeting)) {
+      if (columned.has(id)) seen++;
+      if (seen > 1) { shared.add(meeting.id); break; }
+    }
+  }
+  return shared;
 }
 
 /**

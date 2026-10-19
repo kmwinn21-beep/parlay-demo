@@ -24,9 +24,10 @@
 import { readFileSync } from 'node:fs';
 import {
   DEFAULT_DURATION, DURATION_OPTIONS, MIN_CARD_MINUTES,
-  calendarDays, calendarPeople, cardMinutes, durationSuffix, hourWindow,
-  internalIdsOn, isOutsideConference, layoutDay, matchesPeople, normalizeDuration,
-  timedOn, untimedOn,
+  calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
+  durationSuffix, hourWindow, internalIdsOn, isOutsideConference, layoutDay,
+  matchesPeople, meetingsOfPerson, normalizeDuration, sharedMeetingIds, timedOn,
+  unassignedMeetings, untimedOn,
 } from '@/lib/meetingCalendar';
 
 let pass = 0;
@@ -262,6 +263,170 @@ console.log('\n— whose meetings these are —');
   eq('  and two picked light either’s', week.map(m => matchesPeople(m, new Set([9, 11]))), [true, true, true]);
 }
 
+console.log('\n— turned on its side: a column per person —');
+{
+  const day = '2026-10-21';
+  const users = [
+    { id: 11, value: 'Gavin Steele' }, { id: 12, value: 'Mikkel Wad Thorsen' },
+    { id: 13, value: 'Henri Sejournet' }, { id: 9, value: 'Kevin Winn' },
+  ];
+  const week = [
+    { id: 1, name: 'both', meeting_date: day, meeting_time: '09:00', scheduled_by: '11,13', support_rep_ids: '13' },
+    { id: 2, name: 'gavin', meeting_date: day, meeting_time: '11:00', scheduled_by: '11' },
+    { id: 3, name: 'orphan', meeting_date: day, meeting_time: '10:00', scheduled_by: null },
+    { id: 4, name: 'kevin', meeting_date: day, meeting_time: '14:00', scheduled_by: '9' },
+  ];
+
+  /*
+   * The conference's own internal attendees first, in its order — they are
+   * the people who are AT this thing — then anyone else on a meeting here.
+   * The conference stores names, so they are matched back to the user list.
+   */
+  eq('the columns are the conference’s people',
+    conferencePeople('Henri Sejournet, Gavin Steele', week, users).map(p => p.name),
+    ['Henri Sejournet', 'Gavin Steele', 'Kevin Winn']);
+  eq('  counted', conferencePeople('Gavin Steele', week, users).map(p => `${p.name}:${p.count}`),
+    ['Gavin Steele:2', 'Henri Sejournet:1', 'Kevin Winn:1']);
+  eq('  and a name matching nobody is not a column',
+    conferencePeople('Someone Else', [], users).map(p => p.name), []);
+
+  /*
+   * A meeting goes in EVERY column of a person on it — the rep who booked it
+   * and anyone added through Additional Attendees. That is what the column
+   * means: this person's day. Drawing it once would make one of the two
+   * people look free at nine o'clock.
+   */
+  eq('a meeting two people are on is in both columns',
+    [meetingsOfPerson(week, 11).map(m => m.name), meetingsOfPerson(week, 13).map(m => m.name)],
+    [['both', 'gavin'], ['both']]);
+
+  /*
+   * And one with nobody on it goes in a column of its own rather than being
+   * dropped — it belongs to the conference, and the rep board is the only
+   * view that shows the whole team.
+   */
+  eq('a meeting with nobody on it is its own column',
+    unassignedMeetings(week).map(m => m.name), ['orphan']);
+  eq('  and there is no such column when there is no such meeting',
+    unassignedMeetings(week.filter(m => m.name !== 'orphan')), []);
+
+  /*
+   * Which day it opens on. A board of people with no day cannot be drawn, so
+   * this never comes back empty while there are days to choose from.
+   */
+  const days = ['2026-10-20', '2026-10-21', '2026-10-22'];
+  eq('today, while the conference is on', defaultCalendarDay(days, '2026-10-21'), '2026-10-21');
+  eq('  its first day otherwise', defaultCalendarDay(days, '2026-11-02'), '2026-10-20');
+  eq('  and nothing where there are no days', defaultCalendarDay([], '2026-10-21'), null);
+
+  /*
+   * A conflict is one person in two places. The layout already divides a
+   * column between meetings that overlap — on the rep axis that division IS
+   * the conflict, and on the date axis it is two reps at nine o'clock.
+   */
+  const clash = layoutDay([
+    { id: 5, meeting_date: day, meeting_time: '09:00', duration_minutes: 60, scheduled_by: '13' },
+    { id: 6, meeting_date: day, meeting_time: '09:30', duration_minutes: 30, scheduled_by: '13' },
+  ], 9);
+  eq('two of one person’s meetings overlapping divide the column',
+    clash.map(p => p.columns), [2, 2]);
+  // Back to back is not a conflict, which is the common case at a conference.
+  eq('  while back to back does not',
+    layoutDay([
+      { id: 7, meeting_date: day, meeting_time: '09:00', duration_minutes: 30, scheduled_by: '13' },
+      { id: 8, meeting_date: day, meeting_time: '09:30', duration_minutes: 30, scheduled_by: '13' },
+    ], 9).map(p => p.columns), [1, 1]);
+}
+
+console.log('\n— and pointing at a meeting two of them are on —');
+{
+  const day = '2026-10-21';
+  const people = [{ id: 11 }, { id: 12 }, { id: 13 }];
+  const week = [
+    { id: 1, meeting_date: day, meeting_time: '09:00', scheduled_by: '11,13', support_rep_ids: '13' },
+    { id: 2, meeting_date: day, meeting_time: '10:00', scheduled_by: '11' },
+    { id: 3, meeting_date: day, meeting_time: '11:00', scheduled_by: '11,12,13', support_rep_ids: '12,13' },
+    { id: 4, meeting_date: day, meeting_time: '12:00', scheduled_by: null },
+  ];
+
+  /*
+   * A meeting several people are on is drawn in each of their columns, and
+   * those copies are the only thing worth tracing: hovering one dims the
+   * rest of the board so where it appears can be seen rather than read out
+   * of four columns of company names.
+   */
+  eq('the shared ones are the ones in more than one column',
+    Array.from(sharedMeetingIds(week, people)).sort(), [1, 3]);
+  eq('  a meeting one person is on is not shared', sharedMeetingIds(week, people).has(2), false);
+  eq('  and nor is one with nobody on it', sharedMeetingIds(week, people).has(4), false);
+
+  /*
+   * Counted against the people who HAVE a column. Somebody on a meeting who
+   * is not on the board cannot make it appear twice — so a meeting with one
+   * person on the board and one off it is drawn once, and tracing it would
+   * dim everything to point at a single card.
+   */
+  eq('somebody with no column does not make a meeting shared',
+    sharedMeetingIds(week, [{ id: 11 }]).has(1), false);
+  eq('  and nobody at all shares nothing', Array.from(sharedMeetingIds(week, [])), []);
+}
+
+console.log('\n— and the board drawn from it —');
+{
+  const cal = strip('components/MeetingsCalendar.tsx');
+  const table = strip('components/MeetingsTable.tsx');
+  const page = strip('app/conferences/[id]/page.tsx');
+  const bar = strip('components/MeetingDateFilterBar.tsx');
+
+  // By Rep groups a list in the other two views; here it picks the axis.
+  eq('By Rep picks the axis', /axis=\{groupMode === 'rep' \? 'rep' : 'date'\}/.test(table), true);
+  eq('  and the columns are built from it', /if \(axis === 'date'\) \{/.test(cal), true);
+  eq('  with the people the conference has', /conferencePeople\(internalAttendees, meetings as CalendarMeeting\[\], userOptions\)/.test(cal), true);
+  eq('  the unassigned column first, and only when there is one',
+    /if \(orphans\.length === 0\) return personColumns;/.test(cal), true);
+
+  // One day at a time, chosen by the day filters.
+  eq('the day comes from the filter row', /calendarRepDay=\{meetingFilterDates\[0\] \?\? null\}/.test(page), true);
+  eq('  which stops being clearable', /requireOne=\{calendarByRep\}/.test(page), true);
+  eq('  and insists on one', /onChange\(active && selected\.length === 1 && !requireOne \? \[\] : \[d\]\)/.test(bar), true);
+  eq('  with one lit on arrival', /if \(day\) setMeetingFilterDates\(\[day\]\);/.test(page), true);
+  eq('  and the board falling back to the same day',
+    /repDay && days\.includes\(repDay\) \? repDay : defaultCalendarDay\(days, todayYmd\(\)\)/.test(cal), true);
+
+  // The conflict ring, and only where a conflict is possible.
+  eq('overlapping cards in a person’s column are a conflict',
+    /const conflict = col\.marksConflicts && p\.columns > 1;/.test(cal), true);
+  eq('  ringed in red', /opts\.conflict \? 'ring-2 ring-red-600' : ''/.test(cal), true);
+  eq('  named in the legend', /Conflict\n/.test(cal), true);
+  eq('  and offered only on the rep axis', /\{axis === 'rep' && \(/.test(cal), true);
+  eq('  never on the date axis, where it is two reps at once',
+    /marksConflicts: false,/.test(cal), true);
+
+  /*
+   * Tracing a shared meeting. Measured in Chromium at 1440: hovering the one
+   * three people are on leaves its three copies lit and dims the other ten;
+   * hovering a meeting one person is on changes nothing, nor does hovering
+   * anything on the date axis.
+   */
+  eq('hovering a shared meeting traces it', /onMouseEnter=\{\(\) => \{ if \(sharedIds\.has\(m\.id\)\) setTracedId\(m\.id\); \}\}/.test(cal), true);
+  eq('  and the keyboard does the same', /onFocus=\{\(\) => \{ if \(sharedIds\.has\(m\.id\)\) setTracedId\(m\.id\); \}\}/.test(cal), true);
+  eq('  leaving it puts the board back', /onMouseLeave=\{\(\) => setTracedId\(prev => \(prev === m\.id \? null : prev\)\)\}/.test(cal), true);
+  eq('  everything else dims', /\(tracedId != null && m\.id !== tracedId\)/.test(cal), true);
+  eq('  and only the rep axis has anything to trace',
+    /if \(axis !== 'rep'\) return new Set<number>\(\);/.test(cal), true);
+
+  // The Whose row is what a column each already does.
+  eq('the Whose row goes with the axis', /const peopleFilter = axis === 'date' && whosePeople\.length > 0 && \(/.test(cal), true);
+
+  // Too many columns to share the width.
+  eq('past six columns the board scrolls', /const scrolls = columns\.length > COLUMNS_BEFORE_SCROLL;/.test(cal), true);
+  eq('  with the hour gutter pinned', /sticky left-0 bg-white z-10/.test(cal), true);
+
+  // A phone takes one column at a time, whichever the columns are.
+  eq('a phone picks a column', /onClick=\{\(\) => setOpenColumn\(col\.key\)\}/.test(cal), true);
+  eq('  and the drawer’s chips are the other columns', /\{columns\.map\(c => \{/.test(cal), true);
+}
+
 console.log('\n— the view, wired in —');
 {
   const cal = strip('components/MeetingsCalendar.tsx');
@@ -305,11 +470,14 @@ console.log('\n— the view, wired in —');
   eq('  beside the grouping toggle', /<GroupToggle short \/>/.test(phoneToggle), true);
   eq('  and the buttons set the view', /onClick=\{\(\) => setMeetingViewMode\(opt\.key\)\}/.test(phoneToggle), true);
 
-  // A phone gets one day in a drawer, with the dates to move between them.
-  eq('a phone opens a day in a drawer', /<DayDrawer/.test(cal), true);
-  eq('  and the week grid is desktop only', /className="hidden lg:block p-4"/.test(cal), true);
-  eq('  with the days as buttons below it', /onClick=\{\(\) => setOpenDay\(day\)\}/.test(cal), true);
-  eq('  and the other days inside it', /onClick=\{\(\) => onPick\(d\)\}/.test(cal), true);
+  /*
+   * A phone gets one COLUMN in a drawer — a day on the date axis, a person
+   * on the rep one — with the others as chips to move between them.
+   */
+  eq('a phone opens a column in a drawer', /<ColumnDrawer/.test(cal), true);
+  eq('  and the grid is desktop only', /hidden lg:block p-4/.test(cal), true);
+  eq('  with the columns as buttons below it', /onClick=\{\(\) => setOpenColumn\(col\.key\)\}/.test(cal), true);
+  eq('  and the others inside it', /onClick=\{\(\) => onPick\(c\.key\)\}/.test(cal), true);
 }
 
 console.log('\n— and what the card opens, opens where the calendar is —');
