@@ -21,7 +21,7 @@ import { EntityNotesDrawer } from '@/components/EntityNotesDrawer';
 import { CardNotesButton } from '@/components/SocialEventCardParts';
 import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
-import { MeetingsCalendar } from '@/components/MeetingsCalendar';
+import { MeetingsCalendar, type CalendarSlotPick } from '@/components/MeetingsCalendar';
 import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
@@ -76,6 +76,8 @@ export interface Meeting {
   company_wse: number | null;
   /** companies.status, comma-separated. Drawn as the card's Status stack. */
   company_status?: string | null;
+  /** companies.company_type — what colours the card on the calendar. */
+  company_type?: string | null;
   conference_name: string;
   has_notes?: boolean;
   /** Notes logged against this attendee for this meeting's conference. */
@@ -1454,6 +1456,10 @@ export function MeetingsTable({
   conferenceEnd = null,
   conferenceInternalAttendees = null,
   calendarRepDay = null,
+  calendarDimDays = [],
+  companyTypeOptions = [],
+  companyTypeColorMap = {},
+  onCalendarSlotPick,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -1501,6 +1507,20 @@ export function MeetingsTable({
   conferenceInternalAttendees?: string | null;
   /** The day the calendar's rep axis shows, from the day filters. */
   calendarRepDay?: string | null;
+  /**
+   * The days the picker has lit, for the calendar to dim the rest around.
+   *
+   * The table and the kanban are handed rows that are already filtered; the
+   * calendar is handed the whole week and told which part of it is in play,
+   * because its columns ARE the days and dropping three of four would leave
+   * a board that cannot say where the picked day sits.
+   */
+  calendarDimDays?: string[];
+  /** The configured company types in order, and their colours — the fill. */
+  companyTypeOptions?: string[];
+  companyTypeColorMap?: ColorMap;
+  /** An empty half hour on the calendar was clicked. */
+  onCalendarSlotPick?: (slot: CalendarSlotPick) => void;
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -2866,8 +2886,12 @@ export function MeetingsTable({
           axis={groupMode === 'rep' ? 'rep' : 'date'}
           internalAttendees={conferenceInternalAttendees}
           repDay={calendarRepDay}
+          dimDays={calendarDimDays}
           userOptions={userOptions}
           colorMap={colorMap}
+          companyTypeOptions={companyTypeOptions}
+          companyTypeColorMap={companyTypeColorMap}
+          onPickSlot={onCalendarSlotPick}
           renderDetail={calendarDetail}
         />
       )}

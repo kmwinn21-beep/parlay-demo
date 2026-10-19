@@ -153,6 +153,21 @@ export function buildColorMap(
 const RED_PRESET = COLOR_PRESETS.find(p => p.key === 'red')!;
 
 /**
+ * The preset a VALUE wears, override included.
+ *
+ * "Competitor" is red wherever it is drawn, whatever the option says, because
+ * it is the one status whose colour is part of what it means. Everything that
+ * paints a config value goes through here rather than through getPreset
+ * directly, so a new surface cannot quietly disagree with the badges.
+ */
+export function getValuePreset(
+  value: string | null | undefined, colorMap: ColorMap,
+): ColorPreset {
+  if (!value) return FALLBACK;
+  return value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
+}
+
+/**
  * Get badge class for a value, using its color from the map.
  *
  * sizeClass is the one thing a caller ever needs to vary — a badge in a grid
@@ -163,23 +178,19 @@ const RED_PRESET = COLOR_PRESETS.find(p => p.key === 'red')!;
 export function getBadgeClass(
   value: string | undefined, colorMap: ColorMap, sizeClass = 'text-xs',
 ): string {
-  if (!value) return `inline-flex px-2 py-0.5 rounded-lg ${sizeClass} font-semibold ${FALLBACK.badgeClass}`;
-  const preset = value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
+  const preset = getValuePreset(value, colorMap);
   return `inline-flex px-2 py-0.5 rounded-lg ${sizeClass} font-semibold ${preset.badgeClass}`;
 }
 
 /** Get pill class for a value (solid bg, used on detail pages) */
 export function getPillClass(value: string | undefined, colorMap: ColorMap): string {
-  if (!value) return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${FALLBACK.pillClass}`;
-  const preset = value === 'Competitor' ? RED_PRESET : getPreset(colorMap[value]);
+  const preset = getValuePreset(value, colorMap);
   return `inline-flex px-2 py-0.5 rounded-lg text-xs font-semibold ${preset.pillClass}`;
 }
 
 /** Get hex color for a value (used in charts) */
 export function getHex(value: string | undefined, colorMap: ColorMap): string {
-  if (!value) return FALLBACK.hex;
-  if (value === 'Competitor') return RED_PRESET.hex;
-  return getPreset(colorMap[value]).hex;
+  return getValuePreset(value, colorMap).hex;
 }
 
 /**

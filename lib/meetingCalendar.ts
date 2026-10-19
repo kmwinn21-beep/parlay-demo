@@ -76,6 +76,8 @@ export interface CalendarMeeting {
   duration_minutes?: number | null;
   scheduled_by?: string | null;
   support_rep_ids?: string | null;
+  /** The company's type, which is what colours the card. */
+  company_type?: string | null;
 }
 
 /**
@@ -223,6 +225,119 @@ export function untimedOn<T extends CalendarMeeting>(meetings: T[], day: string)
 export function timedOn<T extends CalendarMeeting>(meetings: T[], day: string): T[] {
   return meetings.filter(m =>
     m.meeting_date === day && timeToMinutes(m.meeting_time) != null);
+}
+
+/* ── Where there is room ──────────────────────────────────────────────── */
+
+/** The grain the board offers a free slot at, same as the availability board. */
+export const SLOT_MINUTES = 30;
+
+/**
+ * The half hours of this column with nothing drawn in them.
+ *
+ * What a column is about does not matter here: a day's free time and a
+ * person's free time are the same question asked of a different set of
+ * meetings, so the caller passes the ones already narrowed to the column.
+ *
+ * Measured against the height a card is DRAWN at rather than its real length,
+ * because the answer becomes a place to click: offering 9:15 under the bottom
+ * half of a quarter-hour meeting's card would be offering a slot that cannot
+ * be pointed at. On the half hour for the same reason the availability board
+ * is — four starts an hour is four times the pills and no more useful.
+ */
+export function openSlots(
+  meetings: CalendarMeeting[],
+  startHour: number,
+  endHour: number,
+): number[] {
+  const busy: Array<[number, number]> = [];
+  for (const m of meetings) {
+    const start = timeToMinutes(m.meeting_time);
+    if (start == null) continue;
+    busy.push([start, start + cardMinutes(m.duration_minutes)]);
+  }
+  const open: number[] = [];
+  for (let s = startHour * 60; s + SLOT_MINUTES <= endHour * 60; s += SLOT_MINUTES) {
+    const end = s + SLOT_MINUTES;
+    if (!busy.some(([bStart, bEnd]) => bStart < end && s < bEnd)) open.push(s);
+  }
+  return open;
+}
+
+/* ── What kind of company it is ───────────────────────────────────────── */
+
+/**
+ * A meeting's company type, or null where there is none.
+ *
+ * Null is ordinary: a company imported from a list and not yet typed, or an
+ * attendee with no company at all. The board draws those plainly rather than
+ * giving them a colour, so a missing type cannot pass for a chosen one.
+ */
+export function companyTypeOf(meeting: { company_type?: string | null }): string | null {
+  const value = String(meeting.company_type ?? '').trim();
+  return value === '' ? null : value;
+}
+
+/** A type on the board, and how many meetings wear it. Null is the untyped. */
+export interface CompanyTypeTally {
+  value: string | null;
+  count: number;
+}
+
+/**
+ * The company types these meetings actually use, in the config's own order.
+ *
+ * Only the ones present: a tenant with fourteen configured types should not
+ * get a fourteen-swatch key for a four-type week. In config order so the key
+ * reads the same as every type picker in the app, with anything configured
+ * since a meeting was booked — or typed by hand — after them, and the untyped
+ * last because it is the absence of an answer rather than one of them.
+ */
+export function companyTypesPresent(
+  meetings: Array<{ company_type?: string | null }>,
+  configOrder: string[] = [],
+): CompanyTypeTally[] {
+  const counts = new Map<string, number>();
+  let untyped = 0;
+  const appeared: string[] = [];
+  for (const m of meetings) {
+    const type = companyTypeOf(m);
+    if (type == null) { untyped++; continue; }
+    if (!counts.has(type)) appeared.push(type);
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+
+  const tallies: CompanyTypeTally[] = [];
+  const taken = new Set<string>();
+  for (const value of configOrder) {
+    if (!counts.has(value) || taken.has(value)) continue;
+    taken.add(value);
+    tallies.push({ value, count: counts.get(value) as number });
+  }
+  for (const value of appeared) {
+    if (taken.has(value)) continue;
+    taken.add(value);
+    tallies.push({ value, count: counts.get(value) as number });
+  }
+  if (untyped > 0) tallies.push({ value: null, count: untyped });
+  return tallies;
+}
+
+/**
+ * Whether a meeting stays lit while these company types are picked.
+ *
+ * The same rule as the people filter, read off the key rather than off a row
+ * of names: nothing picked lights everything, and several picked light a
+ * meeting of any of them. Null is a type here — "No type set" is a thing a
+ * key can be clicked on, and the companies that need typing are worth being
+ * able to pick out of a week.
+ */
+export function matchesCompanyTypes(
+  meeting: { company_type?: string | null },
+  picked: ReadonlySet<string | null>,
+): boolean {
+  if (picked.size === 0) return true;
+  return picked.has(companyTypeOf(meeting));
 }
 
 /* ── Who is on a meeting ──────────────────────────────────────────────── */
@@ -403,4 +518,19 @@ export function sharedMeetingIds(
 export function matchesPeople(meeting: CalendarMeeting, picked: ReadonlySet<number>): boolean {
   if (picked.size === 0) return true;
   return internalIdsOn(meeting).some(id => picked.has(id));
+}
+
+/**
+ * Whether a meeting stays lit while these days are picked.
+ *
+ * The day filters take meetings off the table and out of the kanban, because
+ * a list of Tuesday's meetings with Wednesday's still in it is not a filter.
+ * A calendar is the other way round: the days are its columns, so dropping
+ * three of the four leaves a board that cannot say where Tuesday sits in the
+ * week. Here the picked day is lit and the rest of the week dims — the shape
+ * of the conference is the thing a calendar is read for.
+ */
+export function matchesDays(meeting: CalendarMeeting, picked: readonly string[]): boolean {
+  if (picked.length === 0) return true;
+  return picked.includes(meeting.meeting_date);
 }

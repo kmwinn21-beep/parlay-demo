@@ -4,13 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createPortal } from 'react-dom';
 import { formatMeetingTime, hasNoStartTime, timeToMinutes, unscheduledLabel } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
-import { getPreset, type ColorMap } from '@/lib/colors';
+import { getValuePreset, type ColorMap } from '@/lib/colors';
 import {
-  calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
-  durationSuffix, hourWindow, isOutsideConference, layoutDay, matchesPeople,
-  meetingsOfPerson, meetingsWithoutColumn, sharedMeetingIds,
+  SLOT_MINUTES, calendarDays, calendarPeople, cardMinutes, companyTypeOf, companyTypesPresent,
+  conferencePeople, defaultCalendarDay, durationSuffix, hourWindow, isOutsideConference,
+  layoutDay, matchesCompanyTypes, matchesDays, matchesPeople, meetingsOfPerson,
+  meetingsWithoutColumn, openSlots, sharedMeetingIds,
   type CalendarMeeting,
 } from '@/lib/meetingCalendar';
+import { minutesToTime, slotLabel } from '@/lib/availability';
 import type { Meeting } from '@/components/MeetingsTable';
 
 /**
@@ -51,6 +53,33 @@ function todayYmd(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * How far down the page something has to pin to clear the tab row.
+ *
+ * Measured rather than written down: the tabs wrap to two lines on a narrow
+ * desktop window, and a constant would leave the headings either floating in
+ * a gap or half under the tabs. Zero where there is no tab row — the drawer,
+ * and anywhere else the board is embedded — which pins the headings to the
+ * top of the viewport, the right answer when nothing is above them.
+ */
+function useStickyTop(): number {
+  const [top, setTop] = useState(0);
+  useEffect(() => {
+    const tabs = document.querySelector<HTMLElement>('[data-sticky-tabs]');
+    if (!tabs) return;
+    const measure = () => setTop(tabs.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(tabs);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, []);
+  return top;
+}
+
 /** '7 AM', '12 PM' — the gutter's labels. */
 function hourLabel(hour: number): string {
   const h = hour % 24;
@@ -58,19 +87,34 @@ function hourLabel(hour: number): string {
   return `${h % 12 || 12} ${period}`;
 }
 
-/** What a meeting with no outcome yet wears. */
-const NO_OUTCOME_CLASS = 'bg-brand-secondary/10 text-brand-primary border border-brand-secondary/30';
+/**
+ * What a meeting with no company type wears.
+ *
+ * Dashed and plain rather than grey-filled: grey is a colour an admin can
+ * choose — Other wears it out of the box — and a company nobody has typed
+ * should not be able to pass for one that was typed as nothing. The dashes
+ * are also a nudge, since the fix is a field on the company record.
+ */
+const UNTYPED_CLASS = 'bg-white text-gray-600 border border-dashed border-gray-400';
+
+/** A neutral fill for the legend's conflict swatch, which has no value. */
+const NEUTRAL_CLASS = 'bg-brand-secondary/10 text-brand-primary border border-brand-secondary/30';
 
 /**
- * The colour a card wears: its outcome's, from the same table the pills use.
+ * The colour a card wears: its company's type, from the config's own colours.
  *
- * A calendar is scanned rather than read, and the outcome is the thing worth
- * telling apart at a glance — what is still to happen, what happened, what
- * did not. The badge class, so a card and the outcome pill on it agree.
+ * A calendar is scanned rather than read, and what kind of company it is
+ * answers the question a week of meetings is laid out to ask — am I spending
+ * this conference on operators or on capital. It is also the one fact a card
+ * has exactly one of: a meeting has one company, so the fill never has to
+ * choose between two people on it the way colouring by rep would.
+ *
+ * The badge class, which means a card and the type badge on the company's own
+ * record are the same colour without either being told about the other.
  */
-function outcomeClass(outcome: string | null | undefined, colorMap: ColorMap): string {
-  if (!outcome) return NO_OUTCOME_CLASS;
-  return getPreset(colorMap[outcome]).badgeClass;
+function companyTypeClass(type: string | null, colorMap: ColorMap): string {
+  if (type == null) return UNTYPED_CLASS;
+  return getValuePreset(type, colorMap).badgeClass;
 }
 
 /** The two things a column can be about. */
@@ -87,23 +131,44 @@ interface Column {
   meetings: Meeting[];
   /** Overlapping cards here mean one person in two places: ring them. */
   marksConflicts: boolean;
+  /**
+   * Whether an empty half hour here can be booked into.
+   *
+   * Every column but one: "Nobody attending" is not a diary, so a free half
+   * hour in it is not a place to put a meeting.
+   */
+  offersSlots: boolean;
   head: ReactNode;
   /** What the phone's list and the drawer's chips call it. */
   shortLabel: string;
   longLabel: string;
 }
 
+/** A free half hour, handed back to whatever opens the meeting form. */
+export interface CalendarSlotPick {
+  day: string;
+  /** 'HH:MM'. */
+  time: string;
+  /** The column's person on the rep axis; null on the date axis. */
+  personId: number | null;
+}
+
 export function MeetingsCalendar({
   meetings, conferenceStart, conferenceEnd, userOptions, colorMap, renderDetail,
-  axis = 'date', internalAttendees = null, repDay = null,
-  closeSignal = 0, detailLocked = false, onDetailClose,
+  companyTypeOptions = [], companyTypeColorMap = {},
+  axis = 'date', internalAttendees = null, repDay = null, dimDays = [],
+  closeSignal = 0, detailLocked = false, onDetailClose, onPickSlot,
 }: {
   meetings: Meeting[];
   conferenceStart: string | null;
   conferenceEnd: string | null;
   userOptions: Array<{ id: number; value: string }>;
-  /** The action colours, so a card and its outcome pill agree. */
+  /** The action colours, for the outcome mark and the key beside it. */
   colorMap: ColorMap;
+  /** The configured company types, in their order — the key reads in it. */
+  companyTypeOptions?: string[];
+  /** The company-type colours: what fills a card. */
+  companyTypeColorMap?: ColorMap;
   /** The meeting's own card, rendered in the popup. */
   renderDetail: (meeting: Meeting) => ReactNode;
   /**
@@ -117,6 +182,14 @@ export function MeetingsCalendar({
   internalAttendees?: string | null;
   /** Which day the rep axis shows, from the day filters. Null falls back. */
   repDay?: string | null;
+  /**
+   * The days the picker above has lit, if any.
+   *
+   * These dim the rest of the board rather than removing it — see matchesDays.
+   * Empty means every day reads normally, which is also what the rep axis
+   * passes, since there the picked day is the one column set being drawn.
+   */
+  dimDays?: string[];
   /**
    * Bumped by the table when the card in the popup opens something of its
    * own — a quick view, a call sheet, an add-contact sheet.
@@ -134,10 +207,21 @@ export function MeetingsCalendar({
   detailLocked?: boolean;
   /** The popup closed: whatever it was showing for that meeting is done. */
   onDetailClose?: () => void;
+  /**
+   * An empty half hour was clicked — open the meeting form on it.
+   *
+   * Left out where the conference's stage does not allow logging a meeting,
+   * and the board then draws no slots at all rather than offering a button
+   * whose form refuses it.
+   */
+  onPickSlot?: (slot: CalendarSlotPick) => void;
 }) {
   const isPhone = useIsPhone();
+  const stickyTop = useStickyTop();
   const [openId, setOpenId] = useState<number | null>(null);
   const [pickedPeople, setPickedPeople] = useState<Set<number>>(new Set());
+  /** Types picked off the key. Null in the set is "No type set". */
+  const [pickedTypes, setPickedTypes] = useState<Set<string | null>>(new Set());
   const [openColumn, setOpenColumn] = useState<string | null>(null);
   /** The shared meeting being pointed at, if any — see `sharedIds` below. */
   const [tracedId, setTracedId] = useState<number | null>(null);
@@ -150,6 +234,15 @@ export function MeetingsCalendar({
   const whosePeople = useMemo(
     () => calendarPeople(meetings as CalendarMeeting[], userOptions),
     [meetings, userOptions],
+  );
+  const typeTallies = useMemo(
+    () => companyTypesPresent(meetings as CalendarMeeting[], companyTypeOptions),
+    [meetings, companyTypeOptions],
+  );
+  /** The outcomes on this board, in the order the key should read them. */
+  const outcomesPresent = useMemo(
+    () => Array.from(new Set(meetings.map(m => m.outcome).filter((o): o is string => !!o))).slice(0, 6),
+    [meetings],
   );
   const hours = useMemo(
     () => Array.from({ length: Math.max(1, endHour - startHour) }, (_, i) => startHour + i),
@@ -187,6 +280,7 @@ export function MeetingsCalendar({
           personId: null,
           meetings: onDay(day),
           marksConflicts: false,
+          offersSlots: true,
           shortLabel: `${parts.weekday} ${parts.short}`,
           longLabel: `${parts.weekday} ${parts.label}`,
           head: (
@@ -226,6 +320,7 @@ export function MeetingsCalendar({
         personId: person.id,
         meetings: mine,
         marksConflicts: true,
+        offersSlots: true,
         shortLabel: person.initials,
         longLabel: person.name,
         head: (
@@ -253,6 +348,7 @@ export function MeetingsCalendar({
       personId: null,
       meetings: orphans,
       marksConflicts: true,
+      offersSlots: false,
       shortLabel: 'Nobody',
       longLabel: 'Nobody attending',
       head: (
@@ -323,23 +419,43 @@ export function MeetingsCalendar({
     return next;
   });
 
+  const toggleType = (value: string | null) => setPickedTypes(prev => {
+    const next = new Set(prev);
+    if (next.has(value)) next.delete(value); else next.add(value);
+    return next;
+  });
+
   // Nothing to trace once the columns change under the pointer.
   useEffect(() => { setTracedId(null); }, [axis, theDay]);
 
   /**
    * Dimmed, not hidden: the board keeps its shape while one thing stands out.
    *
-   * Two reasons to dim. The Whose row picks people, on the date axis. And
-   * pointing at a meeting that is in several columns leaves its own copies
-   * lit and dims the rest, so where it appears can be seen at a glance
-   * rather than read out of four columns of company names.
+   * Four reasons to dim. The day filters pick days, which here light a day
+   * rather than empty the week. The key picks company types. The Whose row
+   * picks people, on the date axis. And pointing at a meeting that is in
+   * several columns leaves its own copies lit and dims the rest, so where it
+   * appears can be seen at a glance rather than read out of four columns of
+   * company names.
    */
   const dimmed = (m: Meeting) =>
-    !matchesPeople(m as CalendarMeeting, pickedPeople)
+    !matchesDays(m as CalendarMeeting, dimDays)
+    || !matchesCompanyTypes(m as CalendarMeeting, pickedTypes)
+    || !matchesPeople(m as CalendarMeeting, pickedPeople)
     || (tracedId != null && m.id !== tracedId);
 
+  /**
+   * A day the picker has not lit.
+   *
+   * The meetings in it dim, and so does its heading — a dimmed column under a
+   * heading in full strength reads as a rendering fault rather than as a
+   * filter, and the heading is the part that says which day it is.
+   */
+  const dayDimmed = (day: string) => dimDays.length > 0 && !dimDays.includes(day);
+
   const card = (m: Meeting, opts: { style?: React.CSSProperties; compact?: boolean; conflict?: boolean } = {}) => {
-    const tint = outcomeClass(m.outcome, colorMap);
+    const type = companyTypeOf(m as CalendarMeeting);
+    const tint = companyTypeClass(type, companyTypeColorMap);
     const suffix = durationSuffix(m.duration_minutes);
     const unscheduled = unscheduledLabel(m.meeting_time);
     const name = m.company_name || `${m.first_name} ${m.last_name}`.trim() || 'Meeting';
@@ -357,18 +473,33 @@ export function MeetingsCalendar({
         style={opts.style}
         data-shared={sharedIds.has(m.id) ? 'true' : undefined}
         data-conflict={opts.conflict ? 'true' : undefined}
-        title={`${name}${opts.conflict ? ' — conflict' : ''}${
+        title={`${name}${type ? ` — ${type}` : ''}${m.outcome ? ` — ${m.outcome}` : ''}${
+          opts.conflict ? ' — conflict' : ''}${
           unscheduled ? ` — ${unscheduled}` : m.meeting_time ? ` — ${formatMeetingTime(m.meeting_time)}` : ''}${
           sharedIds.has(m.id) ? ' — on more than one column' : ''}`}
-        className={`block w-full text-left overflow-hidden rounded-md px-1.5 py-1 transition-opacity ${tint} ${
+        className={`relative block w-full text-left overflow-hidden rounded-md px-1.5 py-1 transition-opacity ${tint} ${
           opts.conflict ? 'ring-2 ring-red-600' : ''} ${
           dimmed(m) ? 'opacity-25' : 'opacity-100 hover:brightness-95'}`}
       >
+        {/* The outcome, which no longer has the fill.
+            A dot rather than a tick and a cross, because outcomes are
+            configured: a tenant can have five, and only two of them are ever
+            "it went well" and "it did not". It takes its colour from the same
+            table the outcome pill does, and a meeting with nothing recorded
+            yet — most of them, most of the time — carries no dot at all,
+            which is the quietest thing the commonest state can look like. */}
+        {m.outcome && (
+          <span
+            className="absolute top-1 right-1 w-2 h-2 rounded-full ring-1 ring-white/90"
+            style={{ backgroundColor: getValuePreset(m.outcome, colorMap).hex }}
+            aria-hidden
+          />
+        )}
         {/* The length rides the name's line rather than taking one of its
             own: a quarter-hour card is drawn at half-hour height, which is
             28px, and two lines do not fit in it. The name truncates, the
             length does not — it is the shorter and the more surprising. */}
-        <span className="flex items-baseline gap-1 min-w-0">
+        <span className={`flex items-baseline gap-1 min-w-0 ${m.outcome ? 'pr-2.5' : ''}`}>
           <span className="text-[11px] font-semibold leading-tight truncate">{name}</span>
           {suffix && <span className="flex-shrink-0 text-[9px] font-medium leading-tight opacity-80">{suffix}</span>}
         </span>
@@ -412,6 +543,48 @@ export function MeetingsCalendar({
               aria-hidden
             />
           ))}
+
+          {/*
+            The empty half hours, as somewhere to click.
+
+            Invisible until pointed at, because a board showing twenty dashed
+            outlines is a board of buttons with some meetings in it. Drawn
+            before the cards so the cards sit over them — though none of these
+            overlaps one: openSlots leaves out any half hour a card is drawn
+            in, so the outline never appears under a meeting, where clicking
+            it would mean double-booking.
+
+            Phone only draws the day drawer, where a long press competes with
+            scrolling and there is no hover to reveal anything; the + Meeting
+            button above the list is already a tap away there.
+          */}
+          {!phone && col.offersSlots && onPickSlot
+            && openSlots(col.meetings as CalendarMeeting[], startHour, endHour).map(start => (
+              <button
+                key={start}
+                type="button"
+                onClick={() => onPickSlot({
+                  day: col.day,
+                  time: minutesToTime(start),
+                  personId: col.personId,
+                })}
+                aria-label={`Schedule a meeting, ${slotLabel(start, start + SLOT_MINUTES)}`}
+                title={`Schedule a meeting · ${slotLabel(start, start + SLOT_MINUTES)}`}
+                className="absolute inset-x-0 flex items-center px-0.5 py-px opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
+                style={{
+                  top: (start - startHour * 60) * PX_PER_MINUTE,
+                  height: SLOT_MINUTES * PX_PER_MINUTE,
+                }}
+              >
+                {/* The width of a card, because that is what it would become
+                    — a pill in the middle of the column points at a slot the
+                    size of a pill, and the half hour is the whole column. */}
+                <span className="pointer-events-none flex h-full w-full items-center justify-center truncate rounded-md border border-dashed border-gray-400 bg-white/70 px-2 text-[10px] font-medium text-gray-500">
+                  + Meeting
+                </span>
+              </button>
+            ))}
+
           {placed.map(p => {
             const width = 100 / p.columns;
             /* Overlapping cards in a PERSON's column are one person in two
@@ -447,24 +620,87 @@ export function MeetingsCalendar({
     );
   }
 
-  const legend = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-      <span className="text-[11px] font-medium text-gray-500">Outcome:</span>
-      {Array.from(new Set(meetings.map(m => m.outcome).filter((o): o is string => !!o))).slice(0, 6).map(outcome => (
-        <span key={outcome} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
-          <span className={`w-2.5 h-2.5 rounded-sm ${outcomeClass(outcome, colorMap)}`} />
-          {outcome}
-        </span>
-      ))}
-      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
-        <span className={`w-2.5 h-2.5 rounded-sm ${NO_OUTCOME_CLASS}`} />
-        No outcome yet
-      </span>
+  /*
+   * The key to the fill, which is also a filter.
+   *
+   * Every swatch is a button: a key that tells you teal means OpCo and then
+   * leaves you to find the OpCos is half an answer, and the dimming already
+   * exists for the Whose row. Picking "No type set" is the useful edge of it —
+   * the companies somebody has to go and type.
+   *
+   * Only the types this conference actually uses, so a tenant with fourteen
+   * configured types gets the four that are in the room.
+   */
+  const typeKey = typeTallies.length > 0 && (
+    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+      <span className="text-[11px] font-medium text-gray-500 flex-shrink-0">Company type:</span>
+      <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
+        {typeTallies.map(t => {
+          const on = pickedTypes.has(t.value);
+          const label = t.value ?? 'No type set';
+          return (
+            <button
+              key={label}
+              type="button"
+              onClick={() => toggleType(t.value)}
+              aria-pressed={on}
+              title={`${label} — ${t.count} meeting${t.count === 1 ? '' : 's'}`}
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                on
+                  ? 'bg-brand-secondary text-white border-brand-secondary'
+                  : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}
+            >
+              {/* The swatch stays its own colour on a picked button: it is
+                  what the cards are wearing, and a key whose swatch changes
+                  colour when clicked has stopped being a key. */}
+              <span className={`w-2.5 h-2.5 rounded-sm ${companyTypeClass(t.value, companyTypeColorMap)}`} />
+              {label}
+              <span className={`text-[10px] font-semibold ${on ? 'text-white/80' : 'text-gray-400'}`}>{t.count}</span>
+            </button>
+          );
+        })}
+      </div>
+      {pickedTypes.size > 0 && (
+        <button
+          type="button"
+          onClick={() => setPickedTypes(new Set())}
+          className="flex-shrink-0 text-[11px] font-medium text-gray-500 hover:text-red-500 transition-colors"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
+
+  /*
+   * The outcome, which the fill no longer carries.
+   *
+   * Only once anything has been recorded: on the Monday of a conference every
+   * meeting is still to happen, and a key to marks that are nowhere on the
+   * board is a row of noise.
+   */
+  const outcomeKey = (outcomesPresent.length > 0 || axis === 'rep') && (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 border-b border-gray-100">
+      {outcomesPresent.length > 0 && (
+        <>
+          <span className="text-[11px] font-medium text-gray-500">Outcome:</span>
+          {outcomesPresent.map(outcome => (
+            <span key={outcome} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
+              <span
+                className="w-2 h-2 rounded-full ring-1 ring-gray-300"
+                style={{ backgroundColor: getValuePreset(outcome, colorMap).hex }}
+              />
+              {outcome}
+            </span>
+          ))}
+          <span className="text-[11px] text-gray-400">no dot · nothing recorded yet</span>
+        </>
+      )}
       {/* Only where it can happen: on the date axis two cards side by side
           are two different people, and nothing is wrong. */}
       {axis === 'rep' && (
         <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
-          <span className={`w-2.5 h-2.5 rounded-sm ring-2 ring-red-600 ${NO_OUTCOME_CLASS}`} />
+          <span className={`w-2.5 h-2.5 rounded-sm ring-2 ring-red-600 ${NEUTRAL_CLASS}`} />
           Conflict
         </span>
       )}
@@ -527,7 +763,8 @@ export function MeetingsCalendar({
 
   return (
     <div>
-      {legend}
+      {typeKey}
+      {outcomeKey}
       {peopleFilter}
 
       {/* The rep axis says which day it is about, since the columns no longer
@@ -536,9 +773,6 @@ export function MeetingsCalendar({
         <div className="hidden lg:flex items-center gap-2 px-4 py-2 border-b border-gray-100">
           <p className="text-xs font-semibold text-brand-primary">
             {dayParts(theDay).weekday}, {dayParts(theDay).label}
-          </p>
-          <p className="text-[11px] text-gray-500">
-            · a column each · a meeting shows in every column of a person on it
           </p>
         </div>
       )}
@@ -557,7 +791,8 @@ export function MeetingsCalendar({
             key={col.key}
             type="button"
             onClick={() => setOpenColumn(col.key)}
-            className="w-full flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-gray-300 transition-colors"
+            className={`w-full flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-gray-300 transition-colors ${
+              axis === 'date' && dayDimmed(col.day) ? 'opacity-50' : ''}`}
           >
             <div className="flex-1 min-w-0">
               {axis === 'date' ? (
@@ -590,16 +825,44 @@ export function MeetingsCalendar({
       {/* ── Desktop: the board ── */}
       <div className={`hidden lg:block p-4 ${scrolls ? 'overflow-x-auto' : ''}`}>
         <div className={scrolls ? 'min-w-max' : ''}>
-          <div className="flex">
-            <div className="w-16 flex-shrink-0 sticky left-0 bg-white z-10" />
+          {/*
+            The headings stay put while the day scrolls under them.
+
+            A board is ten hours tall and a conference day is read from the
+            bottom as often as from the top, where a column of company names
+            with nothing saying whose column it is means re-scrolling to find
+            out. Pinned under the tab row rather than over it, and below it in
+            the stack — the tabs are z-20 — so the two rows read as one header
+            rather than as two things fighting for the same pixels.
+
+            White, because the cards pass behind it. Above them, and above the
+            hour gutter's z-10, because the labels and the cards would
+            otherwise both pass over it; below the tabs' z-20, because it
+            belongs under them.
+
+            One caveat: past six columns the board scrolls sideways, and the
+            ancestor that does that is also what a sticky top would measure
+            against, so on those boards the headings scroll away as they did
+            before. The gutter's sticky left is the same trade in reverse.
+          */}
+          <div
+            className="flex sticky z-[15] bg-white border-b border-gray-200"
+            style={{ top: stickyTop }}
+          >
+            <div className="w-16 flex-shrink-0 sticky left-0 bg-white" />
             {columns.map(col => (
-              <div key={col.key} className="px-1 pb-2" style={columnStyle}>
+              <div
+                key={col.key}
+                className={`px-1 pt-1 pb-2 transition-opacity ${
+                  axis === 'date' && dayDimmed(col.day) ? 'opacity-40' : ''}`}
+                style={columnStyle}
+              >
                 {col.head}
               </div>
             ))}
           </div>
 
-          <div className="flex border-t border-gray-200">
+          <div className="flex">
             {/* The hour gutter, pushed down by the untimed band so a label and
                 its line are at the same height, and pinned while the board
                 scrolls sideways. */}
