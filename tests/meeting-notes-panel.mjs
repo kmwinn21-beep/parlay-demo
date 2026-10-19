@@ -189,7 +189,9 @@ console.log('\n— opened beside the row that asked for it —');
    * is already there.
    */
   eq('a phone keeps the popover', /notesView && isPhone && \(/.test(table), true);
-  eq('  and the panel is not drawn there', /notesView && !isPhone && \(/.test(table), true);
+  // …nor in the calendar, where it draws inside the meeting popup instead of
+  // beside a table row that is not there.
+  eq('  and the panel is not drawn there', /notesView && !isPhone && !inCalendarPopup && \(/.test(table), true);
 }
 
 console.log('\n— and the table says which row it is about —');

@@ -2846,4 +2846,11 @@ export const migrations: string[] = [
      pointing at nothing, which is what greys the Floor Plan button out again.
      A copied URL would have outlived the file it named. */
   `ALTER TABLE conferences ADD COLUMN floor_plan_file_id INTEGER`,
+
+  /* How long a meeting runs, in minutes.
+     Nullable, and read as 30 where it is null: every meeting booked before
+     this column existed was booked with no length at all, and 30 minutes is
+     both the form's default and what the calendar had been drawing them as.
+     Writing a value into the old rows would be inventing a fact about them. */
+  `ALTER TABLE meetings ADD COLUMN duration_minutes INTEGER`,
 ];

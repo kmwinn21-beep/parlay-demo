@@ -3,6 +3,7 @@ import { getDb } from '@/lib/getDb';
 import { getSessionUser } from '@/lib/auth';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
 import { loadAdditionalAttendees, serializeAttendeeIds } from '@/lib/additionalAttendees';
+import { normalizeDuration } from '@/lib/meetingCalendar';
 
 export async function GET(
   request: NextRequest,
@@ -16,7 +17,7 @@ export async function GET(
     const result = await db.execute({
       sql: `SELECT m.id, m.attendee_id, m.conference_id, m.scheduled_by, m.support_rep_ids,
                m.additional_attendees, m.additional_attendee_ids,
-               m.meeting_date, m.meeting_time, m.location,
+               m.meeting_date, m.meeting_time, m.location, m.duration_minutes,
                a.first_name, a.last_name, a.title, a.photo_url,
                co.id AS company_id, co.name AS company_name, co.icp AS company_icp,
                c.name AS conference_name, c.internal_attendees AS conference_internal_attendees
@@ -68,6 +69,7 @@ export async function GET(
       meeting_date: r.meeting_date ? String(r.meeting_date) : null,
       meeting_time: r.meeting_time ? String(r.meeting_time) : null,
       location: r.location ? String(r.location) : null,
+      duration_minutes: r.duration_minutes != null ? Number(r.duration_minutes) : null,
       first_name: String(r.first_name ?? ''),
       last_name: String(r.last_name ?? ''),
       title: r.title ? String(r.title) : null,
@@ -93,7 +95,7 @@ export async function PUT(
     const db = await getDb(user?.accountId);
     const { id } = params;
     const body = await request.json();
-    const { meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, meeting_type } = body;
+    const { meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, meeting_type, duration_minutes } = body;
 
     if (!meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'meeting_date and meeting_time are required' }, { status: 400 });
@@ -111,9 +113,19 @@ export async function PUT(
     const stageBlock = await validateConferenceStage(request, Number(existing.rows[0].conference_id), 'canEditMeeting');
     if (stageBlock) return stageBlock;
 
+    /*
+     * The duration is written only when it is sent.
+     *
+     * The table's inline edit row sends the fields it shows and nothing else;
+     * including the duration in the SET list regardless would set every
+     * meeting edited there back to 30 minutes.
+     */
+    const setsDuration = duration_minutes !== undefined;
     await db.execute({
-      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, support_rep_ids = ?, additional_attendees = ?, additional_attendee_ids = ?, meeting_type = ? WHERE id = ?`,
-      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, support_rep_ids ?? null, additional_attendees ?? null, serializeAttendeeIds(additional_attendee_ids), meeting_type ?? null, id],
+      sql: `UPDATE meetings SET meeting_date = ?, meeting_time = ?, location = ?, scheduled_by = ?, support_rep_ids = ?, additional_attendees = ?, additional_attendee_ids = ?, meeting_type = ?${
+        setsDuration ? ', duration_minutes = ?' : ''} WHERE id = ?`,
+      args: [meeting_date, meeting_time, location ?? null, scheduled_by ?? null, support_rep_ids ?? null, additional_attendees ?? null, serializeAttendeeIds(additional_attendee_ids), meeting_type ?? null,
+        ...(setsDuration ? [normalizeDuration(duration_minutes)] : []), id],
     });
 
     return NextResponse.json({ success: true });

@@ -21,6 +21,7 @@ import { EntityNotesDrawer } from '@/components/EntityNotesDrawer';
 import { CardNotesButton } from '@/components/SocialEventCardParts';
 import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { MeetingsCalendar } from '@/components/MeetingsCalendar';
 import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
@@ -60,6 +61,8 @@ export interface Meeting {
   as_additional_attendee?: boolean;
   outcome: string | null;
   meeting_type: string | null;
+  /** 15, 30, 45 or 60. Null on anything booked before the field existed. */
+  duration_minutes?: number | null;
   created_at: string;
   first_name: string;
   last_name: string;
@@ -1447,6 +1450,8 @@ export function MeetingsTable({
   onQuickNote,
   collapseAll,
   viewMode = 'table',
+  conferenceStart = null,
+  conferenceEnd = null,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -1474,8 +1479,17 @@ export function MeetingsTable({
   onQuickNote?: (meeting: Meeting) => void;
   /** Bump the token to collapse (or expand) every section at once. */
   collapseAll?: { token: number; collapse: boolean };
-  /** 'kanban' lays the mobile cards out in a column per group. */
-  viewMode?: 'table' | 'kanban';
+  /**
+   * How the meetings are laid out.
+   *
+   * 'kanban' puts the mobile cards in a column per group; 'calendar' draws the
+   * conference as a week, days across and hours down, and is the one view that
+   * needs the conference's own dates — a week has to show its empty Thursday.
+   */
+  viewMode?: 'table' | 'kanban' | 'calendar';
+  /** The conference's own dates, for the calendar's columns. */
+  conferenceStart?: string | null;
+  conferenceEnd?: string | null;
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -1645,6 +1659,33 @@ export function MeetingsTable({
     [noteCounts],
   );
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
+  /*
+   * Tells the calendar's popup to get out of the way.
+   *
+   * The card inside it opens quick views and contact sheets, which draw
+   * below that popup — so the popup stands aside and the thing that was
+   * asked for is what ends up on screen.
+   */
+  const [calendarCloseSignal, setCalendarCloseSignal] = useState(0);
+  useEffect(() => {
+    if (quickView || callTarget || addContact) setCalendarCloseSignal(n => n + 1);
+  }, [quickView, callTarget, addContact]);
+  /*
+   * And on a phone, the notes too.
+   *
+   * Below sm both notes panels draw themselves as bottom sheets at z-50,
+   * under the popup — so there is no rendering them inside it. The popup
+   * stands aside and the sheet comes up over the week, which is what tapping
+   * the same button on the card list already does.
+   */
+  const phoneCalendar = isPhone && viewMode === 'calendar';
+  useEffect(() => {
+    if (phoneCalendar && (notesMeetingId != null || notesView != null)) setCalendarCloseSignal(n => n + 1);
+  }, [phoneCalendar, notesMeetingId, notesView]);
+  /** The same, for a page-level modal the card asks the page to open. */
+  const stepAside = useCallback(() => {
+    if (viewMode === 'calendar') setCalendarCloseSignal(n => n + 1);
+  }, [viewMode]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   // Checkboxes stay out of the way until the table is being used: hovering it
   // offers them, and any selection keeps them out.
@@ -2014,6 +2055,60 @@ export function MeetingsTable({
   /** Whether the table — and so the row the panel anchors to — is on screen. */
   const notesAnchorable = !cardsOnly && viewMode === 'table';
 
+  /**
+   * Whichever notes are open, drawn INSIDE the calendar's popup.
+   *
+   * In the table they hang beside the row that opened them; in the calendar
+   * there is no row, and rendering them in the old slot put them below the
+   * week where the table would have been — reported, and exactly what it
+   * looked like. Inside the popup they take the card's place, which is what
+   * the inline edit form already does there.
+   *
+   * Desktop only: below sm both panels draw themselves as bottom sheets over
+   * everything, so there the popup steps aside instead (see the close signal).
+   */
+  const inCalendarPopup = !cardsOnly && viewMode === 'calendar' && !isPhone;
+
+  const attendeeNotesPanel = notesView && (
+    <MeetingNotesPanel
+      attendeeId={notesView.meeting.attendee_id}
+      attendeeName={`${notesView.meeting.first_name} ${notesView.meeting.last_name}`.trim()}
+      subtitle={[notesView.meeting.title, notesView.meeting.company_name].filter(Boolean).join(' · ')}
+      conferenceName={notesView.meeting.conference_name}
+      onClose={() => setNotesView(null)}
+      onCountChange={count => setNoteCounts(prev => ({ ...prev, [notesView.meeting.attendee_id]: count }))}
+      onOpenRecord={() => {
+        setQuickView({ type: 'attendee', id: notesView.meeting.attendee_id,
+          name: `${notesView.meeting.first_name} ${notesView.meeting.last_name}`.trim() });
+        setNotesView(null);
+      }}
+    />
+  );
+
+  /**
+   * Whether what the popup is showing owns Escape and the click outside.
+   *
+   * The notes panels and the inline edit form each close themselves, and one
+   * Escape closing the panel AND the popup under it loses the meeting as
+   * well as the notes.
+   */
+  const calendarDetailLocked = inCalendarPopup
+    && (notesMeetingId != null || notesView != null || editingId != null);
+
+  /** Closing the popup finishes whatever it was showing. */
+  const closeCalendarDetail = useCallback(() => {
+    setNotesMeetingId(null);
+    setNotesView(null);
+    setEditingId(null);
+  }, []);
+
+  /** What the popup shows for a meeting: its notes if any are open, else its card. */
+  const calendarDetail = (m: Meeting) => {
+    if (inCalendarPopup && notesMeetingId === m.id && meetingNotesDrawer) return meetingNotesDrawer;
+    if (inCalendarPopup && notesView?.meeting.id === m.id && attendeeNotesPanel) return attendeeNotesPanel;
+    return renderMobileCard(m);
+  };
+
   const renderMobileCard = (m: Meeting) => (
       <div key={m.id} className="p-4 bg-white">
         {editingId === m.id && onEdit ? (
@@ -2095,8 +2190,8 @@ export function MeetingsTable({
                   <MeetingActionsMenu
                     hasNotes={!!m.has_notes}
                     hasConferenceNotes={noteCount(m) > 0}
-                    onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-                    onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+                    onNotes={onNotesClick ? () => { stepAside(); onNotesClick(m.id); } : undefined}
+                    onQuickNote={onQuickNote ? () => { stepAside(); onQuickNote(m); } : undefined}
                     onViewNotes={anchor => { setNotesMeetingId(null); setNotesView({ meeting: m, anchor }); }}
                     onEdit={() => setEditingId(m.id)}
                     onSelect={hasSelection && !anySelected ? () => toggleSelect(m.id) : undefined}
@@ -2587,8 +2682,8 @@ export function MeetingsTable({
           <MeetingActionsMenu
             hasNotes={!!m.has_notes}
             hasConferenceNotes={noteCount(m) > 0}
-            onNotes={onNotesClick ? () => onNotesClick(m.id) : undefined}
-            onQuickNote={onQuickNote ? () => onQuickNote(m) : undefined}
+            onNotes={onNotesClick ? () => { stepAside(); onNotesClick(m.id); } : undefined}
+            onQuickNote={onQuickNote ? () => { stepAside(); onQuickNote(m); } : undefined}
             onViewNotes={anchor => { setNotesMeetingId(null); setNotesView({ meeting: m, anchor }); }}
             onEdit={() => setEditingId(m.id)}
           />
@@ -2739,11 +2834,33 @@ export function MeetingsTable({
         </div>
       )}
 
+      {/*
+        The week.
+
+        It renders the meeting's own card in its popup — renderMobileCard,
+        the same function the kanban columns and the phone list use — so the
+        card is written once and keeps every one of its controls: the notes
+        button, the kebab, the outcome pill, the inline edit.
+      */}
+      {!cardsOnly && viewMode === 'calendar' && (
+        <MeetingsCalendar
+          closeSignal={calendarCloseSignal}
+          detailLocked={calendarDetailLocked}
+          onDetailClose={closeCalendarDetail}
+          meetings={sorted}
+          conferenceStart={conferenceStart}
+          conferenceEnd={conferenceEnd}
+          userOptions={userOptions}
+          colorMap={colorMap}
+          renderDetail={calendarDetail}
+        />
+      )}
+
       {/* Mobile card layout — also the desktop list when the view is a table.
           Each meeting sits in the same bordered card the kanban columns use,
           on the same tinted backing: run flush against each other they read as
           one long list rather than as separate meetings. */}
-      <div className={`${cardsOnly ? 'block' : `block ${viewMode === 'kanban' ? 'lg:hidden' : 'lg:hidden'}`}`}>
+      <div className={`${cardsOnly ? 'block' : viewMode === 'calendar' ? 'hidden' : 'block lg:hidden'}`}>
         {groupedMeetings
           ? groupedMeetings.map(([key, group]) => (
             <div key={`${mode}-${key || 'none'}`} style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
@@ -2870,7 +2987,7 @@ export function MeetingsTable({
           bottom somewhere to scroll to; it sits outside the measured list so
           growing it cannot move the row the offset was measured against — or
           shrink the overhang that put it there. */}
-      {notesView && !isPhone && (
+      {notesView && !isPhone && !inCalendarPopup && (
         <>
           <div className="hidden lg:block" style={{ height: notesOverhang }} aria-hidden />
           <div
@@ -2878,19 +2995,7 @@ export function MeetingsTable({
             style={{ paddingTop: notesOffset }}
           >
             <div ref={notesPanelRef} className="lg:pointer-events-auto">
-              <MeetingNotesPanel
-                attendeeId={notesView.meeting.attendee_id}
-                attendeeName={`${notesView.meeting.first_name} ${notesView.meeting.last_name}`.trim()}
-                subtitle={[notesView.meeting.title, notesView.meeting.company_name].filter(Boolean).join(' · ')}
-                conferenceName={notesView.meeting.conference_name}
-                onClose={() => setNotesView(null)}
-                onCountChange={count => setNoteCounts(prev => ({ ...prev, [notesView.meeting.attendee_id]: count }))}
-                onOpenRecord={() => {
-                  setQuickView({ type: 'attendee', id: notesView.meeting.attendee_id,
-                    name: `${notesView.meeting.first_name} ${notesView.meeting.last_name}`.trim() });
-                  setNotesView(null);
-                }}
-              />
+              {attendeeNotesPanel}
             </div>
           </div>
         </>
@@ -2962,7 +3067,7 @@ export function MeetingsTable({
       {/* And where there is no table, the same panel on its own: below sm the
           drawer is a bottom sheet of its own making, and wider than that it
           sits under the cards it was opened from. */}
-      {meetingNotesDrawer && !notesAnchorable && (
+      {meetingNotesDrawer && !notesAnchorable && !inCalendarPopup && (
         <div className="sm:px-4 sm:pb-4 sm:max-w-md sm:ml-auto">{meetingNotesDrawer}</div>
       )}
       {notesView && isPhone && (

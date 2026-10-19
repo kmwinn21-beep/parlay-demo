@@ -169,7 +169,10 @@ console.log('\n— opening it anchors to the row, like the other panel —');
    */
   eq('the panel itself is built once', (table.match(/<EntityNotesDrawer/g) ?? []).length, 1);
   eq('  anchored where there is a table', /const notesAnchorable = !cardsOnly && viewMode === 'table';/.test(table), true);
-  eq('  and on its own where there is not', /\{meetingNotesDrawer && !notesAnchorable && \(/.test(table), true);
+  // …and on its own where there is neither a table nor a calendar popup to
+  // put it in.
+  eq('  and on its own where there is not',
+    /\{meetingNotesDrawer && !notesAnchorable && !inCalendarPopup && \(/.test(table), true);
 }
 
 console.log('\n— written as the meeting is booked —');
