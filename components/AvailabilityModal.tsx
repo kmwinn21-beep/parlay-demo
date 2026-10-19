@@ -202,7 +202,7 @@ export function AvailabilityModal({
             </p>
           ) : people.length === 0 ? (
             <p className="text-center text-xs text-gray-500 py-10">
-              Nobody from the team is on this conference yet, so there is no availability to show.
+              No internal attendees on this conference yet — add them to the conference to see when they are free.
             </p>
           ) : (
             <div
