@@ -278,7 +278,10 @@ console.log('\n— the view, wired in —');
    * same function — so it keeps every control the card has rather than being
    * a second, poorer copy of it.
    */
-  eq('the popup is the meeting’s own card', /renderDetail=\{renderMobileCard\}/.test(table), true);
+  // The card, through the chooser that shows a notes panel in its place when
+  // one is open — see the section below.
+  eq('the popup is the meeting’s own card',
+    /renderDetail=\{calendarDetail\}/.test(table) && /return renderMobileCard\(m\);/.test(table), true);
   eq('  opened by clicking one', /onClick=\{\(\) => setOpenId\(m\.id\)\}/.test(cal), true);
   eq('  and closed by Escape', /if \(e\.key !== 'Escape'\) return;/.test(cal), true);
 
@@ -307,6 +310,50 @@ console.log('\n— the view, wired in —');
   eq('  and the week grid is desktop only', /className="hidden lg:block p-4"/.test(cal), true);
   eq('  with the days as buttons below it', /onClick=\{\(\) => setOpenDay\(day\)\}/.test(cal), true);
   eq('  and the other days inside it', /onClick=\{\(\) => onPick\(d\)\}/.test(cal), true);
+}
+
+console.log('\n— and what the card opens, opens where the calendar is —');
+{
+  const table = strip('components/MeetingsTable.tsx');
+  const cal = strip('components/MeetingsCalendar.tsx');
+
+  /*
+   * Reported: a note added from the popup's kebab appeared BEHIND the popup,
+   * and both notes panels appeared under the week — in the slot they take
+   * beside a table, which the calendar does not have. Each is the same
+   * mistake: the card inside the popup opens something that knows nothing
+   * about the popup.
+   *
+   * So the panels are drawn inside it, where the inline edit form already
+   * drew itself, and the page-level modals get it out of the way first.
+   * Driven in Chromium at 1440: the pre-meeting notes and the company notes
+   * both inside the popup and nowhere else, Add Note's modal on top with the
+   * popup gone, and at 390 the sheet over a closed popup.
+   */
+  eq('the notes open inside the popup',
+    /const inCalendarPopup = !cardsOnly && viewMode === 'calendar' && !isPhone;/.test(table), true);
+  eq('  the meeting’s own', /if \(inCalendarPopup && notesMeetingId === m\.id && meetingNotesDrawer\) return meetingNotesDrawer;/.test(table), true);
+  eq('  and the attendee’s', /if \(inCalendarPopup && notesView\?\.meeting\.id === m\.id && attendeeNotesPanel\) return attendeeNotesPanel;/.test(table), true);
+  eq('  and not also in the slot beside a table that is not there',
+    /\{meetingNotesDrawer && !notesAnchorable && !inCalendarPopup && \(/.test(table)
+      && /\{notesView && !isPhone && !inCalendarPopup && \(/.test(table), true);
+
+  // The page's own modals draw below the popup, so it stands aside.
+  eq('a page-level modal gets the popup out of the way', /stepAside\(\); onQuickNote\(m\);/.test(table), true);
+  eq('  the page’s notes drawer too', /stepAside\(\); onNotesClick\(m\.id\);/.test(table), true);
+  eq('  and on a phone, the notes sheets', /if \(phoneCalendar && \(notesMeetingId != null \|\| notesView != null\)\)/.test(table), true);
+
+  /*
+   * And one Escape closes one thing. The panels and the edit form each close
+   * themselves; without this, Escape closed the panel and the popup under it
+   * at once, losing the meeting as well as the notes.
+   */
+  eq('what is inside the popup owns Escape', /if \(detailLocked\) return;/.test(cal), true);
+  eq('  and the click outside', /onClick=\{locked \? undefined : onClose\}/.test(cal), true);
+  eq('  while it is a notes panel or the edit form',
+    /const calendarDetailLocked = inCalendarPopup\n\s*&& \(notesMeetingId != null \|\| notesView != null \|\| editingId != null\);/.test(table), true);
+  eq('closing the popup finishes what it was showing',
+    /const closeCalendarDetail = useCallback\(\(\) => \{/.test(table), true);
 }
 
 console.log('\n— and the form that sets the length —');

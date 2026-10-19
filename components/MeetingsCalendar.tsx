@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatMeetingTime, unscheduledLabel } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
@@ -61,7 +61,8 @@ function outcomeClass(outcome: string | null | undefined, colorMap: ColorMap): s
 }
 
 export function MeetingsCalendar({
-  meetings, conferenceStart, conferenceEnd, userOptions, colorMap, renderDetail, closeSignal = 0,
+  meetings, conferenceStart, conferenceEnd, userOptions, colorMap, renderDetail,
+  closeSignal = 0, detailLocked = false, onDetailClose,
 }: {
   meetings: Meeting[];
   conferenceStart: string | null;
@@ -80,6 +81,14 @@ export function MeetingsCalendar({
    * answer: the thing that was asked for is what ends up on screen.
    */
   closeSignal?: number;
+  /**
+   * The popup is showing something that closes itself — the notes panels, the
+   * inline edit form — so Escape and a click outside belong to it rather than
+   * to the popup. Without this, one Escape closes both at once.
+   */
+  detailLocked?: boolean;
+  /** The popup closed: whatever it was showing for that meeting is done. */
+  onDetailClose?: () => void;
 }) {
   const isPhone = useIsPhone();
   const [openId, setOpenId] = useState<number | null>(null);
@@ -102,15 +111,22 @@ export function MeetingsCalendar({
   const openMeeting = openId != null ? meetings.find(m => m.id === openId) ?? null : null;
 
   // Esc closes whatever is open, innermost first.
+  const closeDetail = useCallback(() => {
+    setOpenId(null);
+    onDetailClose?.();
+  }, [onDetailClose]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (openId != null) setOpenId(null);
+      // What is inside the popup closes first, and closes itself.
+      if (detailLocked) return;
+      if (openId != null) closeDetail();
       else if (openDay != null) setOpenDay(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [openId, openDay]);
+  }, [openId, openDay, detailLocked, closeDetail]);
 
   useEffect(() => {
     if (closeSignal === 0) return;
@@ -389,7 +405,7 @@ export function MeetingsCalendar({
 
       {/* ── The meeting, in full ── */}
       {openMeeting && (
-        <DetailPopup onClose={() => setOpenId(null)}>
+        <DetailPopup onClose={closeDetail} locked={detailLocked}>
           {renderDetail(openMeeting)}
         </DetailPopup>
       )}
@@ -419,14 +435,19 @@ function phoneBandHeight(meetings: Meeting[], day: string): number {
 }
 
 /** The popup: the meeting's own card, over a scrim. */
-function DetailPopup({ children, onClose }: { children: ReactNode; onClose: () => void }) {
+function DetailPopup({ children, onClose, locked = false }: {
+  children: ReactNode;
+  onClose: () => void;
+  /** Something inside owns the way out — no scrim click, no close button. */
+  locked?: boolean;
+}) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
   if (!mounted) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-black/40" onClick={locked ? undefined : onClose} aria-hidden />
       <div
         role="dialog"
         aria-modal="true"
@@ -435,8 +456,10 @@ function DetailPopup({ children, onClose }: { children: ReactNode; onClose: () =
       >
         <div className="max-h-[85vh] overflow-y-auto rounded-2xl">
         {/* Outside the card's corner, because the card already has its notes
-            button and its kebab there. */}
-        <button
+            button and its kebab there. Gone while something inside owns the
+            way out, or there are two X's in one corner saying different
+            things. */}
+        {!locked && <button
           type="button"
           onClick={onClose}
           aria-label="Close"
@@ -445,7 +468,7 @@ function DetailPopup({ children, onClose }: { children: ReactNode; onClose: () =
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
-        </button>
+        </button>}
         {children}
         </div>
       </div>
