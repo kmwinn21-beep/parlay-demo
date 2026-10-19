@@ -8,7 +8,7 @@ import { getPreset, type ColorMap } from '@/lib/colors';
 import {
   calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
   durationSuffix, hourWindow, isOutsideConference, layoutDay, matchesPeople,
-  meetingsOfPerson, unassignedMeetings,
+  meetingsOfPerson, sharedMeetingIds, unassignedMeetings,
   type CalendarMeeting,
 } from '@/lib/meetingCalendar';
 import type { Meeting } from '@/components/MeetingsTable';
@@ -139,6 +139,8 @@ export function MeetingsCalendar({
   const [openId, setOpenId] = useState<number | null>(null);
   const [pickedPeople, setPickedPeople] = useState<Set<number>>(new Set());
   const [openColumn, setOpenColumn] = useState<string | null>(null);
+  /** The shared meeting being pointed at, if any — see `sharedIds` below. */
+  const [tracedId, setTracedId] = useState<number | null>(null);
 
   const days = useMemo(
     () => calendarDays(conferenceStart, conferenceEnd, meetings),
@@ -260,6 +262,23 @@ export function MeetingsCalendar({
     }, ...personColumns];
   }, [axis, days, theDay, onDay, meetings, internalAttendees, userOptions, conferenceStart, conferenceEnd]);
 
+  /*
+   * The meetings that are in more than one column.
+   *
+   * Only on the rep axis, and only these: a meeting one person is on appears
+   * once, and dimming the whole board to point at it would say nothing. The
+   * ones worth tracing are the shared ones — the rep who booked it and
+   * whoever was added to it — where the board is otherwise four separate
+   * days that happen to contain the same company name.
+   */
+  const sharedIds = useMemo(() => {
+    if (axis !== 'rep') return new Set<number>();
+    const withColumns = columns
+      .filter(c => c.personId != null)
+      .map(c => ({ id: c.personId as number }));
+    return sharedMeetingIds(meetings as CalendarMeeting[], withColumns);
+  }, [axis, columns, meetings]);
+
   const bandHeight = useMemo(() => untimedBandHeight(columns), [columns]);
   const openMeeting = openId != null ? meetings.find(m => m.id === openId) ?? null : null;
   const drawerColumn = openColumn != null ? columns.find(c => c.key === openColumn) ?? null : null;
@@ -300,8 +319,20 @@ export function MeetingsCalendar({
     return next;
   });
 
-  /** Dimmed, not hidden: the week keeps its shape while one person's stands out. */
-  const dimmed = (m: Meeting) => !matchesPeople(m as CalendarMeeting, pickedPeople);
+  // Nothing to trace once the columns change under the pointer.
+  useEffect(() => { setTracedId(null); }, [axis, theDay]);
+
+  /**
+   * Dimmed, not hidden: the board keeps its shape while one thing stands out.
+   *
+   * Two reasons to dim. The Whose row picks people, on the date axis. And
+   * pointing at a meeting that is in several columns leaves its own copies
+   * lit and dims the rest, so where it appears can be seen at a glance
+   * rather than read out of four columns of company names.
+   */
+  const dimmed = (m: Meeting) =>
+    !matchesPeople(m as CalendarMeeting, pickedPeople)
+    || (tracedId != null && m.id !== tracedId);
 
   const card = (m: Meeting, opts: { style?: React.CSSProperties; compact?: boolean; conflict?: boolean } = {}) => {
     const tint = outcomeClass(m.outcome, colorMap);
@@ -313,10 +344,18 @@ export function MeetingsCalendar({
         key={m.id}
         type="button"
         onClick={() => setOpenId(m.id)}
+        /* Keyboard as well as pointer: tabbing through the board traces the
+           same meeting that hovering it does. */
+        onMouseEnter={() => { if (sharedIds.has(m.id)) setTracedId(m.id); }}
+        onMouseLeave={() => setTracedId(prev => (prev === m.id ? null : prev))}
+        onFocus={() => { if (sharedIds.has(m.id)) setTracedId(m.id); }}
+        onBlur={() => setTracedId(prev => (prev === m.id ? null : prev))}
         style={opts.style}
+        data-shared={sharedIds.has(m.id) ? 'true' : undefined}
         data-conflict={opts.conflict ? 'true' : undefined}
         title={`${name}${opts.conflict ? ' — conflict' : ''}${
-          unscheduled ? ` — ${unscheduled}` : m.meeting_time ? ` — ${formatMeetingTime(m.meeting_time)}` : ''}`}
+          unscheduled ? ` — ${unscheduled}` : m.meeting_time ? ` — ${formatMeetingTime(m.meeting_time)}` : ''}${
+          sharedIds.has(m.id) ? ' — on more than one column' : ''}`}
         className={`block w-full text-left overflow-hidden rounded-md px-1.5 py-1 transition-opacity ${tint} ${
           opts.conflict ? 'ring-2 ring-red-600' : ''} ${
           dimmed(m) ? 'opacity-25' : 'opacity-100 hover:brightness-95'}`}

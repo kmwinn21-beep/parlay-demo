@@ -26,8 +26,8 @@ import {
   DEFAULT_DURATION, DURATION_OPTIONS, MIN_CARD_MINUTES,
   calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
   durationSuffix, hourWindow, internalIdsOn, isOutsideConference, layoutDay,
-  matchesPeople, meetingsOfPerson, normalizeDuration, timedOn, unassignedMeetings,
-  untimedOn,
+  matchesPeople, meetingsOfPerson, normalizeDuration, sharedMeetingIds, timedOn,
+  unassignedMeetings, untimedOn,
 } from '@/lib/meetingCalendar';
 
 let pass = 0;
@@ -338,6 +338,39 @@ console.log('\n— turned on its side: a column per person —');
     ], 9).map(p => p.columns), [1, 1]);
 }
 
+console.log('\n— and pointing at a meeting two of them are on —');
+{
+  const day = '2026-10-21';
+  const people = [{ id: 11 }, { id: 12 }, { id: 13 }];
+  const week = [
+    { id: 1, meeting_date: day, meeting_time: '09:00', scheduled_by: '11,13', support_rep_ids: '13' },
+    { id: 2, meeting_date: day, meeting_time: '10:00', scheduled_by: '11' },
+    { id: 3, meeting_date: day, meeting_time: '11:00', scheduled_by: '11,12,13', support_rep_ids: '12,13' },
+    { id: 4, meeting_date: day, meeting_time: '12:00', scheduled_by: null },
+  ];
+
+  /*
+   * A meeting several people are on is drawn in each of their columns, and
+   * those copies are the only thing worth tracing: hovering one dims the
+   * rest of the board so where it appears can be seen rather than read out
+   * of four columns of company names.
+   */
+  eq('the shared ones are the ones in more than one column',
+    Array.from(sharedMeetingIds(week, people)).sort(), [1, 3]);
+  eq('  a meeting one person is on is not shared', sharedMeetingIds(week, people).has(2), false);
+  eq('  and nor is one with nobody on it', sharedMeetingIds(week, people).has(4), false);
+
+  /*
+   * Counted against the people who HAVE a column. Somebody on a meeting who
+   * is not on the board cannot make it appear twice — so a meeting with one
+   * person on the board and one off it is drawn once, and tracing it would
+   * dim everything to point at a single card.
+   */
+  eq('somebody with no column does not make a meeting shared',
+    sharedMeetingIds(week, [{ id: 11 }]).has(1), false);
+  eq('  and nobody at all shares nothing', Array.from(sharedMeetingIds(week, [])), []);
+}
+
 console.log('\n— and the board drawn from it —');
 {
   const cal = strip('components/MeetingsCalendar.tsx');
@@ -368,6 +401,19 @@ console.log('\n— and the board drawn from it —');
   eq('  and offered only on the rep axis', /\{axis === 'rep' && \(/.test(cal), true);
   eq('  never on the date axis, where it is two reps at once',
     /marksConflicts: false,/.test(cal), true);
+
+  /*
+   * Tracing a shared meeting. Measured in Chromium at 1440: hovering the one
+   * three people are on leaves its three copies lit and dims the other ten;
+   * hovering a meeting one person is on changes nothing, nor does hovering
+   * anything on the date axis.
+   */
+  eq('hovering a shared meeting traces it', /onMouseEnter=\{\(\) => \{ if \(sharedIds\.has\(m\.id\)\) setTracedId\(m\.id\); \}\}/.test(cal), true);
+  eq('  and the keyboard does the same', /onFocus=\{\(\) => \{ if \(sharedIds\.has\(m\.id\)\) setTracedId\(m\.id\); \}\}/.test(cal), true);
+  eq('  leaving it puts the board back', /onMouseLeave=\{\(\) => setTracedId\(prev => \(prev === m\.id \? null : prev\)\)\}/.test(cal), true);
+  eq('  everything else dims', /\(tracedId != null && m\.id !== tracedId\)/.test(cal), true);
+  eq('  and only the rep axis has anything to trace',
+    /if \(axis !== 'rep'\) return new Set<number>\(\);/.test(cal), true);
 
   // The Whose row is what a column each already does.
   eq('the Whose row goes with the axis', /const peopleFilter = axis === 'date' && whosePeople\.length > 0 && \(/.test(cal), true);

@@ -363,6 +363,31 @@ export function calendarPeople(
 }
 
 /**
+ * The meetings more than one of these people is on.
+ *
+ * On the rep axis those are the ones drawn in several columns at once, and
+ * the only ones worth tracing: pointing at a meeting one person is on would
+ * dim the whole board to say nothing. Counted against the people who HAVE a
+ * column — somebody on a meeting who is not on the board cannot make it
+ * appear twice.
+ */
+export function sharedMeetingIds(
+  meetings: CalendarMeeting[],
+  people: Array<{ id: number }>,
+): Set<number> {
+  const columned = new Set(people.map(p => p.id));
+  const shared = new Set<number>();
+  for (const meeting of meetings) {
+    let seen = 0;
+    for (const id of internalIdsOn(meeting)) {
+      if (columned.has(id)) seen++;
+      if (seen > 1) { shared.add(meeting.id); break; }
+    }
+  }
+  return shared;
+}
+
+/**
  * Whether a meeting stays lit while these people are picked.
  *
  * Nobody picked lights everything — the filter is a way of finding your own
