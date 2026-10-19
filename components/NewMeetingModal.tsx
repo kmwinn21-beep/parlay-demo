@@ -13,6 +13,7 @@ import { useHideBottomNav } from './BottomNavContext';
 import { type Meeting } from '@/components/MeetingsTable';
 import { useUser } from '@/components/UserContext';
 import { MEETING_TIME_OPTIONS, formatMeetingTime, timeToMinutes, hasNoStartTime } from '@/lib/meetingTime';
+import { DURATION_OPTIONS, DEFAULT_DURATION } from '@/lib/meetingCalendar';
 import { GroupedCompanyDropdown } from '@/components/GroupedCompanyDropdown';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
 import { SendCalendarInvitePrompt } from '@/components/SendCalendarInvitePrompt';
@@ -334,6 +335,9 @@ export function NewMeetingModal({
   const [selectedAttendeeId, setSelectedAttendeeId] = useState('');
   const [meetingDate, setMeetingDate] = useState('');
   const [meetingTime, setMeetingTime] = useState('');
+  /* Thirty minutes unless somebody says otherwise — the length most of these
+     are booked at, and what the calendar had been drawing them all as. */
+  const [durationMinutes, setDurationMinutes] = useState<number>(DEFAULT_DURATION);
   const [meetingType, setMeetingType] = useState('');
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
   const [location, setLocation] = useState('');
@@ -577,6 +581,7 @@ export function NewMeetingModal({
     setSelectedAttendeeId('');
     setMeetingDate('');
     setMeetingTime('');
+    setDurationMinutes(DEFAULT_DURATION);
     setMeetingType('');
     setLocation('');
     setAdditionalAttendees([]);
@@ -626,6 +631,7 @@ export function NewMeetingModal({
           meeting_date: meetingDate,
           meeting_time: meetingTime,
           meeting_type: meetingType || null,
+          duration_minutes: durationMinutes,
           location: location || null,
           scheduled_by: scheduledByIds.length > 0 ? scheduledByIds.join(',') : null,
           support_rep_ids: supportIds.length > 0 ? supportIds.join(',') : null,
@@ -987,8 +993,12 @@ export function NewMeetingModal({
               )}
             </div>
 
-            {/* Time + Meeting Type */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Time, how long it runs, and what kind it is.
+
+                Three across from md, two below it: at sm the Time label
+                shares its line with the "N meetings" button, which has no
+                room in a third of this modal. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className={labelClass} style={{ marginBottom: 0 }}>Time *</label>
@@ -1012,6 +1022,23 @@ export function NewMeetingModal({
                   <option value="">Select time...</option>
                   {TIME_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* How long it runs. Four lengths rather than a free number:
+                  the calendar lays a day out from this, and a 23-minute
+                  meeting is a card nothing lines up with. */}
+              <div>
+                <label className={labelClass} htmlFor="meeting-duration">Duration</label>
+                <select
+                  id="meeting-duration"
+                  className={inputClass}
+                  value={durationMinutes}
+                  onChange={e => setDurationMinutes(Number(e.target.value))}
+                >
+                  {DURATION_OPTIONS.map(mins => (
+                    <option key={mins} value={mins}>{mins} min</option>
                   ))}
                 </select>
               </div>

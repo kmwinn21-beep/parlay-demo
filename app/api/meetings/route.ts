@@ -4,6 +4,7 @@ import { getDb } from '@/lib/getDb';
 import { getCurrentRepConfigId } from '@/lib/currentRep';
 import { getConfigIdByEmail, notifyForAttendee } from '@/lib/notifications';
 import { validateConferenceStage } from '@/lib/validate-conference-stage';
+import { normalizeDuration } from '@/lib/meetingCalendar';
 import { trackEvent, trackFeature } from '@/lib/trackEvent';
 import { ADDITIONAL_ATTENDEE_MATCH_SQL, loadAdditionalAttendees, serializeAttendeeIds } from '@/lib/additionalAttendees';
 
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
           m.additional_attendee_ids,
           m.outcome,
           m.meeting_type,
+          m.duration_minutes,
           m.created_at,
           a.first_name,
           a.last_name,
@@ -127,6 +129,9 @@ export async function GET(request: NextRequest) {
         additional_attendees: r.additional_attendees != null ? String(r.additional_attendees) : null,
         outcome: r.outcome != null ? String(r.outcome) : null,
         meeting_type: r.meeting_type != null ? String(r.meeting_type) : null,
+        // Null where the meeting predates the column. The calendar reads that
+        // as 30 rather than the API inventing a length for it.
+        duration_minutes: r.duration_minutes != null ? Number(r.duration_minutes) : null,
         created_at: String(r.created_at ?? ''),
         first_name: String(r.first_name ?? ''),
         last_name: String(r.last_name ?? ''),
@@ -154,7 +159,7 @@ export async function POST(request: NextRequest) {
   const db = await getDb(user?.accountId);
   try {
     const body = await request.json();
-    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, meeting_type } = body;
+    const { attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, meeting_type, duration_minutes } = body;
 
     if (!attendee_id || !conference_id || !meeting_date || !meeting_time) {
       return NextResponse.json({ error: 'attendee_id, conference_id, meeting_date, and meeting_time are required' }, { status: 400 });
@@ -175,8 +180,8 @@ export async function POST(request: NextRequest) {
       : 'Scheduled';
 
     const result = await db.execute({
-      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, outcome, meeting_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO meetings (attendee_id, conference_id, meeting_date, meeting_time, location, scheduled_by, support_rep_ids, additional_attendees, additional_attendee_ids, outcome, meeting_type, duration_minutes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *`,
       args: [
         attendee_id,
@@ -190,6 +195,10 @@ export async function POST(request: NextRequest) {
         serializeAttendeeIds(additional_attendee_ids),
         meetingScheduledName,
         meeting_type ?? null,
+        // One of the four, or the default — never whatever arrived. The
+        // calendar lays a day out from this, so a 7-minute meeting would be
+        // a row of cards nothing lines up with.
+        normalizeDuration(duration_minutes),
       ],
     });
 

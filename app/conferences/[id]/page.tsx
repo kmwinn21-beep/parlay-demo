@@ -48,6 +48,7 @@ import {
 } from '@/lib/attendeeGroups';
 import { resolveEntityDesignation } from '@/lib/entityStructureLabels';
 import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTable';
+import { MeetingsCalendar } from '@/components/MeetingsCalendar';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
@@ -584,7 +585,7 @@ export default function ConferenceDetailPage() {
   // Token-driven so choosing the same option twice still lands.
   const [meetingCollapseAll, setMeetingCollapseAll] = useState({ token: 0, collapse: false });
   const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
-  const [meetingViewMode, setMeetingViewMode] = useState<'table' | 'kanban'>('table');
+  const [meetingViewMode, setMeetingViewMode] = useState<'table' | 'kanban' | 'calendar'>('table');
 
   /**
    * Where the frozen Name column starts: the checkbox column plus any visible
@@ -5249,6 +5250,7 @@ export default function ConferenceDetailPage() {
                       {([
                         { key: 'table' as const, label: 'Table', path: 'M3 10h18M3 14h18M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z' },
                         { key: 'kanban' as const, label: 'Kanban', path: 'M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v11h-4z' },
+                        { key: 'calendar' as const, label: 'Calendar', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
                       ]).map((opt, i) => (
                         <button
                           key={opt.key}
@@ -5321,9 +5323,37 @@ export default function ConferenceDetailPage() {
                 />
               </div>
 
-              {/* Mobile row 3 — the grouping toggle, on its own scrolling line */}
+              {/* Mobile row 3 — the grouping toggle, on its own scrolling line,
+                  and the one view choice a phone has.
+
+                  Table and Kanban both draw the same card list below lg, so
+                  there was nothing to choose between them. The calendar is a
+                  different thing on a phone — a day at a time in a drawer —
+                  so Cards or Calendar is a real choice and this is where it
+                  is made. */}
               <ScrollRow className="lg:hidden mt-2" gapClass="gap-0" step={120}>
                 <GroupToggle short />
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden ml-2">
+                  {([
+                    { key: 'table' as const, label: 'Cards', path: 'M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z' },
+                    { key: 'calendar' as const, label: 'Calendar', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+                  ]).map((opt, i) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setMeetingViewMode(opt.key)}
+                      aria-pressed={meetingViewMode === opt.key}
+                      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                        i > 0 ? 'border-l border-gray-200' : ''} ${
+                        meetingViewMode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500'}`}
+                    >
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
+                      </svg>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </ScrollRow>
 
               {/* Active filter pills — full rep names on desktop, initials on mobile */}
@@ -5396,6 +5426,8 @@ export default function ConferenceDetailPage() {
               groupMode={meetingGroupMode}
               collapseAll={meetingCollapseAll}
               viewMode={meetingViewMode}
+              conferenceStart={conference.start_date}
+              conferenceEnd={conference.end_date}
               onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}

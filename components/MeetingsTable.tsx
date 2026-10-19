@@ -21,6 +21,7 @@ import { EntityNotesDrawer } from '@/components/EntityNotesDrawer';
 import { CardNotesButton } from '@/components/SocialEventCardParts';
 import { useAnchoredDrawer } from '@/lib/useAnchoredDrawer';
 import { MobileCard, MobileCardList } from '@/components/MobileCardList';
+import { MeetingsCalendar } from '@/components/MeetingsCalendar';
 import { CARD_TABLE, CARD_TABLE_SCROLL, CARD_TABLE_WRAP, SelectionCell, cardEmphasisClass, cardRowClass, useCardFocus } from '@/components/tableCards';
 import { AssignFollowUpDialog } from '@/components/AssignFollowUpDialog';
 import { AdditionalAttendeesModal, AdditionalAttendeesButton } from '@/components/AdditionalAttendeesModal';
@@ -60,6 +61,8 @@ export interface Meeting {
   as_additional_attendee?: boolean;
   outcome: string | null;
   meeting_type: string | null;
+  /** 15, 30, 45 or 60. Null on anything booked before the field existed. */
+  duration_minutes?: number | null;
   created_at: string;
   first_name: string;
   last_name: string;
@@ -1447,6 +1450,8 @@ export function MeetingsTable({
   onQuickNote,
   collapseAll,
   viewMode = 'table',
+  conferenceStart = null,
+  conferenceEnd = null,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -1474,8 +1479,17 @@ export function MeetingsTable({
   onQuickNote?: (meeting: Meeting) => void;
   /** Bump the token to collapse (or expand) every section at once. */
   collapseAll?: { token: number; collapse: boolean };
-  /** 'kanban' lays the mobile cards out in a column per group. */
-  viewMode?: 'table' | 'kanban';
+  /**
+   * How the meetings are laid out.
+   *
+   * 'kanban' puts the mobile cards in a column per group; 'calendar' draws the
+   * conference as a week, days across and hours down, and is the one view that
+   * needs the conference's own dates — a week has to show its empty Thursday.
+   */
+  viewMode?: 'table' | 'kanban' | 'calendar';
+  /** The conference's own dates, for the calendar's columns. */
+  conferenceStart?: string | null;
+  conferenceEnd?: string | null;
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -1645,6 +1659,17 @@ export function MeetingsTable({
     [noteCounts],
   );
   const [meetingTypeOptions, setMeetingTypeOptions] = useState<string[]>([]);
+  /*
+   * Tells the calendar's popup to get out of the way.
+   *
+   * The card inside it opens quick views and contact sheets, which draw
+   * below that popup — so the popup stands aside and the thing that was
+   * asked for is what ends up on screen.
+   */
+  const [calendarCloseSignal, setCalendarCloseSignal] = useState(0);
+  useEffect(() => {
+    if (quickView || callTarget || addContact) setCalendarCloseSignal(n => n + 1);
+  }, [quickView, callTarget, addContact]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   // Checkboxes stay out of the way until the table is being used: hovering it
   // offers them, and any selection keeps them out.
@@ -2739,11 +2764,31 @@ export function MeetingsTable({
         </div>
       )}
 
+      {/*
+        The week.
+
+        It renders the meeting's own card in its popup — renderMobileCard,
+        the same function the kanban columns and the phone list use — so the
+        card is written once and keeps every one of its controls: the notes
+        button, the kebab, the outcome pill, the inline edit.
+      */}
+      {!cardsOnly && viewMode === 'calendar' && (
+        <MeetingsCalendar
+          closeSignal={calendarCloseSignal}
+          meetings={sorted}
+          conferenceStart={conferenceStart}
+          conferenceEnd={conferenceEnd}
+          userOptions={userOptions}
+          colorMap={colorMap}
+          renderDetail={renderMobileCard}
+        />
+      )}
+
       {/* Mobile card layout — also the desktop list when the view is a table.
           Each meeting sits in the same bordered card the kanban columns use,
           on the same tinted backing: run flush against each other they read as
           one long list rather than as separate meetings. */}
-      <div className={`${cardsOnly ? 'block' : `block ${viewMode === 'kanban' ? 'lg:hidden' : 'lg:hidden'}`}`}>
+      <div className={`${cardsOnly ? 'block' : viewMode === 'calendar' ? 'hidden' : 'block lg:hidden'}`}>
         {groupedMeetings
           ? groupedMeetings.map(([key, group]) => (
             <div key={`${mode}-${key || 'none'}`} style={{ animation: 'meetingGroupIn 200ms ease-out' }}>
