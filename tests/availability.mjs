@@ -26,9 +26,12 @@
 import { readFileSync } from 'node:fs';
 import {
   DEFAULT_WINDOW, SLOT_STEP, WINDOW_OPTIONS,
-  additionalAttendeesFor, availabilityPeople, bookedCount, busyByDay,
+  additionalAttendeesFor, bookedCount, busyByDay,
   freeSlots, minutesToLabel, minutesToTime, slotLabel, slotsByDay, slotsOf,
 } from '@/lib/availability';
+/* The columns are the conference's people — the same list the calendar's rep
+   axis draws, so it lives with the calendar and is read from there. */
+import { conferencePeople } from '@/lib/meetingCalendar';
 
 let pass = 0;
 let fail = 0;
@@ -79,25 +82,25 @@ console.log('\n— who the board is about —');
    * are matched back to the user list.
    */
   eq('the conference’s internal attendees, in its order',
-    availabilityPeople('Henri Sejournet, Gavin Steele', [], users).map(p => p.name),
+    conferencePeople('Henri Sejournet, Gavin Steele', [], users).map(p => p.name),
     ['Henri Sejournet', 'Gavin Steele']);
-  eq('  with their initials', availabilityPeople('Mikkel Wad Thorsen', [], users).map(p => p.initials), ['MT']);
+  eq('  with their initials', conferencePeople('Mikkel Wad Thorsen', [], users).map(p => p.initials), ['MT']);
   eq('  matched however they are cased or spaced',
-    availabilityPeople('  gavin steele ', [], users).map(p => p.id), [11]);
+    conferencePeople('  gavin steele ', [], users).map(p => p.id), [11]);
   eq('  and a name matching nobody is dropped',
-    availabilityPeople('Someone Else', [], users).map(p => p.name), []);
+    conferencePeople('Someone Else', [], users).map(p => p.name), []);
 
   // Then anyone else on a meeting here: a rep booked in without being on the
   // attendee list still has a day that can be filled.
   eq('then whoever else is on a meeting',
-    availabilityPeople('Gavin Steele', [mtg('2026-10-21', '09:00', '9')], users).map(p => p.name),
+    conferencePeople('Gavin Steele', [mtg('2026-10-21', '09:00', '9')], users).map(p => p.name),
     ['Gavin Steele', 'Kevin Winn']);
   eq('  including the people added to one',
-    availabilityPeople('', [mtg('2026-10-21', '09:00', '9,13', 30, '13')], users).map(p => p.name),
+    conferencePeople('', [mtg('2026-10-21', '09:00', '9,13', 30, '13')], users).map(p => p.name),
     ['Kevin Winn', 'Henri Sejournet']);
   eq('  and nobody twice',
-    availabilityPeople('Gavin Steele', [mtg('2026-10-21', '09:00', '11')], users).map(p => p.name), ['Gavin Steele']);
-  eq('nobody at all is no columns', availabilityPeople(null, [], users), []);
+    conferencePeople('Gavin Steele', [mtg('2026-10-21', '09:00', '11')], users).map(p => p.name), ['Gavin Steele']);
+  eq('nobody at all is no columns', conferencePeople(null, [], users), []);
 }
 
 console.log('\n— when somebody is spoken for —');

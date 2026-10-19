@@ -1452,6 +1452,8 @@ export function MeetingsTable({
   viewMode = 'table',
   conferenceStart = null,
   conferenceEnd = null,
+  conferenceInternalAttendees = null,
+  calendarRepDay = null,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -1490,6 +1492,15 @@ export function MeetingsTable({
   /** The conference's own dates, for the calendar's columns. */
   conferenceStart?: string | null;
   conferenceEnd?: string | null;
+  /**
+   * The conference's internal attendees, as it stores them: names.
+   *
+   * The calendar's rep axis draws a column each, so it needs the people who
+   * are AT the conference rather than only the ones already on a meeting.
+   */
+  conferenceInternalAttendees?: string | null;
+  /** The day the calendar's rep axis shows, from the day filters. */
+  calendarRepDay?: string | null;
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -2850,6 +2861,11 @@ export function MeetingsTable({
           meetings={sorted}
           conferenceStart={conferenceStart}
           conferenceEnd={conferenceEnd}
+          /* By Rep groups a list in the table and the kanban; in the calendar
+             there is nothing to group, so it picks what the columns are. */
+          axis={groupMode === 'rep' ? 'rep' : 'date'}
+          internalAttendees={conferenceInternalAttendees}
+          repDay={calendarRepDay}
           userOptions={userOptions}
           colorMap={colorMap}
           renderDetail={calendarDetail}

@@ -54,12 +54,8 @@ export const WINDOW_OPTIONS: Array<{ value: number; label: string }> =
     return { value, label: minutesToLabel(value) };
   });
 
-export interface AvailabilityPerson {
-  /** config_options id — what scheduled_by and support_rep_ids hold. */
-  id: number;
-  name: string;
-  initials: string;
-}
+/** A column on the board: id is the config_options id the columns key on. */
+export type AvailabilityPerson = { id: number; name: string; initials: string };
 
 export interface AvailabilitySlot {
   personId: number;
@@ -67,52 +63,6 @@ export interface AvailabilitySlot {
   day: string;
   startMinutes: number;
   endMinutes: number;
-}
-
-/** Initials from a display name: "Gavin Steele" → "GS". */
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-/**
- * Whose availability the board shows.
- *
- * The conference's own internal attendees first, in the order the conference
- * lists them — they are the people who are AT this thing, and a board that
- * opened on a different set would be answering a different question. Then
- * anyone else who is on a meeting here: a rep booked into the conference
- * without being on its attendee list still has a day that can be filled.
- *
- * The conference stores names rather than ids, so they are matched back to
- * the user list; a name matching nobody is dropped rather than drawn as a
- * column nothing can be booked into.
- */
-export function availabilityPeople(
-  internalAttendees: string | null | undefined,
-  meetings: CalendarMeeting[],
-  userOptions: Array<{ id: number; value: string }>,
-): AvailabilityPerson[] {
-  const byName = new Map(userOptions.map(u => [u.value.trim().toLowerCase(), u]));
-  const byId = new Map(userOptions.map(u => [u.id, u]));
-  const people: AvailabilityPerson[] = [];
-  const seen = new Set<number>();
-
-  const add = (option: { id: number; value: string } | undefined) => {
-    if (!option || seen.has(option.id)) return;
-    seen.add(option.id);
-    people.push({ id: option.id, name: option.value, initials: initialsOf(option.value) });
-  };
-
-  for (const name of String(internalAttendees ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
-    add(byName.get(name.toLowerCase()));
-  }
-  for (const meeting of meetings) {
-    for (const id of internalIdsOn(meeting)) add(byId.get(id));
-  }
-  return people;
 }
 
 /** [start, end) in minutes for a meeting, or null when it is not on the clock. */

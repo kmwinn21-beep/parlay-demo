@@ -20,7 +20,7 @@ function shortLabel(d: string) {
  * chevrons appearing on either side once there is somewhere to scroll to.
  */
 export function MeetingDateFilterBar({
-  dates, selected, onChange, variant = 'long',
+  dates, selected, onChange, variant = 'long', requireOne = false,
   showBoothHours = false, boothHoursOnly = false, onBoothHoursChange,
 }: {
   dates: string[];
@@ -29,6 +29,14 @@ export function MeetingDateFilterBar({
   onChange: (dates: string[]) => void;
   /** 'long' = "Monday, Aug 17" (desktop), 'short' = "Mon, 8.17" (mobile). */
   variant?: 'long' | 'short';
+  /**
+   * One day is always chosen, and clicking the chosen one does nothing.
+   *
+   * For the calendar's rep axis, where the row is not a filter that can be
+   * cleared but the picker that says which day is drawn — a board of people
+   * with no day is not a thing that can be drawn at all.
+   */
+  requireOne?: boolean;
   /** Offered only when the conference actually has booth-hours meetings. */
   showBoothHours?: boolean;
   boothHoursOnly?: boolean;
@@ -74,7 +82,7 @@ export function MeetingDateFilterBar({
             <button
               key={d}
               type="button"
-              onClick={() => onChange(active && selected.length === 1 ? [] : [d])}
+              onClick={() => onChange(active && selected.length === 1 && !requireOne ? [] : [d])}
               aria-pressed={active}
               className={`flex-shrink-0 whitespace-nowrap px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
                 active

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { DURATION_OPTIONS, DEFAULT_DURATION, calendarDays, type CalendarMeeting } from '@/lib/meetingCalendar';
 import {
-  DEFAULT_WINDOW, WINDOW_OPTIONS, availabilityPeople, bookedCount, freeSlots,
+  DURATION_OPTIONS, DEFAULT_DURATION, calendarDays, conferencePeople, type CalendarMeeting,
+} from '@/lib/meetingCalendar';
+import {
+  DEFAULT_WINDOW, WINDOW_OPTIONS, bookedCount, freeSlots,
   minutesToLabel, slotLabel, slotsByDay, slotsOf,
   type AvailabilitySlot,
 } from '@/lib/availability';
@@ -64,7 +66,7 @@ export function AvailabilityModal({
   );
   const days = useMemo(() => (day ? allDays.filter(d => d === day) : allDays), [allDays, day]);
   const people = useMemo(
-    () => availabilityPeople(internalAttendees, meetings, userOptions),
+    () => conferencePeople(internalAttendees, meetings, userOptions),
     [internalAttendees, meetings, userOptions],
   );
   const slots = useMemo(

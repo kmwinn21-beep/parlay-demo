@@ -51,6 +51,7 @@ import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTa
 import { MeetingsCalendar } from '@/components/MeetingsCalendar';
 import { AvailabilityModal } from '@/components/AvailabilityModal';
 import { additionalAttendeesFor } from '@/lib/availability';
+import { defaultCalendarDay } from '@/lib/meetingCalendar';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
@@ -589,6 +590,23 @@ export default function ConferenceDetailPage() {
   const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
   const [meetingViewMode, setMeetingViewMode] = useState<'table' | 'kanban' | 'calendar'>('table');
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  /** The calendar drawn as people rather than days — one day at a time. */
+  const calendarByRep = meetingViewMode === 'calendar' && meetingGroupMode === 'rep';
+  /*
+   * Entering that view with no day chosen lights one.
+   *
+   * The board itself falls back to the same day either way, but the picker
+   * above it would be showing nothing chosen while a day was plainly drawn —
+   * so the row is set to the day the board is about, and leaving the view
+   * hands the filter back exactly as it was.
+   */
+  useEffect(() => {
+    if (!calendarByRep || !conference || meetingFilterDates.length > 0) return;
+    const today = new Date();
+    const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const day = defaultCalendarDay(getConferenceDates(conference.start_date, conference.end_date), ymd);
+    if (day) setMeetingFilterDates([day]);
+  }, [calendarByRep, conference, meetingFilterDates.length]);
   /** A slot picked off the availability board, waiting for the meeting form. */
   const [meetingPrefill, setMeetingPrefill] = useState<{
     date: string; time: string; duration: number; internalUserIds: number[];
@@ -5319,6 +5337,10 @@ export default function ConferenceDetailPage() {
                     selected={meetingFilterDates}
                     onChange={setMeetingFilterDates}
                     variant="short"
+                    /* A calendar of people is one day at a time, so the row
+                       stops being a filter that can be cleared and becomes
+                       the picker that chooses which day is drawn. */
+                    requireOne={calendarByRep}
                     showBoothHours={hasBoothHoursMeetings}
                     boothHoursOnly={boothHoursOnly}
                     onBoothHoursChange={setBoothHoursOnly}
@@ -5443,6 +5465,11 @@ export default function ConferenceDetailPage() {
               viewMode={meetingViewMode}
               conferenceStart={conference.start_date}
               conferenceEnd={conference.end_date}
+              conferenceInternalAttendees={conference.internal_attendees ?? null}
+              /* The day the rep axis draws: whichever the picker above is on,
+                 and the fallback is the calendar's own (today while the
+                 conference is running, else its first day). */
+              calendarRepDay={meetingFilterDates[0] ?? null}
               onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}
