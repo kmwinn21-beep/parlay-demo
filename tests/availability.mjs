@@ -90,16 +90,18 @@ console.log('\n— who the board is about —');
   eq('  and a name matching nobody is dropped',
     conferencePeople('Someone Else', [], users).map(p => p.name), []);
 
-  // Then anyone else on a meeting here: a rep booked in without being on the
-  // attendee list still has a day that can be filled.
-  eq('then whoever else is on a meeting',
+  /*
+   * And nobody else. A rep who is not at the conference books meetings for
+   * the people who are — their availability is not what this board is for,
+   * and a column of it would be a day somebody cannot be booked into.
+   */
+  eq('and nobody else on a meeting',
     conferencePeople('Gavin Steele', [mtg('2026-10-21', '09:00', '9')], users).map(p => p.name),
-    ['Gavin Steele', 'Kevin Winn']);
-  eq('  including the people added to one',
-    conferencePeople('', [mtg('2026-10-21', '09:00', '9,13', 30, '13')], users).map(p => p.name),
-    ['Kevin Winn', 'Henri Sejournet']);
+    ['Gavin Steele']);
+  eq('  not even where they were added to one',
+    conferencePeople('', [mtg('2026-10-21', '09:00', '9,13', 30, '13')], users).map(p => p.name), []);
   eq('  and nobody twice',
-    conferencePeople('Gavin Steele', [mtg('2026-10-21', '09:00', '11')], users).map(p => p.name), ['Gavin Steele']);
+    conferencePeople('Gavin Steele, Gavin Steele', [], users).map(p => p.name), ['Gavin Steele']);
   eq('nobody at all is no columns', conferencePeople(null, [], users), []);
 }
 

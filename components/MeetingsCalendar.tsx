@@ -8,7 +8,7 @@ import { getPreset, type ColorMap } from '@/lib/colors';
 import {
   calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
   durationSuffix, hourWindow, isOutsideConference, layoutDay, matchesPeople,
-  meetingsOfPerson, sharedMeetingIds, unassignedMeetings,
+  meetingsOfPerson, meetingsWithoutColumn, sharedMeetingIds,
   type CalendarMeeting,
 } from '@/lib/meetingCalendar';
 import type { Meeting } from '@/components/MeetingsTable';
@@ -210,9 +210,13 @@ export function MeetingsCalendar({
     }
 
     if (!theDay) return [];
-    const dayMeetings = onDay(theDay);
     const people = conferencePeople(internalAttendees, meetings as CalendarMeeting[], userOptions);
-    const orphans = unassignedMeetings(dayMeetings as CalendarMeeting[]) as Meeting[];
+    /* No internal attendees, no board: a lone column holding every meeting
+       under "Nobody attending" is a true statement that explains nothing.
+       The empty state names what is missing instead. */
+    if (people.length === 0) return [];
+    const dayMeetings = onDay(theDay);
+    const orphans = meetingsWithoutColumn(dayMeetings as CalendarMeeting[], people) as Meeting[];
 
     const personColumns: Column[] = people.map(person => {
       const mine = meetingsOfPerson(dayMeetings as CalendarMeeting[], person.id) as Meeting[];
@@ -240,8 +244,8 @@ export function MeetingsCalendar({
       };
     });
 
-    /* Only when there is one: an empty column headed "No rep yet" on every
-       other conference would be a question nobody asked. */
+    /* Only when there is one: an empty column on every other conference
+       would be a question nobody asked. */
     if (orphans.length === 0) return personColumns;
     return [{
       key: 'unassigned',
@@ -249,11 +253,11 @@ export function MeetingsCalendar({
       personId: null,
       meetings: orphans,
       marksConflicts: true,
-      shortLabel: 'No rep',
-      longLabel: 'No rep yet',
+      shortLabel: 'Nobody',
+      longLabel: 'Nobody attending',
       head: (
-        <div className="min-w-0">
-          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">No rep yet</p>
+        <div className="min-w-0" title="Booked with no rep, or by someone who is not at this conference">
+          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">Nobody attending</p>
           <p className="text-sm font-semibold text-gray-500">
             {orphans.length} meeting{orphans.length === 1 ? '' : 's'}
           </p>
@@ -577,7 +581,9 @@ export function MeetingsCalendar({
           </button>
         ))}
         {columns.length === 0 && (
-          <p className="text-xs text-gray-400 text-center py-6">Nobody from the team is on this conference yet.</p>
+          <p className="text-xs text-gray-400 text-center py-6">
+            No internal attendees on this conference yet — add them to the conference to draw their days.
+          </p>
         )}
       </div>
 
@@ -625,7 +631,7 @@ export function MeetingsCalendar({
             ))}
             {columns.length === 0 && (
               <p className="flex-1 text-center text-xs text-gray-400 py-10">
-                Nobody from the team is on this conference yet, so there are no columns to draw.
+                No internal attendees on this conference yet — add them to the conference to draw their days.
               </p>
             )}
           </div>

@@ -264,13 +264,14 @@ function initialsOf(name: string): string {
 }
 
 /**
- * Everyone this conference's calendar can draw a column for.
+ * The people this conference's calendar draws a column for.
  *
- * The conference's own internal attendees first, in the order it lists them —
- * they are the people who are AT this thing, and a board that opened on a
- * different set would answer a different question. Then anyone else on a
- * meeting here: a rep booked in without being on the attendee list still has
- * a day worth reading.
+ * Its own internal attendees, in the order the conference lists them, and
+ * NOBODY ELSE. The people on a meeting are not the same set: a rep who is
+ * not at the conference books a meeting and puts whoever IS there on it as
+ * an additional attendee, which is what the Rep and Additional Attendees
+ * fields are for. Drawing a column for the booking rep would be a day's
+ * schedule for somebody who is not in the building.
  *
  * The conference stores names rather than ids, so they are matched back to
  * the user list; a name matching nobody is dropped rather than drawn as a
@@ -282,7 +283,6 @@ export function conferencePeople(
   userOptions: Array<{ id: number; value: string }>,
 ): CalendarPerson[] {
   const byName = new Map(userOptions.map(u => [u.value.trim().toLowerCase(), u]));
-  const byId = new Map(userOptions.map(u => [u.id, u]));
   const counts = new Map<number, number>();
   for (const m of meetings) {
     for (const id of internalIdsOn(m)) counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -304,7 +304,6 @@ export function conferencePeople(
   for (const name of String(internalAttendees ?? '').split(',').map(s => s.trim()).filter(Boolean)) {
     add(byName.get(name.toLowerCase()));
   }
-  for (const m of meetings) for (const id of internalIdsOn(m)) add(byId.get(id));
   return people;
 }
 
@@ -314,14 +313,21 @@ export function meetingsOfPerson<T extends CalendarMeeting>(meetings: T[], perso
 }
 
 /**
- * The ones with nobody from the team on them.
+ * The ones nobody with a column is on.
  *
- * A meeting with no rep belongs to the conference rather than to nobody, so
- * the rep view gives it a column of its own rather than dropping it — it
- * would otherwise be hidden from the only board that shows the whole team.
+ * Two kinds, and they want the same answer: a meeting with no rep at all,
+ * and a meeting whose reps are not at this conference — booked by someone
+ * back at the office, with nobody here added to it yet. Either way it
+ * belongs to the conference rather than to nobody, so the rep view gives it
+ * a column of its own rather than dropping it; it would otherwise be hidden
+ * from the only board that shows the whole team.
  */
-export function unassignedMeetings<T extends CalendarMeeting>(meetings: T[]): T[] {
-  return meetings.filter(m => internalIdsOn(m).length === 0);
+export function meetingsWithoutColumn<T extends CalendarMeeting>(
+  meetings: T[],
+  people: Array<{ id: number }>,
+): T[] {
+  const columned = new Set(people.map(p => p.id));
+  return meetings.filter(m => !internalIdsOn(m).some(id => columned.has(id)));
 }
 
 /**

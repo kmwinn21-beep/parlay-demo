@@ -26,8 +26,8 @@ import {
   DEFAULT_DURATION, DURATION_OPTIONS, MIN_CARD_MINUTES,
   calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
   durationSuffix, hourWindow, internalIdsOn, isOutsideConference, layoutDay,
-  matchesPeople, meetingsOfPerson, normalizeDuration, sharedMeetingIds, timedOn,
-  unassignedMeetings, untimedOn,
+  matchesPeople, meetingsOfPerson, meetingsWithoutColumn, normalizeDuration,
+  sharedMeetingIds, timedOn, untimedOn,
 } from '@/lib/meetingCalendar';
 
 let pass = 0;
@@ -278,17 +278,26 @@ console.log('\n— turned on its side: a column per person —');
   ];
 
   /*
-   * The conference's own internal attendees first, in its order — they are
-   * the people who are AT this thing — then anyone else on a meeting here.
-   * The conference stores names, so they are matched back to the user list.
+   * The conference's own internal attendees, in its order, and NOBODY ELSE.
+   *
+   * The people on a meeting are not the same set: a rep who is not at the
+   * conference books one and puts whoever IS there on it as an additional
+   * attendee — which is what the Rep and Additional Attendees fields are
+   * for. A column for the booking rep would be a day's schedule for someone
+   * who is not in the building. Reported, after the first build drew one.
    */
-  eq('the columns are the conference’s people',
+  eq('the columns are the conference’s internal attendees',
     conferencePeople('Henri Sejournet, Gavin Steele', week, users).map(p => p.name),
-    ['Henri Sejournet', 'Gavin Steele', 'Kevin Winn']);
-  eq('  counted', conferencePeople('Gavin Steele', week, users).map(p => `${p.name}:${p.count}`),
-    ['Gavin Steele:2', 'Henri Sejournet:1', 'Kevin Winn:1']);
-  eq('  and a name matching nobody is not a column',
+    ['Henri Sejournet', 'Gavin Steele']);
+  eq('  and nobody else on a meeting',
+    conferencePeople('Gavin Steele', week, users).map(p => p.name), ['Gavin Steele']);
+  eq('  counted over the meetings they are on',
+    conferencePeople('Gavin Steele, Henri Sejournet', week, users).map(p => `${p.name}:${p.count}`),
+    ['Gavin Steele:2', 'Henri Sejournet:1']);
+  eq('  a name matching nobody is not a column',
     conferencePeople('Someone Else', [], users).map(p => p.name), []);
+  eq('  and none set is no columns at all',
+    conferencePeople('', week, users).map(p => p.name), []);
 
   /*
    * A meeting goes in EVERY column of a person on it — the rep who booked it
@@ -301,14 +310,21 @@ console.log('\n— turned on its side: a column per person —');
     [['both', 'gavin'], ['both']]);
 
   /*
-   * And one with nobody on it goes in a column of its own rather than being
-   * dropped — it belongs to the conference, and the rep board is the only
-   * view that shows the whole team.
+   * And the ones nobody with a column is on go in a column of their own
+   * rather than being dropped — they belong to the conference, and the rep
+   * board is the only view that shows the whole team.
+   *
+   * Two kinds, one answer: no rep at all, and a rep who is not here. The
+   * second is the common one — booked from the office for somebody who has
+   * not been added to it yet.
    */
-  eq('a meeting with nobody on it is its own column',
-    unassignedMeetings(week).map(m => m.name), ['orphan']);
+  const columned = [{ id: 11 }, { id: 13 }];
+  eq('a meeting nobody with a column is on gets its own',
+    meetingsWithoutColumn(week, columned).map(m => m.name), ['orphan', 'kevin']);
+  eq('  while one an attendee is on does not',
+    meetingsWithoutColumn([week[0]], columned), []);
   eq('  and there is no such column when there is no such meeting',
-    unassignedMeetings(week.filter(m => m.name !== 'orphan')), []);
+    meetingsWithoutColumn(week.filter(m => ['both', 'gavin'].includes(m.name)), columned), []);
 
   /*
    * Which day it opens on. A board of people with no day cannot be drawn, so
@@ -382,8 +398,14 @@ console.log('\n— and the board drawn from it —');
   eq('By Rep picks the axis', /axis=\{groupMode === 'rep' \? 'rep' : 'date'\}/.test(table), true);
   eq('  and the columns are built from it', /if \(axis === 'date'\) \{/.test(cal), true);
   eq('  with the people the conference has', /conferencePeople\(internalAttendees, meetings as CalendarMeeting\[\], userOptions\)/.test(cal), true);
-  eq('  the unassigned column first, and only when there is one',
+  eq('  the leftover column first, and only when there is one',
     /if \(orphans\.length === 0\) return personColumns;/.test(cal), true);
+  eq('  holding what nobody with a column is on',
+    /meetingsWithoutColumn\(dayMeetings as CalendarMeeting\[\], people\)/.test(cal), true);
+  // No attendees, no board: a lone column holding everything explains nothing.
+  eq('  and no attendees means the empty state, not one column',
+    /if \(people\.length === 0\) return \[\];/.test(cal), true);
+  eq('  which names what is missing', /No internal attendees on this conference yet/.test(cal), true);
 
   // One day at a time, chosen by the day filters.
   eq('the day comes from the filter row', /calendarRepDay=\{meetingFilterDates\[0\] \?\? null\}/.test(page), true);
