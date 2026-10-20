@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import {
   loadConferenceNav, invalidateConferenceNav,
   type ConferenceOption, type ConferenceLoad,
@@ -27,6 +27,8 @@ import { useCapabilities } from '@/lib/useCapabilities';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { MobileHeaderSearchBar } from '@/components/MobileHeaderSearchBar';
+import { MobileMenuDrawer, MobileMenuSection } from '@/components/MobileMenuDrawer';
+import { useIsPhone } from '@/lib/useIsPhone';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
   '/conferences': 'Conferences',
@@ -51,6 +53,26 @@ function getPageTitle(pathname: string): string {
 function formatDateShort(d: string) {
   if (!d) return '';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
+
+/**
+ * " · day 2 of 4", for a conference that is on today.
+ *
+ * The one thing somebody standing in the hall opens this list to confirm, and
+ * only ever shown against a conference whose dates already bracket today.
+ * Empty where the dates cannot say — a single day needs no counting out, and
+ * a bad pair of dates should go quiet rather than print "day -3 of 0".
+ */
+function conferenceDayOf(conf: { start_date: string; end_date: string }, today: string): string {
+  const day = (d: string) => Date.parse(`${d}T00:00:00Z`);
+  const start = day(conf.start_date);
+  const end = day(conf.end_date);
+  const now = day(today);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(now)) return '';
+  const span = Math.round((end - start) / 86_400_000) + 1;
+  const which = Math.round((now - start) / 86_400_000) + 1;
+  if (span < 2 || which < 1 || which > span) return '';
+  return ` · day ${which} of ${span}`;
 }
 
 // ─── Module-level conference pre-fetcher ────────────────────────────────────
@@ -116,6 +138,229 @@ export function Header() {
     loadConferenceNav().then(applyConferences);
   }, [applyConferences]);
   const addNewRef = useRef<HTMLDivElement>(null);
+  const isPhone = useIsPhone();
+
+  /*
+   * The eight things that can be added, said once.
+   *
+   * They were eight all-but-identical blocks of markup, and now they are
+   * drawn twice — a list in the desktop panel, rows with a line of
+   * explanation each in the phone drawer — so one list is the only way the
+   * two can agree. The hint is the phone's: the panel has no width for it.
+   *
+   * `group` is where the day splits. Note, Meeting, Follow Up and Touchpoints
+   * are taken standing up with a phone in one hand; the other four are desk
+   * work, and on a phone they sit below a line saying so.
+   */
+  const ADD_NEW_ITEMS: Array<{
+    key: string;
+    label: string;
+    hint: string;
+    group: 'there' | 'desk';
+    tint: string;
+    icon: ReactNode;
+    href?: string;
+    run?: () => void;
+  }> = [
+    {
+      key: 'note', label: 'Note', group: 'there', tint: 'bg-yellow-100 text-yellow-800',
+      hint: 'What was said, against a company or an attendee',
+      run: () => setShowNoteModal(true),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'meeting', label: 'Meeting', group: 'there', tint: 'bg-violet-100 text-violet-700',
+      hint: 'Booked ahead, or logged after the fact',
+      run: () => setShowMeetingModal(true),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'follow-up', label: 'Follow Up', group: 'there', tint: 'bg-amber-100 text-amber-700',
+      hint: 'Something owed to someone, with a date on it',
+      run: () => setShowFollowUpModal(true),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+      ),
+    },
+    {
+      key: 'touchpoints', label: 'Touchpoints', group: 'there', tint: 'bg-teal-100 text-teal-700',
+      hint: 'Brief or informal attendee interaction(s)',
+      run: () => setShowTouchpointsModal(true),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <circle cx="12" cy="12" r="4" />
+          <line x1="12" y1="2" x2="12" y2="6" />
+          <line x1="12" y1="18" x2="12" y2="22" />
+          <line x1="2" y1="12" x2="6" y2="12" />
+          <line x1="18" y1="12" x2="22" y2="12" />
+        </svg>
+      ),
+    },
+    {
+      key: 'relationship', label: 'Relationship', group: 'desk', tint: 'bg-indigo-100 text-indigo-700',
+      hint: 'Who works with whom, and in what way',
+      run: () => setShowRelationshipModal(true),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        </svg>
+      ),
+    },
+    {
+      key: 'conference', label: 'Conference', group: 'desk', tint: 'bg-blue-100 text-blue-700',
+      hint: 'A new one on the calendar, with its dates',
+      href: '/conferences/new',
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      ),
+    },
+    {
+      key: 'agenda', label: 'Agenda', group: 'desk', tint: 'bg-slate-200 text-slate-600',
+      hint: 'A session or a slot on a conference’s programme',
+      run: () => setShowAgendaModal(true),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+      ),
+    },
+    {
+      key: 'closed-deal', label: 'Closed / Won Deal', group: 'desk', tint: 'bg-emerald-100 text-emerald-700',
+      hint: 'Where it landed, and what it was worth',
+      run: () => openClosedDeal(),
+      icon: (
+        <svg className="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+        </svg>
+      ),
+    },
+  ];
+
+  /*
+   * The conference list, drawn by both the desktop panel and the phone
+   * drawer.
+   *
+   * In progress first, then what is coming, then what is done — and on a
+   * phone the running one says which day of it today is, which is the one
+   * thing somebody standing at a conference opens this to confirm.
+   */
+  const conferenceList = (mobile: boolean) => {
+    if (isLoadingConfs) {
+      return (
+        <div className="flex justify-center py-6">
+          <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
+        </div>
+      );
+    }
+    /* Said out loud rather than shown as an empty list. The request not
+       arriving and the account having nothing in it are different facts, and
+       only one of them is worth a retry button. */
+    if (confsFailed) {
+      return (
+        <div className="px-4 py-5 text-center">
+          <p className="text-sm text-gray-500">Couldn&rsquo;t load conferences.</p>
+          <button
+            type="button"
+            onClick={refreshConferences}
+            className="mt-2 text-sm font-semibold text-brand-secondary hover:underline"
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    if (conferences.length === 0) {
+      return <p className="text-sm text-gray-400 text-center py-4">No conferences found.</p>;
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const userDisplayName = user?.displayName?.trim().toLowerCase() ?? null;
+    const isUserAttendee = (conf: ConferenceOption) => {
+      if (!userDisplayName || !conf.internal_attendees) return false;
+      return conf.internal_attendees.split(',').some(a => a.trim().toLowerCase() === userDisplayName);
+    };
+
+    const inProgress = conferences
+      .filter(c => c.start_date <= today && c.end_date >= today)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const upcoming = conferences
+      .filter(c => c.start_date > today)
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const past = conferences
+      .filter(c => c.end_date < today)
+      .sort((a, b) => b.start_date.localeCompare(a.start_date));
+
+    const groups = [
+      { label: 'In Progress', items: inProgress },
+      { label: 'Upcoming',    items: upcoming },
+      { label: 'Past',        items: past },
+    ].filter(g => g.items.length > 0);
+
+    const dot = (conf: ConferenceOption) => isUserAttendee(conf) && (
+      <span
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: 'rgb(var(--brand-accent-rgb))' }}
+      />
+    );
+
+    const renderConf = (conf: ConferenceOption) => (
+      <Link
+        key={conf.id}
+        href={`/conferences/${conf.id}`}
+        onClick={() => setShowConferences(false)}
+        className={mobile
+          ? 'w-full text-left px-4 py-3 flex items-center gap-2.5 border-b border-gray-100 last:border-0 active:bg-gray-50'
+          : 'w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0'}
+      >
+        {mobile ? (
+          <>
+            {dot(conf) || <span className="w-2 flex-shrink-0" />}
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-brand-primary truncate">{conf.name}</span>
+              {conf.start_date <= today && conf.end_date >= today && (
+                <span className="block text-[11.5px] font-medium text-green-700">
+                  On now{conferenceDayOf(conf, today)}
+                </span>
+              )}
+            </span>
+            <span className="text-xs font-medium text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
+          </>
+        ) : (
+          <>
+            <span className="flex items-center gap-2 min-w-0">
+              {dot(conf)}
+              <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
+            </span>
+            <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
+          </>
+        )}
+      </Link>
+    );
+
+    return groups.map(({ label, items }) => (
+      <div key={label}>
+        {mobile ? <MobileMenuSection label={label} sticky /> : (
+          <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
+          </div>
+        )}
+        {items.map(renderConf)}
+      </div>
+    ));
+  };
 
   // Re-fetch the conference list on every route change so that after a
   // conference is created or deleted the nav dropdown stays accurate.
@@ -270,99 +515,62 @@ export function Header() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          {showAddNew && (
-            <div className="absolute right-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
+          {showAddNew && !isPhone && (
+            <div className="hidden sm:block absolute right-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Add New</p>
               </div>
               <div>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); setShowNoteModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Note</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); setShowFollowUpModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Follow Up</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); setShowMeetingModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Meeting</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); setShowRelationshipModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Relationship</span>
-                </button>
-                <Link
-                  href="/conferences/new"
-                  onClick={() => setShowAddNew(false)}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Conference</span>
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); setShowAgendaModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Agenda</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); setShowTouchpointsModal(true); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <circle cx="12" cy="12" r="4" />
-                    <line x1="12" y1="2" x2="12" y2="6" />
-                    <line x1="12" y1="18" x2="12" y2="22" />
-                    <line x1="2" y1="12" x2="6" y2="12" />
-                    <line x1="18" y1="12" x2="22" y2="12" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Touchpoints</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowAddNew(false); openClosedDeal(); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3"
-                >
-                  <svg className="w-[18px] h-[18px] text-brand-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-800">Closed / Won Deal</span>
-                </button>
+                {ADD_NEW_ITEMS.map(item => {
+                  const body = (
+                    <>
+                      <span className="w-[18px] h-[18px] text-brand-primary flex-shrink-0">{item.icon}</span>
+                      <span className="text-sm font-medium text-gray-800">{item.label}</span>
+                    </>
+                  );
+                  const cls = 'w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center gap-3 border-b border-gray-50 last:border-0';
+                  return item.href ? (
+                    <Link key={item.key} href={item.href} onClick={() => setShowAddNew(false)} className={cls}>{body}</Link>
+                  ) : (
+                    <button key={item.key} type="button" onClick={() => { setShowAddNew(false); item.run?.(); }} className={cls}>{body}</button>
+                  );
+                })}
               </div>
             </div>
+          )}
+          {/* ── The same eight, as a phone drawer ──
+
+              The width buys each one the line that says what it is for, which
+              a 224px panel could not hold, and splits them where the day
+              splits: the four taken standing up at a conference, then the four
+              that are desk work. */}
+          {showAddNew && isPhone && (
+            <MobileMenuDrawer title="Add new" onClose={() => setShowAddNew(false)}>
+              {(['there', 'desk'] as const).map(group => (
+                <div key={group}>
+                  <MobileMenuSection label={group === 'there' ? 'While you are there' : 'Back at the desk'} />
+                  {ADD_NEW_ITEMS.filter(i => i.group === group).map(item => {
+                    const body = (
+                      <>
+                        <span className={`w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0 ${item.tint}`}>
+                          <span className="w-[19px] h-[19px]">{item.icon}</span>
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-brand-primary">{item.label}</span>
+                          <span className="block mt-0.5 text-[11.5px] leading-snug text-gray-500">{item.hint}</span>
+                        </span>
+                      </>
+                    );
+                    const cls = 'w-full text-left px-4 py-3 flex items-center gap-3 border-b border-gray-100 last:border-0 active:bg-gray-50';
+                    return item.href ? (
+                      <Link key={item.key} href={item.href} onClick={() => setShowAddNew(false)} className={cls}>{body}</Link>
+                    ) : (
+                      <button key={item.key} type="button" onClick={() => { setShowAddNew(false); item.run?.(); }} className={cls}>{body}</button>
+                    );
+                  })}
+                </div>
+              ))}
+            </MobileMenuDrawer>
           )}
         </div>
         {/* Conference Navigator */}
@@ -385,94 +593,38 @@ export function Header() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
-          {showConferences && (
-            <div className="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
+          {showConferences && !isPhone && (
+            <div className="hidden sm:block absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl shadow-xl z-[100] overflow-hidden">
               <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Go to Conference</p>
               </div>
-              <div className="max-h-72 overflow-y-auto">
-                {isLoadingConfs ? (
-                  <div className="flex justify-center py-6">
-                    <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
-                  </div>
-                ) : confsFailed ? (
-                  /* Said out loud rather than shown as an empty list. The
-                     request not arriving and the account having nothing in it
-                     are different facts, and only one of them is worth a
-                     retry button. */
-                  <div className="px-4 py-5 text-center">
-                    <p className="text-sm text-gray-500">Couldn&rsquo;t load conferences.</p>
-                    <button
-                      type="button"
-                      onClick={refreshConferences}
-                      className="mt-2 text-sm font-semibold text-brand-secondary hover:underline"
-                    >
-                      Try again
-                    </button>
-                  </div>
-                ) : conferences.length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">No conferences found.</p>
-                ) : (
-                  (() => {
-                    const today = new Date().toISOString().slice(0, 10);
-                    const userDisplayName = user?.displayName?.trim().toLowerCase() ?? null;
-
-                    const isUserAttendee = (conf: ConferenceOption) => {
-                      if (!userDisplayName || !conf.internal_attendees) return false;
-                      return conf.internal_attendees.split(',').some(a => a.trim().toLowerCase() === userDisplayName);
-                    };
-
-                    const inProgress = conferences
-                      .filter(c => c.start_date <= today && c.end_date >= today)
-                      .sort((a, b) => a.start_date.localeCompare(b.start_date));
-                    const upcoming = conferences
-                      .filter(c => c.start_date > today)
-                      .sort((a, b) => a.start_date.localeCompare(b.start_date));
-                    const past = conferences
-                      .filter(c => c.end_date < today)
-                      .sort((a, b) => b.start_date.localeCompare(a.start_date));
-
-                    const groups = [
-                      { label: 'In Progress', items: inProgress },
-                      { label: 'Upcoming',    items: upcoming },
-                      { label: 'Past',        items: past },
-                    ].filter(g => g.items.length > 0);
-
-                    const renderConf = (conf: ConferenceOption) => (
-                      <Link
-                        key={conf.id}
-                        href={`/conferences/${conf.id}`}
-                        onClick={() => setShowConferences(false)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50 transition-colors flex items-center justify-between gap-2 border-b border-gray-50 last:border-0"
-                      >
-                        <span className="flex items-center gap-2 min-w-0">
-                          {isUserAttendee(conf) && (
-                            <span
-                              className="w-2 h-2 rounded-full flex-shrink-0"
-                              style={{ backgroundColor: 'rgb(var(--brand-accent-rgb))' }}
-                            />
-                          )}
-                          <span className="text-sm font-medium text-gray-800 truncate">{conf.name}</span>
-                        </span>
-                        <span className="text-xs text-gray-400 flex-shrink-0">{formatDateShort(conf.start_date)}</span>
-                      </Link>
-                    );
-
-                    return groups.map(({ label, items }) => (
-                      <div key={label}>
-                        <div className="px-4 py-1.5 bg-gray-50 border-b border-gray-100">
-                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
-                        </div>
-                        {items.map(renderConf)}
-                      </div>
-                    ));
-                  })()
-                )}
-              </div>
+              <div className="max-h-72 overflow-y-auto">{conferenceList(false)}</div>
             </div>
           )}
-        </div>
+          {/* ── The same list, as a phone drawer ──
 
+              Forty conferences in a 288px panel pinned to one corner, inside
+              a page that is itself scrolling. Here they get the width for a
+              name and a date, rows a thumb can hit, and headings that stay
+              put while their own group runs under them. */}
+          {showConferences && isPhone && (
+            <MobileMenuDrawer
+              title="Go to conference"
+              subtitle={
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="w-[7px] h-[7px] rounded-full flex-shrink-0"
+                    style={{ backgroundColor: 'rgb(var(--brand-accent-rgb))' }}
+                  />
+                  marks the ones you are attending
+                </span>
+              }
+              onClose={() => setShowConferences(false)}
+            >
+              {conferenceList(true)}
+            </MobileMenuDrawer>
+          )}
+        </div>
         {/* Global Search — mobile only, to the right of "Go to conference"; desktop uses the button above */}
         <button
           type="button"

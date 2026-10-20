@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useUser } from './UserContext';
+import { MobileMenuDrawer } from '@/components/MobileMenuDrawer';
+import { useIsPhone } from '@/lib/useIsPhone';
 
 interface FollowUpItem {
   id: number;
@@ -134,9 +136,10 @@ export function OutstandingFollowUps() {
 
   const initials = getInitials(user?.displayName ?? user?.repName ?? null);
   const total = items.length;
+  const isPhone = useIsPhone();
 
-  return (
-    <div className="relative" ref={containerRef}>
+  const trigger = (
+    <>
       {/* Icon button with count badge */}
       <button
         type="button"
@@ -174,24 +177,13 @@ export function OutstandingFollowUps() {
           </span>
         )}
       </button>
+    </>
+  );
 
-      {/* Dropdown — rendered in portal for mobile viewport safety */}
-      {open && mounted && createPortal(
-        <div
-          ref={dropdownRef}
-          className="bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-          style={dropStyle}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
-            <h3 className="text-sm font-bold text-brand-primary">Outstanding Follow Ups</h3>
-            {total > 0 && (
-              <span className="min-w-[22px] h-[22px] px-1.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                {total > 99 ? '99+' : total}
-              </span>
-            )}
-          </div>
-
+  /* The list itself, drawn inside a dropdown on a desktop and inside a phone
+     drawer below sm — see the two wrappers below it. */
+  const menuBody = (
+    <>
           {loading && (
             <div className="flex items-center justify-center gap-2 py-8 text-gray-400 text-sm">
               <div className="w-4 h-4 animate-spin rounded-full border-2 border-brand-primary border-t-transparent" />
@@ -277,7 +269,7 @@ export function OutstandingFollowUps() {
                               type="button"
                               disabled={isPending}
                               onClick={() => markDone(item.id)}
-                              className="px-2.5 py-1 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+                              className="px-3.5 py-2 sm:px-2.5 sm:py-1 text-xs font-medium border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
                             >
                               Done
                             </button>
@@ -285,7 +277,7 @@ export function OutstandingFollowUps() {
                               type="button"
                               disabled={isPending}
                               onClick={() => deleteItem(item.id)}
-                              className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                              className="p-2 sm:p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
                               title="Delete"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -302,8 +294,53 @@ export function OutstandingFollowUps() {
               })}
             </div>
           )}
+    </>
+  );
+
+  return (
+    <div className="relative" ref={containerRef}>
+      {trigger}
+
+      {/* ── A desktop dropdown, anchored to the icon ── */}
+      {open && mounted && !isPhone && createPortal(
+        <div
+          ref={dropdownRef}
+          className="hidden sm:flex bg-white border border-gray-200 rounded-2xl shadow-2xl overflow-hidden flex-col"
+          style={dropStyle}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+            <h3 className="text-sm font-bold text-brand-primary">Outstanding Follow Ups</h3>
+            {total > 0 && (
+              <span className="min-w-[22px] h-[22px] px-1.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                {total > 99 ? '99+' : total}
+              </span>
+            )}
+          </div>
+          {menuBody}
         </div>,
         document.body
+      )}
+
+      {/* ── A phone drawer ──
+
+          The menu that never fitted: groups, items, and two actions on each,
+          a hundred of them behind an 18px badge. Full width it can say what
+          is owed, to whom, and how long it has been owed. */}
+      {open && isPhone && (
+        <MobileMenuDrawer
+          title="Outstanding follow ups"
+          subtitle={total > 0
+            ? `${total} owed, across ${groups.length} conference${groups.length === 1 ? '' : 's'}`
+            : undefined}
+          badge={total > 0 ? (
+            <span className="flex-shrink-0 min-w-[22px] h-[22px] px-1.5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+              {total > 99 ? '99+' : total}
+            </span>
+          ) : undefined}
+          onClose={() => setOpen(false)}
+        >
+          {menuBody}
+        </MobileMenuDrawer>
       )}
     </div>
   );
