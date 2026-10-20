@@ -229,11 +229,15 @@ console.log('\n— the board —');
     /\{col\.offersSlots && onPickSlot/.test(cal), true);
   /*
    * A finger has no hover, and a board where every empty half hour books a
-   * meeting the moment it is brushed cannot be scrolled. So a phone asks to
-   * see the outline first and takes it with the second tap.
+   * meeting the moment it is brushed cannot be scrolled. So a touch screen
+   * asks to see the outline first and takes it with the second tap — read
+   * off the POINTER rather than the width, since the stack is also what a
+   * 560px drawer gets on a desktop.
    */
-  eq('  a phone reveals it before it takes it',
-    /if \(phone && !revealed\) \{ setRevealedSlot\(slotKey\); return; \}/.test(cal), true);
+  eq('  a finger reveals it before it takes it',
+    /if \(touch && !revealed\) \{ setRevealedSlot\(slotKey\); return; \}/.test(cal), true);
+  eq('    and a finger is what cannot hover, not what is narrow',
+    /const media = window\.matchMedia\('\(hover: none\)'\);/.test(cal), true);
   eq('    one at a time', /const revealed = revealedSlot === slotKey;/.test(cal), true);
   // "Nobody attending" is not a diary.
   eq('  and not in the column that is nobody’s day',

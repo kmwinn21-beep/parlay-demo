@@ -445,9 +445,10 @@ console.log('\n— and the board drawn from it —');
   eq('  with the hour gutter pinned', /sticky left-0 bg-white z-10/.test(cal), true);
 
   // A phone runs the columns end to end instead, each with its own heading.
-  eq('a phone stacks the columns', /<section key=\{col\.key\} data-calendar-section=\{col\.key\}>/.test(cal), true);
+  eq('a phone stacks the columns',
+    /<section key=\{col\.key\} data-calendar-section=\{col\.key\} data-folded=/.test(cal), true);
   eq('  and each heading pins while its own column runs under it',
-    /className=\{`sticky z-10 flex items-center gap-2 border-y/.test(cal), true);
+    /const headClass = `sticky z-10 flex w-full items-center gap-2 border-y/.test(cal), true);
   /*
    * Reported: a strip of the grid showed between the tab bar and the pinned
    * date. A sticky top of 0 stops at the scrollport's CONTENT edge, so the

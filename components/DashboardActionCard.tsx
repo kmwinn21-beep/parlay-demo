@@ -12,7 +12,8 @@ import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
-import { internalIdsOn, type CalendarMeeting } from '@/lib/meetingCalendar';
+import { DEFAULT_DURATION, internalIdsOn, type CalendarMeeting } from '@/lib/meetingCalendar';
+import { NewMeetingModal } from '@/components/NewMeetingModal';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -1122,6 +1123,15 @@ export function DashboardActionCard() {
    * hole in it — which a list of cards cannot answer.
    */
   const [drawerView, setDrawerView] = useState<'calendar' | 'cards'>('calendar');
+  /**
+   * An empty half hour picked off the drawer's board.
+   *
+   * The same hand-off the conference calendar makes: the board says when,
+   * the booking form opens on it. Whose gap it was never has to be sent here
+   * — the drawer's board is the week, a column per day, so there is no
+   * person's column to inherit, and the form fills the rep in itself.
+   */
+  const [slotPrefill, setSlotPrefill] = useState<{ date: string; time: string } | null>(null);
   // Whoever is signed in, by first name where we have one.
   const meetingsOwner = (user?.firstName || user?.displayName || user?.repName || 'My').split(' ')[0];
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -1530,6 +1540,8 @@ export function DashboardActionCard() {
                 <MeetingsTable
                   viewMode="calendar"
                   calendarLayout="stack"
+                  calendarCollapsibleSections
+                  onCalendarSlotPick={slot => setSlotPrefill({ date: slot.day, time: slot.time })}
                   tableName="conference_meetings"
                   meetings={boothFilteredDrawerMeetings}
                   calendarDimDays={drawerDateFilter}
@@ -1589,6 +1601,31 @@ export function DashboardActionCard() {
         capture="environment"
         className="hidden"
         onChange={e => { const f = e.target.files?.[0]; if (f) void handleNotesFile(f); e.target.value = ''; }}
+      />
+
+      {/* The form the board's empty half hours open, on the day and time
+          that was clicked. The meeting it books is dropped into the drawer's
+          own list, so the slot it filled is a card before the drawer is
+          closed and opened again. */}
+      <NewMeetingModal
+        isOpen={slotPrefill != null}
+        onClose={() => setSlotPrefill(null)}
+        availableConferences={activeConference
+          ? [{
+            id: activeConference.id,
+            name: activeConference.name,
+            start_date: activeConference.start_date ?? '',
+            end_date: activeConference.end_date ?? undefined,
+          }]
+          : []}
+        defaultConferenceId={activeConference?.id}
+        prefillDate={slotPrefill?.date}
+        prefillTime={slotPrefill?.time}
+        prefillDuration={DEFAULT_DURATION}
+        onSuccess={meeting => {
+          if (meeting.conference_id !== activeConference?.id) return;
+          setMeetings(prev => (prev.some(m => m.id === meeting.id) ? prev : [meeting as Meeting, ...prev]));
+        }}
       />
 
       {/* Modals */}

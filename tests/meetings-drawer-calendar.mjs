@@ -113,6 +113,62 @@ console.log('\n— the board, in a 560px drawer —');
     /No meetings match those filters\./.test(card), true);
 }
 
+console.log('\n— a day at a time —');
+{
+  eq('the drawer asks for folding days', /calendarCollapsibleSections/.test(card), true);
+  eq('  and the table passes it on', /collapsibleSections=\{calendarCollapsibleSections\}/.test(table), true);
+
+  // Two rules make the default, and nothing else does.
+  eq('an empty day opens folded',
+    /\(picked\.length > 0 \? !picked\.includes\(col\.day\) : col\.meetings\.length === 0\)/.test(calendar), true);
+  eq('  a picked day folds the others', /const dayPick = dimDays\.join\(','\);/.test(calendar), true);
+  eq('  and picking a different one drops what was folded by hand',
+    /useEffect\(\(\) => \{ setFoldOverrides\(\{\}\); \}, \[dayPick\]\);/.test(calendar), true);
+  // A default plus overrides, so the first paint is already folded right.
+  eq('the reader can still fold any of them',
+    /const toggleFold = \(key: string\) =>/.test(calendar), true);
+
+  eq('the heading is the control', /aria-expanded=\{!folded\}/.test(calendar), true);
+  eq('  and it pins whether the day is open or shut',
+    /const headClass = `sticky z-10 flex w-full items-center gap-2/.test(calendar), true);
+  // Nothing to measure: a ten-hour day folds as fast as a short one.
+  eq('the body folds by row size, not by height',
+    /gridTemplateRows: folded \? '0fr' : '1fr'/.test(calendar), true);
+  eq('  and a folded day is out of the tab order',
+    /aria-hidden=\{folded\} inert=\{folded \|\| undefined\}/.test(calendar), true);
+}
+
+console.log('\n— booking an empty half hour from the drawer —');
+{
+  eq('the board hands the slot back',
+    /onCalendarSlotPick=\{slot => setSlotPrefill\(\{ date: slot\.day, time: slot\.time \}\)\}/.test(card), true);
+  eq('  which opens the booking form on it',
+    /prefillDate=\{slotPrefill\?\.date\}/.test(card) && /prefillTime=\{slotPrefill\?\.time\}/.test(card), true);
+  eq('  at the usual length', /prefillDuration=\{DEFAULT_DURATION\}/.test(card), true);
+  eq('  and what it books lands in the drawer without a reload',
+    /setMeetings\(prev => \(prev\.some\(m => m\.id === meeting\.id\) \? prev : \[meeting as Meeting, \.\.\.prev\]\)\)/.test(card), true);
+
+  // Whether the outline waits for a tap is a question about the POINTER: the
+  // stack is also what a 560px drawer gets on a 1600px screen.
+  eq('a pointer reveals the outline by hovering it',
+    /'opacity-0 hover:opacity-100 focus-visible:opacity-100'/.test(calendar), true);
+  eq('  a finger taps once to see it and again to take it',
+    /if \(touch && !revealed\) \{ setRevealedSlot\(slotKey\); return; \}/.test(calendar), true);
+  eq('  and which it is comes from the pointer',
+    /const touch = coarsePointer;/.test(calendar), true);
+}
+
+console.log('\n— the key rows, when they run past the edge —');
+{
+  // In a 560px drawer both rows overflow with nothing to say so.
+  eq('the type key scrolls with chevrons',
+    /<ScrollRow className="flex-1" gapClass="gap-1\.5" step=\{140\}>[\s\S]*?typeTallies\.map/.test(calendar), true);
+  eq('  and so does the rep key',
+    /<ScrollRow className="flex-1" gapClass="gap-1\.5" step=\{140\}>[\s\S]*?whosePeople\.map/.test(calendar), true);
+  eq('  from the row the rest of the app uses',
+    /import \{ ScrollRow \} from '@\/components\/ScrollRow';/.test(calendar), true);
+}
+
 console.log('\n— how “stack” reaches the calendar —');
 {
   eq('the table passes it through', /layout=\{calendarLayout\}/.test(table), true);

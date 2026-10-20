@@ -12,6 +12,7 @@ import {
   type CalendarMeeting,
 } from '@/lib/meetingCalendar';
 import { minutesToTime, slotLabel } from '@/lib/availability';
+import { ScrollRow } from '@/components/ScrollRow';
 import type { Meeting } from '@/components/MeetingsTable';
 
 /**
@@ -134,6 +135,30 @@ function useScrollerPaddingTop(ref: React.RefObject<HTMLElement | null>): number
   return pad;
 }
 
+/**
+ * Whether what is pointing at this cannot hover.
+ *
+ * Not the same question as "is this a phone": the stack is also what a 560px
+ * drawer gets on a 1600px screen, where there IS a pointer and the + Meeting
+ * outline should appear under it rather than waiting to be tapped twice. And
+ * a tablet is the reverse — wide, but with a finger on it.
+ *
+ * Starts false so a pointer's board paints with its empty slots already
+ * invisible; a touch screen corrects itself on mount, before anyone has had
+ * time to tap one.
+ */
+function useCoarsePointer(): boolean {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia('(hover: none)');
+    const update = () => setCoarse(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  return coarse;
+}
+
 /** '7 AM', '12 PM' — the gutter's labels. */
 function hourLabel(hour: number): string {
   const h = hour % 24;
@@ -224,6 +249,7 @@ export function MeetingsCalendar({
   meetings, conferenceStart, conferenceEnd, userOptions, colorMap, renderDetail,
   companyTypeOptions = [], companyTypeColorMap = {},
   axis = 'date', internalAttendees = null, repDay = null, dimDays = [], layout = 'auto',
+  collapsibleSections = false,
   closeSignal = 0, detailLocked = false, onDetailClose, onPickSlot,
 }: {
   meetings: Meeting[];
@@ -258,6 +284,17 @@ export function MeetingsCalendar({
    * window around it is doing, and four day columns in it are unreadable.
    */
   layout?: 'auto' | 'stack';
+  /**
+   * Each day of the stack folds away behind its heading.
+   *
+   * For the stack drawn inside something short — the dashboard's Meetings
+   * drawer, where a four-day conference is four ten-hour grids and the day
+   * you want is three screens down. A day with nothing booked opens folded,
+   * since an empty grid is the one that earns its space least, and picking a
+   * day on the filter above folds the rest: there the chips can do more than
+   * dim, because a folded day still says it is there.
+   */
+  collapsibleSections?: boolean;
   /**
    * The days the picker above has lit, if any.
    *
@@ -294,6 +331,7 @@ export function MeetingsCalendar({
 }) {
   const stickyTop = useStickyTop();
   const now = useNowMinutes();
+  const coarsePointer = useCoarsePointer();
   const phoneStackRef = useRef<HTMLDivElement>(null);
   const scrollerPad = useScrollerPaddingTop(phoneStackRef);
   /*
@@ -456,6 +494,33 @@ export function MeetingsCalendar({
       ),
     }, ...personColumns];
   }, [axis, days, theDay, onDay, meetings, internalAttendees, userOptions, conferenceStart, conferenceEnd]);
+
+  /*
+   * Which days are folded away, where the stack folds at all.
+   *
+   * Two rules make the default, and the reader overrides it a section at a
+   * time: a day with nothing booked opens folded, and a day picked on the
+   * filter above folds every OTHER day — which is what the chips can do here
+   * that dimming cannot, since a folded day still shows its heading and its
+   * count where a removed column shows nothing.
+   *
+   * Kept as a default plus overrides rather than as one set, so there is
+   * nothing to flash: the first paint is already folded correctly. Picking a
+   * different day drops the overrides, or the day just asked for would stay
+   * folded because it was folded by hand twenty seconds ago.
+   */
+  const dayPick = dimDays.join(',');
+  const defaultFolded = useMemo(() => {
+    const picked = dayPick ? dayPick.split(',') : [];
+    return new Set(columns
+      .filter(col => (picked.length > 0 ? !picked.includes(col.day) : col.meetings.length === 0))
+      .map(col => col.key));
+  }, [columns, dayPick]);
+  const [foldOverrides, setFoldOverrides] = useState<Record<string, boolean>>({});
+  useEffect(() => { setFoldOverrides({}); }, [dayPick]);
+  const isFolded = (key: string) => foldOverrides[key] ?? defaultFolded.has(key);
+  const toggleFold = (key: string) =>
+    setFoldOverrides(prev => ({ ...prev, [key]: !(prev[key] ?? defaultFolded.has(key)) }));
 
   /*
    * The meetings that are in more than one column.
@@ -659,30 +724,33 @@ export function MeetingsCalendar({
             in, so the outline never appears under a meeting, where clicking
             it would mean double-booking.
 
-            Phone only draws the day drawer, where a long press competes with
-            scrolling and there is no hover to reveal anything; the + Meeting
-            button above the list is already a tap away there.
+            A finger has no hover, so there the first tap shows the outline and
+            the second takes it. Which of the two it is comes from the POINTER
+            rather than from the width: the stack is also what a 560px drawer
+            gets on a desktop, and there the outline should appear under the
+            mouse like it does on the wide board.
           */}
           {col.offersSlots && onPickSlot
             && openSlots(col.meetings as CalendarMeeting[], startHour, endHour).map(start => {
               const slotKey = `${col.key}-${start}`;
               const revealed = revealedSlot === slotKey;
+              const touch = coarsePointer;
               return (
               <button
                 key={start}
                 type="button"
                 onClick={() => {
                   // A finger asks to see it first, then asks for it.
-                  if (phone && !revealed) { setRevealedSlot(slotKey); return; }
+                  if (touch && !revealed) { setRevealedSlot(slotKey); return; }
                   onPickSlot({ day: col.day, time: minutesToTime(start), personId: col.personId });
                 }}
-                aria-label={phone && !revealed
+                aria-label={touch && !revealed
                   ? `Book this half hour, ${slotLabel(start, start + SLOT_MINUTES)}`
                   : `Schedule a meeting, ${slotLabel(start, start + SLOT_MINUTES)}`}
                 title={`Schedule a meeting · ${slotLabel(start, start + SLOT_MINUTES)}`}
                 data-calendar-slot={slotKey}
                 className={`absolute inset-x-0 flex items-center px-0.5 py-px transition-opacity ${
-                  phone
+                  touch
                     ? (revealed ? 'opacity-100' : 'opacity-0')
                     : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'}`}
                 style={{
@@ -749,7 +817,10 @@ export function MeetingsCalendar({
   const typeKey = typeTallies.length > 0 && (
     <div className={`${KEY_ROW} bg-gray-50/60`}>
       <span className={KEY_LABEL}>Type</span>
-      <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
+      {/* Chevrons rather than a bare scroller: in a 560px drawer the row runs
+          past its edge with nothing to say so, and a touch scroller inside a
+          vertically scrolling drawer is easy to fight with. */}
+      <ScrollRow className="flex-1" gapClass="gap-1.5" step={140}>
         {typeTallies.map(t => {
           const on = pickedTypes.has(t.value);
           const label = t.value ?? 'No type set';
@@ -774,7 +845,7 @@ export function MeetingsCalendar({
             </button>
           );
         })}
-      </div>
+      </ScrollRow>
       {pickedTypes.size > 0 && (
         <button
           type="button"
@@ -838,7 +909,7 @@ export function MeetingsCalendar({
   const peopleFilter = axis === 'date' && whosePeople.length > 0 && (
     <div className={KEY_ROW}>
       <span className={KEY_LABEL}>Rep</span>
-      <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
+      <ScrollRow className="flex-1" gapClass="gap-1.5" step={140}>
         {whosePeople.map(p => {
           const on = pickedPeople.has(p.id);
           return (
@@ -858,7 +929,7 @@ export function MeetingsCalendar({
             </button>
           );
         })}
-      </div>
+      </ScrollRow>
       {pickedPeople.size > 0 && (
         <button
           type="button"
@@ -913,40 +984,76 @@ export function MeetingsCalendar({
         )}
         {columns.map(col => {
           const band = untimedBandHeight([col]);
-          return (
-            <section key={col.key} data-calendar-section={col.key}>
-              <div
-                className={`sticky z-10 flex items-center gap-2 border-y border-gray-100 bg-gray-50/95 px-4 py-2 backdrop-blur-sm transition-opacity ${
-                  axis === 'date' && dayDimmed(col.day) ? 'opacity-60' : ''}`}
-                style={{ top: phoneHeadTop }}
-              >
-                <p className="text-sm font-semibold text-brand-primary truncate">
-                  {col.longLabel}
-                </p>
-                {axis === 'date' && isOutsideConference(col.day, conferenceStart, conferenceEnd) && (
-                  <span className="flex-shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                    Outside
-                  </span>
-                )}
-                <span className="ml-auto flex-shrink-0 text-[11px] font-semibold text-gray-500">
-                  {col.meetings.length === 0 ? 'Nothing booked' : col.meetings.length}
+          const folded = collapsibleSections && isFolded(col.key);
+          const headInside = (
+            <>
+              {collapsibleSections && (
+                <svg
+                  className={`w-3.5 h-3.5 flex-shrink-0 text-gray-400 transition-transform duration-200 ease-out ${
+                    folded ? '' : 'rotate-90'}`}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+              <p className="text-sm font-semibold text-brand-primary truncate">
+                {col.longLabel}
+              </p>
+              {axis === 'date' && isOutsideConference(col.day, conferenceStart, conferenceEnd) && (
+                <span className="flex-shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                  Outside
                 </span>
-              </div>
-              <div className="flex px-3 py-2">
-                {/* Padded by the band so an hour's label and its line are at
-                    the same height — the untimed stack sits above the grid
-                    inside the column beside it. */}
-                <div className="w-14 flex-shrink-0" style={{ paddingTop: band }}>
-                  <div className="relative" style={{ height: gridHeight }}>
-                    {hours.map((h, i) => (
-                      <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * HOUR_PX - 6 }}>
-                        {hourLabel(h)}
-                      </span>
-                    ))}
+              )}
+              <span className="ml-auto flex-shrink-0 text-[11px] font-semibold text-gray-500">
+                {col.meetings.length === 0 ? 'Nothing booked' : col.meetings.length}
+              </span>
+            </>
+          );
+          /* The heading pins whether the day is open or folded — a folded day
+             that scrolled away would leave nothing to open it by. */
+          const headClass = `sticky z-10 flex w-full items-center gap-2 border-y border-gray-100 bg-gray-50/95 px-4 py-2 text-left backdrop-blur-sm transition-opacity ${
+            axis === 'date' && dayDimmed(col.day) ? 'opacity-60' : ''}`;
+          return (
+            <section key={col.key} data-calendar-section={col.key} data-folded={folded ? 'true' : undefined}>
+              {collapsibleSections ? (
+                <button
+                  type="button"
+                  onClick={() => toggleFold(col.key)}
+                  aria-expanded={!folded}
+                  title={folded ? `Show ${col.longLabel}` : `Hide ${col.longLabel}`}
+                  className={`${headClass} hover:bg-gray-100/95`}
+                  style={{ top: phoneHeadTop }}
+                >
+                  {headInside}
+                </button>
+              ) : (
+                <div className={headClass} style={{ top: phoneHeadTop }}>{headInside}</div>
+              )}
+              {/* 0fr to 1fr: the day's own height never has to be measured,
+                  and a ten-hour grid folds in the same quarter second a short
+                  one does. */}
+              <div
+                className="grid transition-[grid-template-rows] duration-200 ease-out"
+                style={{ gridTemplateRows: folded ? '0fr' : '1fr' }}
+              >
+                <div className="overflow-hidden" aria-hidden={folded} inert={folded || undefined}>
+                  <div className="flex px-3 py-2">
+                    {/* Padded by the band so an hour's label and its line are at
+                        the same height — the untimed stack sits above the grid
+                        inside the column beside it. */}
+                    <div className="w-14 flex-shrink-0" style={{ paddingTop: band }}>
+                      <div className="relative" style={{ height: gridHeight }}>
+                        {hours.map((h, i) => (
+                          <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * HOUR_PX - 6 }}>
+                            {hourLabel(h)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0 border-l border-gray-200">
+                      {columnBody(col, true, band)}
+                    </div>
                   </div>
-                </div>
-                <div className="flex-1 min-w-0 border-l border-gray-200">
-                  {columnBody(col, true, band)}
                 </div>
               </div>
             </section>
