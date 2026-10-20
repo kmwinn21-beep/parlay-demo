@@ -51,7 +51,7 @@ import { SocialEventsTable, type SocialEvent } from '@/components/SocialEventsTa
 import { MeetingsCalendar } from '@/components/MeetingsCalendar';
 import { AvailabilityModal } from '@/components/AvailabilityModal';
 import { additionalAttendeesFor } from '@/lib/availability';
-import { defaultCalendarDay } from '@/lib/meetingCalendar';
+import { DEFAULT_DURATION, defaultCalendarDay } from '@/lib/meetingCalendar';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
@@ -592,6 +592,8 @@ export default function ConferenceDetailPage() {
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   /** The calendar drawn as people rather than days — one day at a time. */
   const calendarByRep = meetingViewMode === 'calendar' && meetingGroupMode === 'rep';
+  /** The one view where picking a day lights it rather than emptying the week. */
+  const calendarDimsDays = meetingViewMode === 'calendar' && meetingGroupMode !== 'rep';
   /*
    * Entering that view with no day chosen lights one.
    *
@@ -4276,6 +4278,9 @@ export default function ConferenceDetailPage() {
              which is the cut that was reported. With the gap back it is 25px
              clear, and the row still pins to the top when the page scrolls —
              a margin is a position in the flow, not a constraint on sticky. */
+          /* Named so anything that pins under it can measure it rather than
+             carry a copy of its height — the calendar's column headings do. */
+          data-sticky-tabs
           className="mt-6 border-b border-gray-200 overflow-x-auto sticky top-0 z-20 bg-gray-50 shadow-[0_-1rem_0_0_rgb(249,250,251)] lg:shadow-[0_-1.5rem_0_0_rgb(249,250,251)]"
         >
           {tabNav}
@@ -5145,7 +5150,13 @@ export default function ConferenceDetailPage() {
             const ids = (m.scheduled_by || '').split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
             if (!meetingFilterReps.some(id => ids.includes(id))) return false;
           }
-          if (meetingFilterDates.length > 0 && !meetingFilterDates.includes(m.meeting_date)) return false;
+          // The calendar's date axis keeps every day and dims the ones not
+          // picked — its columns ARE the days, so removing three of four
+          // leaves a board that cannot say where the picked day sits in the
+          // week. Everywhere else, including the calendar's rep axis (where
+          // the picked day is which board is drawn), the filter still filters.
+          if (meetingFilterDates.length > 0 && !calendarDimsDays
+              && !meetingFilterDates.includes(m.meeting_date)) return false;
           if (boothHoursOnly && !isBoothHours(m.meeting_time)) return false;
           if (meetingFilterCompanyTypes.length > 0) {
             const att = attendeeMap.get(m.attendee_id);
@@ -5470,6 +5481,27 @@ export default function ConferenceDetailPage() {
                  and the fallback is the calendar's own (today while the
                  conference is running, else its first day). */
               calendarRepDay={meetingFilterDates[0] ?? null}
+              calendarDimDays={calendarDimsDays ? meetingFilterDates : []}
+              /* The fill, and the key that reads it: the colours an admin
+                 already set on each Company Type, in the order they set. */
+              companyTypeOptions={meetingCompanyTypeOpts}
+              companyTypeColorMap={colorMaps.company_type || {}}
+              /* An empty half hour on the board opens the same form the
+                 availability slots do, with the same rule about who else
+                 goes on it — the column's person, unless that is the one
+                 doing the booking. Left off where the conference's stage
+                 has closed logging, and the board then draws no slots. */
+              onCalendarSlotPick={newMeetingBlocked ? undefined : slot => {
+                setMeetingPrefill({
+                  date: slot.day,
+                  time: slot.time,
+                  duration: DEFAULT_DURATION,
+                  internalUserIds: slot.personId == null
+                    ? []
+                    : additionalAttendeesFor(slot.personId, currentUser?.configId ?? null),
+                });
+                setNewMeetingOpen(true);
+              }}
               onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}

@@ -45,7 +45,9 @@ await db.execute(`CREATE TABLE meetings (
   duration_minutes INTEGER, created_at TEXT DEFAULT (datetime('now')))`);
 await db.execute(`CREATE TABLE attendees (id INTEGER PRIMARY KEY, first_name TEXT, last_name TEXT, title TEXT,
   photo_url TEXT, email TEXT, phone TEXT, company_id INTEGER)`);
-await db.execute(`CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT, wse INTEGER, status TEXT)`);
+// company_type rides along with the row: the calendar colours its cards by it,
+// so the list read is selecting it.
+await db.execute(`CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT, wse INTEGER, status TEXT, company_type TEXT)`);
 // The stage guard the POST runs through reads these, so the fixture has to
 // carry them or every booking answers 500.
 await db.execute(`CREATE TABLE conferences (id INTEGER PRIMARY KEY, name TEXT, internal_attendees TEXT,

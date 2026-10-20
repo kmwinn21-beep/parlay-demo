@@ -248,8 +248,32 @@ console.log('\n— the board, and the button that opens it —');
   eq('the board is a column per person', /data-availability-person=\{person\.id\}/.test(modal), true);
   eq('  of slots that can be clicked', /data-availability-slot=/.test(modal), true);
   eq('  with the three controls', /Meeting length/.test(modal) && /Between/.test(modal) && />Day</.test(modal), true);
-  eq('  the day heading only where there is more than one',
-    /\{groups\.length > 1 && \(/.test(modal), true);
+  /*
+   * Each day is a drawer, shut to start with.
+   *
+   * Four people over four days is eighty cards; collapsed, a column is four
+   * lines with a count on each, which is the question the board is opened to
+   * ask — which day has room — before the question of what time.
+   */
+  eq('  each day is a drawer', /onClick=\{\(\) => toggleDay\(group\.day\)\}/.test(modal), true);
+  eq('    that says whether it is open', /aria-expanded=\{open\}/.test(modal), true);
+  eq('    with its count on the right',
+    /text-\[10px\] font-semibold text-green-700">\n\s*\{group\.slots\.length\}/.test(modal), true);
+  eq('    holding its slots only while open', /\{open && group\.slots\.map\(slot => \(/.test(modal), true);
+  eq('    shut to start with', /useState<Set<string>>\(new Set\(\)\)/.test(modal), true);
+  // One open day opens in every column: the board exists to compare a day
+  // across the team, and a Tuesday open in one column and shut in the next is
+  // four columns that cannot be read against each other.
+  eq('    and opening one opens it in every column',
+    /const \[openDays, setOpenDays\] = useState/.test(modal)
+      && /const open = openDays\.has\(group\.day\);/.test(modal), true);
+  // Except where the picker above has already named the day.
+  eq('    unless there is only one day, which opens itself',
+    /setOpenDays\(days\.length === 1 \? new Set\(days\) : new Set\(\)\);/.test(modal), true);
+  // The date led every card from when the slots were one flat list.
+  eq('  a slot card is its time, the day being said above it',
+    /formatCardDate\(slot\.day\)/.test(modal.split('function SlotButton')[1] ?? '')
+      && !/<span className="block text-\[9px\] font-semibold uppercase tracking-wide text-green-700">/.test(modal), true);
   // A column with nothing says so, and offers the length that would find some.
   eq('  and an empty column offers a shorter meeting',
     /Show \{fallback\} min instead/.test(modal), true);
