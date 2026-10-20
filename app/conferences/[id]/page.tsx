@@ -5243,7 +5243,20 @@ export default function ConferenceDetailPage() {
           </div>
         );
         return (
-          <div className="card p-0 overflow-hidden">
+          /*
+           * clip rather than hidden, because the calendar inside pins its
+           * column headings.
+           *
+           * `overflow: hidden` creates a scrolling box — one that cannot be
+           * scrolled, but a scrolling box all the same — and a sticky element
+           * resolves against the nearest one of those. So every heading
+           * measured itself against a card that never moves and simply
+           * scrolled away with the grid. `overflow: clip` clips the rounded
+           * corners exactly as before without becoming a scrollport, which
+           * hands the headings back to the page's own scroller: <main> on a
+           * desktop, the tab drawer's body on a phone.
+           */
+          <div className="card p-0 overflow-clip">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100">
               {/* Row 1 — title, the day filters (desktop), and the actions.
@@ -5295,6 +5308,41 @@ export default function ConferenceDetailPage() {
                       ))}
                     </div>
                   </div>
+                  {/* A phone's two openers, icon only and in the title row.
+
+                      Availability used to sit at the end of the day filters,
+                      where it crowded a row that has to scroll, and the
+                      calendar was a word in a segmented control two rows
+                      down. Both are things that OPEN rather than things that
+                      narrow what is already on screen, so they belong beside
+                      the kebab — which is where a thumb already goes. */}
+                  <button
+                    type="button"
+                    onClick={() => setMeetingViewMode(m => (m === 'calendar' ? 'table' : 'calendar'))}
+                    aria-pressed={meetingViewMode === 'calendar'}
+                    aria-label={meetingViewMode === 'calendar' ? 'Show the cards' : 'Show the calendar'}
+                    title={meetingViewMode === 'calendar' ? 'Cards' : 'Calendar'}
+                    className={`lg:hidden flex-shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg border transition-colors ${
+                      meetingViewMode === 'calendar'
+                        ? 'bg-brand-secondary text-white border-brand-secondary'
+                        : 'bg-white text-gray-500 border-gray-200'}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityOpen(true)}
+                    aria-label="Availability"
+                    title="Where the team has room"
+                    className="lg:hidden flex-shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg bg-brand-secondary text-white hover:bg-brand-primary transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 7v5l3 2" />
+                    </svg>
+                  </button>
                   <KebabMenu
                     title="Meeting actions"
                     items={[
@@ -5361,7 +5409,10 @@ export default function ConferenceDetailPage() {
                   type="button"
                   onClick={() => setAvailabilityOpen(true)}
                   title="Where the team has room"
-                  className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary transition-colors"
+                  /* A phone has this as an icon in the title row; here it
+                     would be a third thing competing for a line that already
+                     has to scroll. */
+                  className="hidden lg:inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary transition-colors"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <circle cx="12" cy="12" r="9" />
@@ -5371,37 +5422,11 @@ export default function ConferenceDetailPage() {
                 </button>
               </div>
 
-              {/* Mobile row 3 — the grouping toggle, on its own scrolling line,
-                  and the one view choice a phone has.
-
-                  Table and Kanban both draw the same card list below lg, so
-                  there was nothing to choose between them. The calendar is a
-                  different thing on a phone — a day at a time in a drawer —
-                  so Cards or Calendar is a real choice and this is where it
-                  is made. */}
+              {/* Mobile row 3 — how the meetings are grouped, on its own
+                  scrolling line. Cards or Calendar used to share it; that is
+                  the icon pair up in the title row now. */}
               <ScrollRow className="lg:hidden mt-2" gapClass="gap-0" step={120}>
                 <GroupToggle short />
-                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden ml-2">
-                  {([
-                    { key: 'table' as const, label: 'Cards', path: 'M4 6h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7a1 1 0 011-1z' },
-                    { key: 'calendar' as const, label: 'Calendar', path: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-                  ]).map((opt, i) => (
-                    <button
-                      key={opt.key}
-                      type="button"
-                      onClick={() => setMeetingViewMode(opt.key)}
-                      aria-pressed={meetingViewMode === opt.key}
-                      className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                        i > 0 ? 'border-l border-gray-200' : ''} ${
-                        meetingViewMode === opt.key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500'}`}
-                    >
-                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={opt.path} />
-                      </svg>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
               </ScrollRow>
 
               {/* Active filter pills — full rep names on desktop, initials on mobile */}

@@ -259,7 +259,12 @@ console.log('\n— the board, and the button that opens it —');
   eq('    that says whether it is open', /aria-expanded=\{open\}/.test(modal), true);
   eq('    with its count on the right',
     /text-\[10px\] font-semibold text-green-700">\n\s*\{group\.slots\.length\}/.test(modal), true);
-  eq('    holding its slots only while open', /\{open && group\.slots\.map\(slot => \(/.test(modal), true);
+  // Rows of 0fr to 1fr: it slides without anything measuring how tall the
+  // list is, which a list that changes with the length and the window would
+  // have to do on every change.
+  eq('    sliding rather than appearing',
+    /grid transition-\[grid-template-rows\] duration-200 ease-out motion-reduce:transition-none/.test(modal), true);
+  eq('    and out of reach while it is shut', /inert=\{!open\}/.test(modal), true);
   eq('    shut to start with', /useState<Set<string>>\(new Set\(\)\)/.test(modal), true);
   // One open day opens in every column: the board exists to compare a day
   // across the team, and a Tuesday open in one column and shut in the next is
@@ -274,6 +279,24 @@ console.log('\n— the board, and the button that opens it —');
   eq('  a slot card is its time, the day being said above it',
     /formatCardDate\(slot\.day\)/.test(modal.split('function SlotButton')[1] ?? '')
       && !/<span className="block text-\[9px\] font-semibold uppercase tracking-wide text-green-700">/.test(modal), true);
+  /*
+   * A phone has no room for columns side by side, so the people stack: each
+   * one shut until it is asked for, opening onto their days, themselves shut.
+   */
+  eq('  a phone stacks the people', /data-availability-person-toggle=\{person\.id\}/.test(modal), true);
+  eq('    shut to start with', /const personOpen = !isPhone \|\| openPeople\.has\(person\.id\);/.test(modal), true);
+  eq('    with a count of their own', /\{mine\.length\}\n\s*<\/span>/.test(modal), true);
+  eq('    and the columns side by side from sm',
+    /className="flex flex-col gap-2 sm:grid sm:gap-3 sm:min-w-0 sm:h-full"/.test(modal), true);
+  // The sheet stops where every other phone drawer stops.
+  eq('  and opens as a sheet below the header',
+    /drawer-mobile-responsive sheet-below-header/.test(modal), true);
+  // The day buttons wrapped into whatever the other two controls left over,
+  // which at 390px was a column pinned to the right with half of it off screen.
+  eq('  the day buttons are one line that scrolls',
+    /flex gap-1\.5 overflow-x-auto scrollbar-hide sm:flex-wrap/.test(modal), true);
+  eq('    directly under the length', /className="order-2 w-full min-w-0 sm:order-3 sm:flex-1"/.test(modal), true);
+
   // A column with nothing says so, and offers the length that would find some.
   eq('  and an empty column offers a shorter meeting',
     /Show \{fallback\} min instead/.test(modal), true);

@@ -11,6 +11,7 @@ import {
   type AvailabilitySlot,
 } from '@/lib/availability';
 import { formatCardDate } from '@/lib/meetingTime';
+import { useIsPhone } from '@/lib/useIsPhone';
 
 /**
  * Where there is room, for everybody on this conference at once.
@@ -47,6 +48,7 @@ export function AvailabilityModal({
   onPick: (pick: AvailabilityPick) => void;
   onClose: () => void;
 }) {
+  const isPhone = useIsPhone();
   const [mounted, setMounted] = useState(false);
   const [duration, setDuration] = useState<number>(DEFAULT_DURATION);
   const [startMinutes, setStartMinutes] = useState(DEFAULT_WINDOW.startMinutes);
@@ -60,6 +62,12 @@ export function AvailabilityModal({
    * is four columns that cannot be read against each other.
    */
   const [openDays, setOpenDays] = useState<Set<string>>(new Set());
+  /**
+   * The people whose section is open — a phone only, where the columns are
+   * stacked. From sm every column is open, because they are side by side and
+   * there is nothing a shut one would make room for.
+   */
+  const [openPeople, setOpenPeople] = useState<Set<number>>(new Set());
 
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
   useEffect(() => {
@@ -100,6 +108,12 @@ export function AvailabilityModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daysKey]);
 
+  const togglePerson = (id: number) => setOpenPeople(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
   const toggleDay = (value: string) => setOpenDays(prev => {
     const next = new Set(prev);
     if (next.has(value)) next.delete(value); else next.add(value);
@@ -120,13 +134,18 @@ export function AvailabilityModal({
   const windowValid = endMinutes > startMinutes;
 
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-[150] flex items-end justify-center p-0 sm:items-center sm:p-6">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden />
+      {/* A phone gets a sheet that starts at the header's bottom edge and runs
+          to the bottom of the screen — sheet-below-header, the same measure
+          every other phone drawer in the app uses, so they all stop in the
+          same place whatever the status-bar inset turns out to be. From sm it
+          is a centred dialog again. */}
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Availability"
-        className="relative w-full max-w-6xl h-[88vh] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
+        className="drawer-mobile-responsive sheet-below-header relative w-full max-w-6xl bg-white rounded-t-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden sm:h-[88vh] sm:rounded-2xl"
       >
         {/* Header */}
         <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -149,9 +168,17 @@ export function AvailabilityModal({
           </button>
         </div>
 
-        {/* How long, between when, and which day */}
-        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50/60 flex-shrink-0 flex flex-wrap items-end gap-x-6 gap-y-3">
-          <div>
+        {/* How long, which day, and between when.
+
+            A phone stacks them, each on a full-width line of its own: the day
+            buttons used to wrap into whatever the first two left over, which
+            at 390px was a narrow column pinned to the right edge with half of
+            the dates off screen and no way to reach them. Order matters in the
+            stack — length, then day, then the window, which is how the
+            question is actually asked — so the three carry order classes that
+            the sm+ row ignores. */}
+        <div className="px-4 sm:px-5 py-3 border-b border-gray-100 bg-gray-50/60 flex-shrink-0 flex flex-wrap items-end gap-x-6 gap-y-3">
+          <div className="order-1 w-full sm:w-auto">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Meeting length</p>
             <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
               {DURATION_OPTIONS.map((mins, i) => (
@@ -169,7 +196,7 @@ export function AvailabilityModal({
             </div>
           </div>
 
-          <div>
+          <div className="order-3 w-full sm:order-2 sm:w-auto">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Between</p>
             <div className="flex items-center gap-2">
               <label className="sr-only" htmlFor="availability-from">From</label>
@@ -194,14 +221,17 @@ export function AvailabilityModal({
             </div>
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="order-2 w-full min-w-0 sm:order-3 sm:flex-1">
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Day</p>
-            <div className="flex flex-wrap gap-1.5">
+            {/* One line that scrolls, rather than a block that wraps: a week
+                of dates is wider than a phone however they are arranged, and
+                a row you can push sideways beats a column you cannot reach. */}
+            <div className="flex gap-1.5 overflow-x-auto scrollbar-hide sm:flex-wrap sm:overflow-visible">
               <button
                 type="button"
                 onClick={() => setDay(null)}
                 aria-pressed={day === null}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                className={`flex-shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                   day === null ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
               >
                 All days
@@ -212,7 +242,7 @@ export function AvailabilityModal({
                   type="button"
                   onClick={() => setDay(prev => (prev === d ? null : d))}
                   aria-pressed={day === d}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
+                  className={`flex-shrink-0 rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
                     day === d ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}`}
                 >
                   {formatCardDate(d)}
@@ -222,12 +252,18 @@ export function AvailabilityModal({
           </div>
         </div>
 
-        {/* The board */}
-        {/* The board fills what is left and each column scrolls on its own:
-            a week of half hours is eighty cards, and a page that grows to
-            hold the longest column leaves the others short and the controls
-            off screen. */}
-        <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden bg-gray-50 p-4">
+        {/* The board.
+
+            From sm: a column per person, side by side, each scrolling on its
+            own — a week of half hours is eighty cards, and a page that grows
+            to hold the longest column leaves the others short and the controls
+            off screen.
+
+            On a phone there is no room for columns side by side, so the people
+            stack: each one a section that is shut until it is asked for, and
+            opens onto their days, themselves shut. Two taps to a time, and
+            four people fit on one screen instead of a quarter of one. */}
+        <div className="flex-1 min-h-0 overflow-y-auto sm:overflow-x-auto sm:overflow-y-hidden bg-gray-50 p-3 sm:p-4">
           {!windowValid ? (
             <p className="text-center text-xs text-gray-500 py-10">
               The day has to end after it starts — {minutesToLabel(startMinutes)} is not before {minutesToLabel(endMinutes)}.
@@ -238,7 +274,9 @@ export function AvailabilityModal({
             </p>
           ) : (
             <div
-              className="grid gap-3 min-w-0 h-full"
+              className="flex flex-col gap-2 sm:grid sm:gap-3 sm:min-w-0 sm:h-full"
+              /* Ignored while the box is a column of sections; it is what the
+                 sm: grid lays its columns out with. */
               style={{ gridTemplateColumns: `repeat(${Math.max(people.length, 1)}, minmax(220px, 1fr))` }}
             >
               {people.map(person => {
@@ -246,25 +284,26 @@ export function AvailabilityModal({
                 const groups = slotsByDay(mine);
                 const booked = bookedCount(meetings, person.id);
                 const fallback = mine.length === 0 ? shorterThan(person.id) : null;
-                return (
-                  <div
-                    key={person.id}
-                    data-availability-person={person.id}
-                    className="min-w-0 min-h-0 bg-white border border-gray-200 rounded-xl flex flex-col overflow-hidden"
-                  >
-                    <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
-                      <span className="w-6 h-6 rounded-full bg-brand-secondary/10 text-brand-primary text-[9px] font-semibold flex items-center justify-center flex-shrink-0">
-                        {person.initials}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-brand-primary truncate">{person.name}</p>
-                        <p className="text-[10px] text-gray-500">
-                          {booked} booked · {mine.length} open
-                        </p>
-                      </div>
+                const personOpen = !isPhone || openPeople.has(person.id);
+                /* Written once, worn by a button on a phone and by a plain
+                   heading everywhere else — a button that cannot be pressed
+                   is still in the tab order, and a column head that is always
+                   open has nothing to announce. */
+                const personHead = (
+                  <>
+                    <span className="w-6 h-6 rounded-full bg-brand-secondary/10 text-brand-primary text-[9px] font-semibold flex items-center justify-center flex-shrink-0">
+                      {person.initials}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-brand-primary truncate">{person.name}</p>
+                      <p className="text-[10px] text-gray-500">
+                        {booked} booked · {mine.length} open
+                      </p>
                     </div>
-
-                    <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-1.5">
+                  </>
+                );
+                const body = (
+                  <div className="p-2.5 flex flex-col gap-1.5">
                       {mine.length === 0 && (
                         <div className="py-6 px-2 text-center">
                           <p className="text-[11px] text-gray-500 leading-relaxed">
@@ -314,23 +353,86 @@ export function AvailabilityModal({
                               {group.slots.length}
                             </span>
                           </button>
-                          {open && group.slots.map(slot => (
-                            <SlotButton
-                              key={`${slot.day}-${slot.startMinutes}`}
-                              slot={slot}
-                              onPick={() => onPick({
-                                personId: person.id,
-                                personName: person.name,
-                                day: slot.day,
-                                time: `${String(Math.floor(slot.startMinutes / 60)).padStart(2, '0')}:${String(slot.startMinutes % 60).padStart(2, '0')}`,
-                                durationMinutes: duration,
-                              })}
-                            />
-                          ))}
+                          {/* Rows of 0fr to 1fr: the drawer slides without
+                              anything having to measure how tall its contents
+                              are, which a list that changes with the length
+                              and the window would have to do on every change.
+                              The slots stay mounted and are clipped, since a
+                              height cannot animate from nothing. */}
+                          <div
+                            className={`grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${
+                              open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+                          >
+                            <div className="overflow-hidden">
+                              {/* Shut means out of reach as well as out of sight: a clipped
+                                  slot is still a tab stop without this. */}
+                              <div className="flex flex-col gap-1.5 pt-1.5" inert={!open}>
+                                {group.slots.map(slot => (
+                                  <SlotButton
+                                    key={`${slot.day}-${slot.startMinutes}`}
+                                    slot={slot}
+                                    onPick={() => onPick({
+                                      personId: person.id,
+                                      personName: person.name,
+                                      day: slot.day,
+                                      time: `${String(Math.floor(slot.startMinutes / 60)).padStart(2, '0')}:${String(slot.startMinutes % 60).padStart(2, '0')}`,
+                                      durationMinutes: duration,
+                                    })}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                         );
                       })}
-                    </div>
+                  </div>
+                );
+
+                return (
+                  <div
+                    key={person.id}
+                    data-availability-person={person.id}
+                    className="min-w-0 bg-white border border-gray-200 rounded-xl flex flex-col overflow-hidden sm:min-h-0"
+                  >
+                    {isPhone ? (
+                      <button
+                        type="button"
+                        onClick={() => togglePerson(person.id)}
+                        aria-expanded={personOpen}
+                        data-availability-person-toggle={person.id}
+                        className="w-full px-3 py-2.5 flex items-center gap-2 text-left"
+                      >
+                        <svg
+                          className={`w-3.5 h-3.5 flex-shrink-0 text-gray-400 transition-transform ${personOpen ? 'rotate-90' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                        </svg>
+                        {personHead}
+                        <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[1.5rem] rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700">
+                          {mine.length}
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
+                        {personHead}
+                      </div>
+                    )}
+
+                    {isPhone ? (
+                      <div
+                        className={`grid border-t border-gray-100 transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none ${
+                          personOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] border-transparent'}`}
+                      >
+                        <div className="overflow-hidden">{body}</div>
+                      </div>
+                    ) : (
+                      <div className="flex-1 min-h-0 overflow-y-auto">{body}</div>
+                    )}
                   </div>
                 );
               })}

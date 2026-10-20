@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatMeetingTime, hasNoStartTime, timeToMinutes, unscheduledLabel } from '@/lib/meetingTime';
-import { useIsPhone } from '@/lib/useIsPhone';
 import { getValuePreset, type ColorMap } from '@/lib/colors';
 import {
   SLOT_MINUTES, calendarDays, calendarPeople, cardMinutes, companyTypeOf, companyTypesPresent,
@@ -216,13 +215,11 @@ export function MeetingsCalendar({
    */
   onPickSlot?: (slot: CalendarSlotPick) => void;
 }) {
-  const isPhone = useIsPhone();
   const stickyTop = useStickyTop();
   const [openId, setOpenId] = useState<number | null>(null);
   const [pickedPeople, setPickedPeople] = useState<Set<number>>(new Set());
   /** Types picked off the key. Null in the set is "No type set". */
   const [pickedTypes, setPickedTypes] = useState<Set<string | null>>(new Set());
-  const [openColumn, setOpenColumn] = useState<string | null>(null);
   /** The shared meeting being pointed at, if any — see `sharedIds` below. */
   const [tracedId, setTracedId] = useState<number | null>(null);
 
@@ -381,7 +378,6 @@ export function MeetingsCalendar({
 
   const bandHeight = useMemo(() => untimedBandHeight(columns), [columns]);
   const openMeeting = openId != null ? meetings.find(m => m.id === openId) ?? null : null;
-  const drawerColumn = openColumn != null ? columns.find(c => c.key === openColumn) ?? null : null;
 
   // Esc closes whatever is open, innermost first.
   const closeDetail = useCallback(() => {
@@ -395,23 +391,15 @@ export function MeetingsCalendar({
       // What is inside the popup closes first, and closes itself.
       if (detailLocked) return;
       if (openId != null) closeDetail();
-      else if (openColumn != null) setOpenColumn(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [openId, openColumn, detailLocked, closeDetail]);
+  }, [openId, detailLocked, closeDetail]);
 
   useEffect(() => {
     if (closeSignal === 0) return;
     setOpenId(null);
-    // On a phone the column drawer is above those layers too.
-    if (isPhone) setOpenColumn(null);
-    // isPhone is read, not depended on: the signal is the event.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
-
-  // A column open on one axis means nothing on the other.
-  useEffect(() => { setOpenColumn(null); }, [axis, theDay]);
 
   const togglePerson = (id: number) => setPickedPeople(prev => {
     const next = new Set(prev);
@@ -777,44 +765,64 @@ export function MeetingsCalendar({
         </div>
       )}
 
-      {/* ── Phone: the columns as buttons, one at a time in a drawer ──
+      {/* ── Phone: one column, run end to end ──
+
           An hour grid four columns wide is unreadable at 390px, so a phone
-          picks a column and gets it in full width. */}
-      <div className="lg:hidden p-3 flex flex-col gap-2">
+          gets them stacked: Tuesday's grid, then Wednesday's, in one scroll.
+          Each heading pins to the top while its own day runs under it and is
+          pushed off by the next one, so the day a card belongs to is never
+          more than a glance away — which a board of four taps-to-open could
+          not say at all.
+
+          The rep axis stacks the same way: one day, a section per person,
+          and the name pins instead of the date. */}
+      <div className="lg:hidden">
         {axis === 'rep' && theDay && (
-          <p className="text-[11px] font-medium text-gray-500 px-1">
-            {dayParts(theDay).weekday}, {dayParts(theDay).label} — pick a person
+          <p className="text-[11px] font-medium text-gray-500 px-4 py-2 border-b border-gray-100">
+            {dayParts(theDay).weekday}, {dayParts(theDay).label}
           </p>
         )}
-        {columns.map(col => (
-          <button
-            key={col.key}
-            type="button"
-            onClick={() => setOpenColumn(col.key)}
-            className={`w-full flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-gray-300 transition-colors ${
-              axis === 'date' && dayDimmed(col.day) ? 'opacity-50' : ''}`}
-          >
-            <div className="flex-1 min-w-0">
-              {axis === 'date' ? (
-                <>
-                  <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{dayParts(col.day).weekday}</p>
-                  <p className="text-sm font-semibold text-brand-primary">{dayParts(col.day).label}</p>
-                </>
-              ) : (
-                <p className="text-sm font-semibold text-brand-primary truncate">{col.longLabel}</p>
-              )}
-            </div>
-            {axis === 'date' && isOutsideConference(col.day, conferenceStart, conferenceEnd) && (
-              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                Outside
-              </span>
-            )}
-            <span className="text-xs font-semibold text-gray-500">{col.meetings.length}</span>
-            <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        ))}
+        {columns.map(col => {
+          const band = untimedBandHeight([col]);
+          return (
+            <section key={col.key} data-calendar-section={col.key}>
+              <div
+                className={`sticky z-10 flex items-center gap-2 border-y border-gray-100 bg-gray-50/95 px-4 py-2 backdrop-blur-sm transition-opacity ${
+                  axis === 'date' && dayDimmed(col.day) ? 'opacity-60' : ''}`}
+                style={{ top: stickyTop }}
+              >
+                <p className="text-sm font-semibold text-brand-primary truncate">
+                  {col.longLabel}
+                </p>
+                {axis === 'date' && isOutsideConference(col.day, conferenceStart, conferenceEnd) && (
+                  <span className="flex-shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    Outside
+                  </span>
+                )}
+                <span className="ml-auto flex-shrink-0 text-[11px] font-semibold text-gray-500">
+                  {col.meetings.length === 0 ? 'Nothing booked' : col.meetings.length}
+                </span>
+              </div>
+              <div className="flex px-3 py-2">
+                {/* Padded by the band so an hour's label and its line are at
+                    the same height — the untimed stack sits above the grid
+                    inside the column beside it. */}
+                <div className="w-14 flex-shrink-0" style={{ paddingTop: band }}>
+                  <div className="relative" style={{ height: gridHeight }}>
+                    {hours.map((h, i) => (
+                      <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * HOUR_PX - 6 }}>
+                        {hourLabel(h)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0 border-l border-gray-200">
+                  {columnBody(col, true, band)}
+                </div>
+              </div>
+            </section>
+          );
+        })}
         {columns.length === 0 && (
           <p className="text-xs text-gray-400 text-center py-6">
             No internal attendees on this conference yet — add them to the conference to draw their days.
@@ -901,24 +909,6 @@ export function MeetingsCalendar({
         </div>
       </div>
 
-      {/* ── One column, on a phone ── */}
-      {drawerColumn && isPhone && (
-        <ColumnDrawer
-          column={drawerColumn}
-          columns={columns}
-          axis={axis}
-          onPick={setOpenColumn}
-          onClose={() => setOpenColumn(null)}
-          conferenceStart={conferenceStart}
-          conferenceEnd={conferenceEnd}
-          hours={hours}
-          gridHeight={gridHeight}
-          hourLabelOf={hourLabel}
-          bandHeight={untimedBandHeight([drawerColumn])}
-          body={columnBody(drawerColumn, true, untimedBandHeight([drawerColumn]))}
-        />
-      )}
-
       {/* ── The meeting, in full ── */}
       {openMeeting && (
         <DetailPopup onClose={closeDetail} locked={detailLocked}>
@@ -984,113 +974,6 @@ function DetailPopup({ children, onClose, locked = false }: {
         </div>
       </div>
     </div>,
-    document.body,
-  );
-}
-
-/** One column, full width, with the others a tap away. */
-function ColumnDrawer({
-  column, columns, axis, onPick, onClose, conferenceStart, conferenceEnd,
-  hours, gridHeight, hourLabelOf, bandHeight, body,
-}: {
-  column: Column;
-  columns: Column[];
-  axis: CalendarAxis;
-  onPick: (key: string) => void;
-  onClose: () => void;
-  conferenceStart: string | null;
-  conferenceEnd: string | null;
-  hours: number[];
-  gridHeight: number;
-  hourLabelOf: (hour: number) => string;
-  /** The untimed stack's height, which the gutter has to clear. */
-  bandHeight: number;
-  body: ReactNode;
-}) {
-  const [mounted, setMounted] = useState(false);
-  const activeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
-  // Keep the open column's button in view as the reader moves along.
-  useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [column.key]);
-  if (!mounted) return null;
-
-  const parts = dayParts(column.day);
-  return createPortal(
-    <>
-      <div className="fixed inset-0 bg-black/30 z-[110]" onClick={onClose} aria-hidden />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={axis === 'date' ? `Meetings on ${parts.weekday} ${parts.label}` : `${column.longLabel} on ${parts.weekday} ${parts.label}`}
-        className="drawer-mobile-responsive fixed inset-x-0 bottom-0 z-[115] h-[82vh] rounded-t-2xl border border-gray-200 bg-white flex flex-col overflow-hidden"
-      >
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 flex-shrink-0">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-              {axis === 'date' ? parts.weekday : `${parts.weekday}, ${parts.label}`}
-            </p>
-            <p className="text-sm font-semibold text-brand-primary truncate">
-              {axis === 'date' ? parts.label : column.longLabel}
-              {axis === 'date' && isOutsideConference(column.day, conferenceStart, conferenceEnd) && (
-                <span className="ml-1.5 align-middle text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
-                  Outside
-                </span>
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* The other columns, to move between them without closing. */}
-        <div className="flex gap-1.5 px-4 py-2 border-b border-gray-100 overflow-x-auto scrollbar-hide flex-shrink-0">
-          {columns.map(c => {
-            const on = c.key === column.key;
-            return (
-              <button
-                key={c.key}
-                ref={on ? activeRef : undefined}
-                type="button"
-                onClick={() => onPick(c.key)}
-                aria-pressed={on}
-                className={`flex-shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  on ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-600 border-gray-200'}`}
-              >
-                {c.shortLabel}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="flex p-3">
-            {/* Padded by the band, so an hour's label and its line are at the
-                same height — the untimed stack sits above the grid inside the
-                column beside it. */}
-            <div className="w-14 flex-shrink-0" style={{ paddingTop: bandHeight }}>
-              <div className="relative" style={{ height: gridHeight }}>
-                {hours.map((h, i) => (
-                  <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * 60 - 6 }}>
-                    {hourLabelOf(h)}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 border-l border-gray-200">{body}</div>
-          </div>
-        </div>
-      </div>
-    </>,
     document.body,
   );
 }
