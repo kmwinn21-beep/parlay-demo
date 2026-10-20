@@ -25,8 +25,8 @@
  */
 import { readFileSync } from 'node:fs';
 import {
-  DEFAULT_WINDOW, SLOT_STEP, WINDOW_OPTIONS,
-  additionalAttendeesFor, bookedCount, busyByDay,
+  DAY_HUES, DEFAULT_WINDOW, SLOT_STEP, WINDOW_OPTIONS,
+  additionalAttendeesFor, bookedCount, busyByDay, dayHue,
   freeSlots, minutesToLabel, minutesToTime, slotLabel, slotsByDay, slotsOf,
 } from '@/lib/availability';
 /* The columns are the conference's people — the same list the calendar's rep
@@ -231,6 +231,7 @@ console.log('\n— the board, and the button that opens it —');
 {
   const page = strip('app/conferences/[id]/page.tsx');
   const modal = strip('components/AvailabilityModal.tsx');
+  const lib = strip('lib/availability.ts');
   const form = strip('components/NewMeetingModal.tsx');
 
   /*
@@ -258,7 +259,7 @@ console.log('\n— the board, and the button that opens it —');
   eq('  each day is a drawer', /onClick=\{\(\) => toggleDay\(group\.day\)\}/.test(modal), true);
   eq('    that says whether it is open', /aria-expanded=\{open\}/.test(modal), true);
   eq('    with its count on the right',
-    /text-\[10px\] font-semibold text-green-700">\n\s*\{group\.slots\.length\}/.test(modal), true);
+    /text-\[10px\] font-semibold \$\{hue\.badge\}`\}>\n\s*\{group\.slots\.length\}/.test(modal), true);
   // Rows of 0fr to 1fr: it slides without anything measuring how tall the
   // list is, which a list that changes with the length and the window would
   // have to do on every change.
@@ -275,6 +276,31 @@ console.log('\n— the board, and the button that opens it —');
   // Except where the picker above has already named the day.
   eq('    unless there is only one day, which opens itself',
     /setOpenDays\(days\.length === 1 \? new Set\(days\) : new Set\(\)\);/.test(modal), true);
+  /*
+   * A hue per day, so a column of forty times is not one list.
+   *
+   * The conference tabs' palette, keyed off the day's place in the
+   * conference rather than its place in what is on screen — Wednesday is the
+   * same colour whether the board is showing every day or only Wednesday.
+   */
+  eq('  each day wears its own colour', /const hue = dayHue\(allDays\.indexOf\(group\.day\)\);/.test(modal), true);
+  eq('    on the pills, the count and the heading',
+    /\$\{hue\.pill\}/.test(modal) && /\$\{hue\.badge\}/.test(modal) && /\$\{hue\.heading\}/.test(modal), true);
+  eq('    in the drawer as well as the column',
+    (modal.match(/dayHue\(allDays\.indexOf\(group\.day\)\)/g) ?? []).length, 2);
+  // Neighbours apart rather than the tabs' own order: rose, sky, indigo,
+  // violet in a row would give three blues to three consecutive days.
+  eq('    ten of them, starting round again after that', DAY_HUES.length, 10);
+  eq('      so day eleven is day one again', dayHue(10), dayHue(0));
+  eq('      and each is a different hue', new Set(DAY_HUES.map(h => h.pill)).size, DAY_HUES.length);
+  // Negative only where a day falls outside the conference's own dates and
+  // indexOf answers -1; it still has to land on a colour rather than throw.
+  eq('      a day the conference does not list still gets one', dayHue(-1), DAY_HUES[9]);
+  eq('    defined where the arithmetic lives',
+    /export function dayHue\(index: number\): DayHue \{/.test(lib), true);
+  eq('    and a day’s total is no day’s colour',
+    /border-brand-secondary\/20 bg-brand-secondary\/10/.test(modal), true);
+
   // The date led every card from when the slots were one flat list.
   eq('  a slot card is its time, the day being said above it',
     /formatCardDate\(slot\.day\)/.test(modal.split('function SlotButton')[1] ?? '')

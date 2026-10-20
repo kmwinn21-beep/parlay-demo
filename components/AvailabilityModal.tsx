@@ -6,9 +6,9 @@ import {
   DURATION_OPTIONS, DEFAULT_DURATION, calendarDays, conferencePeople, type CalendarMeeting,
 } from '@/lib/meetingCalendar';
 import {
-  DEFAULT_WINDOW, WINDOW_OPTIONS, bookedCount, freeSlots,
+  DEFAULT_WINDOW, WINDOW_OPTIONS, bookedCount, dayHue, freeSlots,
   minutesToLabel, slotLabel, slotsByDay, slotsOf,
-  type AvailabilitySlot,
+  type AvailabilitySlot, type DayHue,
 } from '@/lib/availability';
 import { formatCardDate } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
@@ -408,6 +408,7 @@ export function AvailabilityModal({
 
                       {groups.map(group => {
                         const open = openDays.has(group.day);
+                        const hue = dayHue(allDays.indexOf(group.day));
                         return (
                         <div key={group.day} className="flex flex-col gap-1.5">
                           {/* The day, what it holds, and the way into it. */}
@@ -428,12 +429,12 @@ export function AvailabilityModal({
                             >
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                             </svg>
-                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap group-hover/day:text-brand-primary transition-colors">
+                            <p className={`text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap transition-colors ${hue.heading}`}>
                               {formatCardDate(group.day)}
                             </p>
                             <span className="flex-1 h-px bg-gray-200" />
-                            {/* Green, like the slots it is counting. */}
-                            <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[1.25rem] rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                            {/* The day's own colour, like the slots it counts. */}
+                            <span className={`flex-shrink-0 inline-flex items-center justify-center min-w-[1.25rem] rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${hue.badge}`}>
                               {group.slots.length}
                             </span>
                           </button>
@@ -455,6 +456,7 @@ export function AvailabilityModal({
                                   <SlotButton
                                     key={`${slot.day}-${slot.startMinutes}`}
                                     slot={slot}
+                                    hue={hue}
                                     onPick={() => onPick({
                                       personId: person.id,
                                       personName: person.name,
@@ -491,7 +493,9 @@ export function AvailabilityModal({
                         className="w-full px-3 py-2.5 flex items-center gap-2 text-left"
                       >
                         {personHead}
-                        <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[1.5rem] rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-[11px] font-semibold text-green-700">
+                        {/* Their whole week, which is no one day's colour —
+                            the same tint as the initials beside it. */}
+                        <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[1.5rem] rounded-full border border-brand-secondary/20 bg-brand-secondary/10 px-1.5 py-0.5 text-[11px] font-semibold text-brand-primary">
                           {mine.length}
                         </span>
                         <svg className="w-4 h-4 flex-shrink-0 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -573,13 +577,15 @@ export function AvailabilityModal({
                       </button>
                     )}
                   </div>
-                ) : drawerGroups.map(group => (
+                ) : drawerGroups.map(group => {
+                  const hue = dayHue(allDays.indexOf(group.day));
+                  return (
                   <section key={group.day} data-availability-drawer-day={group.day}>
                     <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-100 bg-gray-50/95 px-4 py-2 backdrop-blur-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-primary">
+                      <p className={`text-[11px] font-semibold uppercase tracking-wide ${hue.heading}`}>
                         {formatCardDate(group.day)}
                       </p>
-                      <span className="ml-auto flex-shrink-0 inline-flex items-center justify-center min-w-[1.25rem] rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                      <span className={`ml-auto flex-shrink-0 inline-flex items-center justify-center min-w-[1.25rem] rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${hue.badge}`}>
                         {group.slots.length}
                       </span>
                     </div>
@@ -591,6 +597,7 @@ export function AvailabilityModal({
                           key={`${slot.day}-${slot.startMinutes}`}
                           slot={slot}
                           compact
+                          hue={hue}
                           onPick={() => onPick({
                             personId: drawerPerson.id,
                             personName: drawerPerson.name,
@@ -602,7 +609,8 @@ export function AvailabilityModal({
                       ))}
                     </div>
                   </section>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </>
@@ -614,9 +622,11 @@ export function AvailabilityModal({
 }
 
 /** One free slot: the day, the time, and a booking waiting to happen. */
-function SlotButton({ slot, onPick, compact = false }: {
+function SlotButton({ slot, onPick, hue, compact = false }: {
   slot: AvailabilitySlot;
   onPick: () => void;
+  /** The day's colour — see DAY_HUES. */
+  hue: DayHue;
   /** Three to a row: there is width for a start time and nothing else. */
   compact?: boolean;
 }) {
@@ -626,14 +636,15 @@ function SlotButton({ slot, onPick, compact = false }: {
       onClick={onPick}
       data-availability-slot={`${slot.day}-${slot.startMinutes}`}
       title={`${formatCardDate(slot.day)} · ${slotLabel(slot.startMinutes, slot.endMinutes)}`}
-      className={`w-full rounded-lg border border-green-200 bg-green-50 transition-colors hover:border-green-500 hover:bg-green-100 ${
+      className={`w-full rounded-lg border transition-colors ${hue.pill} ${
         compact ? 'px-1 py-2 text-center' : 'px-2.5 py-2 text-left'}`}
     >
       {/* The time alone. The date used to lead the card, from when the slots
           were one flat list per person; the day's own heading sits directly
           above it now, and saying Wednesday nine times under a line that says
           Wednesday is the sort of thing a reader stops seeing. */}
-      <span className="block text-xs font-semibold text-green-900">
+      {/* The colour is the pill's; the text takes it from the same class. */}
+      <span className="block text-xs font-semibold">
         {compact ? minutesToLabel(slot.startMinutes) : slotLabel(slot.startMinutes, slot.endMinutes)}
       </span>
     </button>
