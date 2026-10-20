@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { refreshUnreadNotifications, subscribeUnreadNotifications } from '@/lib/unreadNotifications';
 import Link from 'next/link';
-import { MobileMenuDrawer } from '@/components/MobileMenuDrawer';
+import { MobileMenuDrawer, isInsideMobileMenuDrawer } from '@/components/MobileMenuDrawer';
 import { useIsPhone } from '@/lib/useIsPhone';
 
 interface Notification {
@@ -118,6 +118,8 @@ export function NotificationBell() {
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
+      // The phone drawer is a portal, so it is not inside panelRef.
+      if (isInsideMobileMenuDrawer(e.target)) return;
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setOpen(false);
       }

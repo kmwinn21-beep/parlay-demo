@@ -130,6 +130,31 @@ console.log('\n— and the things a finger has to reach —');
   ], [true, true, true, true]);
 }
 
+console.log('\n— a tap inside the drawer is not a tap outside the menu —');
+{
+  /*
+   * Reported: every control in every one of the four drawers did nothing but
+   * dismiss it, and a follow-up group closed the drawer instead of opening.
+   *
+   * Each menu closes on a mousedown outside its own element, which is right
+   * for a dropdown and wrong the moment the same menu is drawn in a PORTAL:
+   * the drawer is a child of <body>, so `ref.contains` called every tap
+   * inside it an outside one. The menu shut on mousedown and the button under
+   * the finger never saw its click.
+   */
+  eq('the three handlers ask whether the drawer owns the tap', [
+    /if \(isInsideMobileMenuDrawer\(e\.target\)\) return;/.test(header),
+    /if \(isInsideMobileMenuDrawer\(e\.target\)\) return;/.test(follow),
+    /if \(isInsideMobileMenuDrawer\(e\.target\)\) return;/.test(bell),
+  ], [true, true, true]);
+  eq('  and the question is asked of the drawer, once',
+    /export function isInsideMobileMenuDrawer\(target: EventTarget \| null\): boolean \{/.test(drawer), true);
+  eq('  by the mark the sheet carries', /closest\('\[data-mobile-menu-drawer\]'\)/.test(drawer), true);
+  // The scrim is a SIBLING of the sheet, not inside it, so it still closes.
+  eq('  while the scrim stays outside it',
+    drawer.indexOf('bg-black/40') < drawer.indexOf('data-mobile-menu-drawer'), true);
+}
+
 console.log('\n— which day of the conference it is —');
 {
   // Read off the dates rather than counted by hand, and silent where the

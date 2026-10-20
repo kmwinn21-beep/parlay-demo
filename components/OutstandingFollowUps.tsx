@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useUser } from './UserContext';
-import { MobileMenuDrawer } from '@/components/MobileMenuDrawer';
+import { MobileMenuDrawer, isInsideMobileMenuDrawer } from '@/components/MobileMenuDrawer';
 import { useIsPhone } from '@/lib/useIsPhone';
 
 interface FollowUpItem {
@@ -79,6 +79,8 @@ export function OutstandingFollowUps() {
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
+      // The phone drawer is a portal, so it is in neither ref.
+      if (isInsideMobileMenuDrawer(e.target)) return;
       const target = e.target as Node;
       const inButton = containerRef.current?.contains(target);
       const inDropdown = dropdownRef.current?.contains(target);

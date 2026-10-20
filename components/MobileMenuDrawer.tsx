@@ -97,6 +97,25 @@ export function MobileMenuDrawer({
   );
 }
 
+/**
+ * Whether a click landed inside an open menu drawer.
+ *
+ * Every one of these menus closes itself on a mousedown outside its own
+ * element — which is right for a dropdown, and wrong the moment the same menu
+ * is drawn in a PORTAL: the drawer is a child of <body>, so `ref.contains`
+ * says every tap inside it is outside. The menu then shut on mousedown and
+ * the button under the finger never saw its click, which looked from the
+ * outside like a drawer full of controls that do nothing.
+ *
+ * So each handler asks this as well. The scrim is deliberately not inside —
+ * it is a sibling of the sheet — so tapping it still closes.
+ */
+export function isInsideMobileMenuDrawer(target: EventTarget | null): boolean {
+  const node = target as Node | null;
+  const el = node instanceof Element ? node : node?.parentElement ?? null;
+  return !!el?.closest('[data-mobile-menu-drawer]');
+}
+
 /** A group heading in one of these lists, pinned while its group runs under it. */
 export function MobileMenuSection({ label, sticky = false }: { label: string; sticky?: boolean }) {
   return (

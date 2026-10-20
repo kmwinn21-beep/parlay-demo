@@ -27,7 +27,7 @@ import { useCapabilities } from '@/lib/useCapabilities';
 import { clearActiveConferenceStorage } from '@/components/ActiveConferenceContext';
 import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { MobileHeaderSearchBar } from '@/components/MobileHeaderSearchBar';
-import { MobileMenuDrawer, MobileMenuSection } from '@/components/MobileMenuDrawer';
+import { MobileMenuDrawer, MobileMenuSection, isInsideMobileMenuDrawer } from '@/components/MobileMenuDrawer';
 import { useIsPhone } from '@/lib/useIsPhone';
 const pageTitles: Record<string, string> = {
   '/': 'Dashboard',
@@ -370,6 +370,8 @@ export function Header() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
+      // The phone drawer is a portal, so it is not inside either ref.
+      if (isInsideMobileMenuDrawer(e.target)) return;
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowConferences(false);
       }
