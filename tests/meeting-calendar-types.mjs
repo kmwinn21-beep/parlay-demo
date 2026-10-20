@@ -188,6 +188,15 @@ console.log('\n— the board —');
   eq('  coloured from the action map', /backgroundColor: getValuePreset\(m\.outcome, colorMap\)\.hex/.test(cal), true);
   eq('  and a meeting with nothing recorded carries none', /\{m\.outcome && \(/.test(cal), true);
 
+  // An eyebrow above the row on a phone, a label leading it from lg: at
+  // 390px "Company type:" and one swatch took the width between them.
+  eq('the keys name themselves above the row they label',
+    /const KEY_ROW = 'flex flex-col gap-1\.5 px-4 py-2\.5 border-b border-gray-100 '/.test(cal), true);
+  eq('  and say Type, Outcome and Rep',
+    /<span className=\{KEY_LABEL\}>Type<\/span>/.test(cal)
+      && /<span className=\{KEY_LABEL\}>Outcome<\/span>/.test(cal)
+      && /<span className=\{KEY_LABEL\}>Rep<\/span>/.test(cal), true);
+
   eq('the key is a row of buttons', /onClick=\{\(\) => toggleType\(t\.value\)\}/.test(cal), true);
   eq('  that say whether they are on', /aria-pressed=\{on\}/.test(cal), true);
   eq('  keep the swatch in the card’s own colour',
@@ -199,19 +208,27 @@ console.log('\n— the board —');
   eq('  and a day nobody picked dims its heading too',
     /const dayDimmed = \(day: string\) => dimDays\.length > 0 && !dimDays\.includes\(day\);/.test(cal), true);
 
-  eq('an empty half hour is a button', /openSlots\(col\.meetings as CalendarMeeting\[\], startHour, endHour\)\.map\(start => \(/.test(cal), true);
-  eq('  invisible until pointed at', /opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100/.test(cal), true);
+  eq('an empty half hour is a button', /openSlots\(col\.meetings as CalendarMeeting\[\], startHour, endHour\)\.map\(start => \{/.test(cal), true);
+  eq('  invisible until pointed at', /'opacity-0 hover:opacity-100 focus-visible:opacity-100'/.test(cal), true);
   // A pill in the middle of the column points at a slot the size of a pill.
   eq('  the width of the card it would become',
     /flex h-full w-full items-center justify-center truncate rounded-md border border-dashed border-gray-400/.test(cal), true);
   eq('  reading “+ Meeting”', /\+ Meeting/.test(cal), true);
-  eq('  not on a phone, and not without somewhere to send it',
-    /\{!phone && col\.offersSlots && onPickSlot/.test(cal), true);
+  eq('  and not without somewhere to send it',
+    /\{col\.offersSlots && onPickSlot/.test(cal), true);
+  /*
+   * A finger has no hover, and a board where every empty half hour books a
+   * meeting the moment it is brushed cannot be scrolled. So a phone asks to
+   * see the outline first and takes it with the second tap.
+   */
+  eq('  a phone reveals it before it takes it',
+    /if \(phone && !revealed\) \{ setRevealedSlot\(slotKey\); return; \}/.test(cal), true);
+  eq('    one at a time', /const revealed = revealedSlot === slotKey;/.test(cal), true);
   // "Nobody attending" is not a diary.
   eq('  and not in the column that is nobody’s day',
     /key: 'unassigned',[\s\S]{0,160}offersSlots: false,/.test(cal), true);
   eq('  handing back the day, the time and whose column it was',
-    /day: col\.day,\n\s*time: minutesToTime\(start\),\n\s*personId: col\.personId,/.test(cal), true);
+    /onPickSlot\(\{ day: col\.day, time: minutesToTime\(start\), personId: col\.personId \}\);/.test(cal), true);
 
   // The headings are the only thing saying whose column is whose, and a board
   // is ten hours tall.

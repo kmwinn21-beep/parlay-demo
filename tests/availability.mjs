@@ -265,7 +265,7 @@ console.log('\n— the board, and the button that opens it —');
   eq('    sliding rather than appearing',
     /grid transition-\[grid-template-rows\] duration-200 ease-out motion-reduce:transition-none/.test(modal), true);
   eq('    and out of reach while it is shut', /inert=\{!open\}/.test(modal), true);
-  eq('    shut to start with', /useState<Set<string>>\(new Set\(\)\)/.test(modal), true);
+  eq('    shut to start with', /const \[openDays, setOpenDays\] = useState<Set<string>>\(new Set\(\)\);/.test(modal), true);
   // One open day opens in every column: the board exists to compare a day
   // across the team, and a Tuesday open in one column and shut in the next is
   // four columns that cannot be read against each other.
@@ -284,11 +284,36 @@ console.log('\n— the board, and the button that opens it —');
    * one shut until it is asked for, opening onto their days, themselves shut.
    */
   eq('  a phone stacks the people', /data-availability-person-toggle=\{person\.id\}/.test(modal), true);
-  eq('    shut to start with', /const personOpen = !isPhone \|\| openPeople\.has\(person\.id\);/.test(modal), true);
+  /*
+   * And opens one of them in a drawer rather than underneath. A person's
+   * week is eighty times; unrolling that inside a list of people buries the
+   * other three.
+   */
+  eq('    opening one in a drawer', /data-availability-person-drawer=\{drawerPerson\.id\}/.test(modal), true);
+  eq('    anchored to the filters’ bottom edge',
+    /setDrawerTop\(Math\.round\(filters\.getBoundingClientRect\(\)\.bottom - sheet\.getBoundingClientRect\(\)\.top\)\);/.test(modal), true);
+  eq('    which follows them as they open', /observer\.observe\(filtersRef\.current\)/.test(modal), true);
+  eq('    with the name in its header and the days below',
+    /aria-label=\{`\$\{drawerPerson\.name\} — availability`\}/.test(modal), true);
+  eq('    the day headings pinning as the calendar’s do',
+    /className="sticky top-0 z-10 flex items-center gap-2 border-b border-gray-100 bg-gray-50\/95/.test(modal), true);
+  eq('    and three times to a row', /grid grid-cols-3 gap-1\.5 px-3 py-2\.5/.test(modal), true);
+
+  /*
+   * The controls fold away on a phone. The defaults answer most of the
+   * question — half an hour, every day, the working day — so what three rows
+   * of them mostly did at 390px was push the people off the screen.
+   */
+  eq('  the controls fold into Filters', /data-availability-filters/.test(modal), true);
+  eq('    shut to start with', /const \[filtersOpen, setFiltersOpen\] = useState\(false\);/.test(modal), true);
+  eq('    saying what they are set to', /\{duration\} min · \{day \? formatCardDate\(day\) : 'All days'\}/.test(modal), true);
   eq('    with a count of their own', /\{mine\.length\}\n\s*<\/span>/.test(modal), true);
   eq('    and the columns side by side from sm',
     /className="flex flex-col gap-2 sm:grid sm:gap-3 sm:min-w-0 sm:h-full"/.test(modal), true);
   // The sheet stops where every other phone drawer stops.
+  // Gone from both: the board's own emptiness says it better than a footnote.
+  eq('  no footnote on the board',
+    /Booth hours and TBD do not block a slot/.test(modal), false);
   eq('  and opens as a sheet below the header',
     /drawer-mobile-responsive sheet-below-header/.test(modal), true);
   // The day buttons wrapped into whatever the other two controls left over,

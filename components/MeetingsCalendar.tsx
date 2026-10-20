@@ -128,6 +128,19 @@ function hourLabel(hour: number): string {
  */
 const UNTYPED_CLASS = 'bg-white text-gray-600 border border-dashed border-gray-400';
 
+/**
+ * The three key rows, which are also the filters.
+ *
+ * A phone puts the label above what it labels, as an eyebrow: at 390px
+ * "Company type:" and the first swatch took the width between them and the
+ * rest of the row was off screen. From lg the label leads the line, which is
+ * what there is room for and what the rest of the app does.
+ */
+const KEY_ROW = 'flex flex-col gap-1.5 px-4 py-2.5 border-b border-gray-100 '
+  + 'lg:flex-row lg:items-center lg:gap-2';
+const KEY_LABEL = 'flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 '
+  + 'lg:text-[11px] lg:font-medium lg:normal-case lg:tracking-normal';
+
 /** A neutral fill for the legend's conflict swatch, which has no value. */
 const NEUTRAL_CLASS = 'bg-brand-secondary/10 text-brand-primary border border-brand-secondary/30';
 
@@ -265,6 +278,15 @@ export function MeetingsCalendar({
   const [pickedTypes, setPickedTypes] = useState<Set<string | null>>(new Set());
   /** The shared meeting being pointed at, if any — see `sharedIds` below. */
   const [tracedId, setTracedId] = useState<number | null>(null);
+  /**
+   * The empty half hour a phone has tapped, if any.
+   *
+   * A pointer reveals the + Meeting outline by hovering it; a finger has no
+   * hover, and a board where every empty half hour books a meeting the moment
+   * it is brushed is a board nobody can scroll. So the first tap shows the
+   * outline — one at a time — and the second takes it.
+   */
+  const [revealedSlot, setRevealedSlot] = useState<string | null>(null);
 
   const days = useMemo(
     () => calendarDays(conferenceStart, conferenceEnd, meetings),
@@ -456,8 +478,8 @@ export function MeetingsCalendar({
     return next;
   });
 
-  // Nothing to trace once the columns change under the pointer.
-  useEffect(() => { setTracedId(null); }, [axis, theDay]);
+  // Nothing to trace or reveal once the columns change under the pointer.
+  useEffect(() => { setTracedId(null); setRevealedSlot(null); }, [axis, theDay]);
 
   /**
    * Dimmed, not hidden: the board keeps its shape while one thing stands out.
@@ -589,19 +611,28 @@ export function MeetingsCalendar({
             scrolling and there is no hover to reveal anything; the + Meeting
             button above the list is already a tap away there.
           */}
-          {!phone && col.offersSlots && onPickSlot
-            && openSlots(col.meetings as CalendarMeeting[], startHour, endHour).map(start => (
+          {col.offersSlots && onPickSlot
+            && openSlots(col.meetings as CalendarMeeting[], startHour, endHour).map(start => {
+              const slotKey = `${col.key}-${start}`;
+              const revealed = revealedSlot === slotKey;
+              return (
               <button
                 key={start}
                 type="button"
-                onClick={() => onPickSlot({
-                  day: col.day,
-                  time: minutesToTime(start),
-                  personId: col.personId,
-                })}
-                aria-label={`Schedule a meeting, ${slotLabel(start, start + SLOT_MINUTES)}`}
+                onClick={() => {
+                  // A finger asks to see it first, then asks for it.
+                  if (phone && !revealed) { setRevealedSlot(slotKey); return; }
+                  onPickSlot({ day: col.day, time: minutesToTime(start), personId: col.personId });
+                }}
+                aria-label={phone && !revealed
+                  ? `Book this half hour, ${slotLabel(start, start + SLOT_MINUTES)}`
+                  : `Schedule a meeting, ${slotLabel(start, start + SLOT_MINUTES)}`}
                 title={`Schedule a meeting · ${slotLabel(start, start + SLOT_MINUTES)}`}
-                className="absolute inset-x-0 flex items-center px-0.5 py-px opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
+                data-calendar-slot={slotKey}
+                className={`absolute inset-x-0 flex items-center px-0.5 py-px transition-opacity ${
+                  phone
+                    ? (revealed ? 'opacity-100' : 'opacity-0')
+                    : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'}`}
                 style={{
                   top: (start - startHour * 60) * PX_PER_MINUTE,
                   height: SLOT_MINUTES * PX_PER_MINUTE,
@@ -614,7 +645,8 @@ export function MeetingsCalendar({
                   + Meeting
                 </span>
               </button>
-            ))}
+              );
+            })}
 
           {placed.map(p => {
             const width = 100 / p.columns;
@@ -663,8 +695,8 @@ export function MeetingsCalendar({
    * configured types gets the four that are in the room.
    */
   const typeKey = typeTallies.length > 0 && (
-    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-      <span className="text-[11px] font-medium text-gray-500 flex-shrink-0">Company type:</span>
+    <div className={`${KEY_ROW} bg-gray-50/60`}>
+      <span className={KEY_LABEL}>Type</span>
       <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
         {typeTallies.map(t => {
           const on = pickedTypes.has(t.value);
@@ -711,10 +743,11 @@ export function MeetingsCalendar({
    * board is a row of noise.
    */
   const outcomeKey = (outcomesPresent.length > 0 || axis === 'rep') && (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 border-b border-gray-100">
+    <div className={KEY_ROW}>
       {outcomesPresent.length > 0 && (
         <>
-          <span className="text-[11px] font-medium text-gray-500">Outcome:</span>
+          <span className={KEY_LABEL}>Outcome</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {outcomesPresent.map(outcome => (
             <span key={outcome} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
               <span
@@ -725,6 +758,7 @@ export function MeetingsCalendar({
             </span>
           ))}
           <span className="text-[11px] text-gray-400">no dot · nothing recorded yet</span>
+          </div>
         </>
       )}
       {/* Only where it can happen: on the date axis two cards side by side
@@ -750,8 +784,8 @@ export function MeetingsCalendar({
    * what a column each already does.
    */
   const peopleFilter = axis === 'date' && whosePeople.length > 0 && (
-    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
-      <span className="text-[11px] font-medium text-gray-500 flex-shrink-0">Whose:</span>
+    <div className={KEY_ROW}>
+      <span className={KEY_LABEL}>Rep</span>
       <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
         {whosePeople.map(p => {
           const on = pickedPeople.has(p.id);
