@@ -1480,6 +1480,7 @@ export function MeetingsTable({
   calendarRepDay = null,
   calendarDimDays = [],
   calendarLayout = 'auto',
+  calendarCollapsibleSections = false,
   companyTypeOptions = [],
   companyTypeColorMap = {},
   onCalendarSlotPick,
@@ -1542,6 +1543,8 @@ export function MeetingsTable({
   /** 'stack' draws the calendar as one column at every width — see the
    *  calendar's own `layout`. */
   calendarLayout?: 'auto' | 'stack';
+  /** The stack's days fold away behind their headings — see the calendar. */
+  calendarCollapsibleSections?: boolean;
   /** The configured company types in order, and their colours — the fill. */
   companyTypeOptions?: string[];
   companyTypeColorMap?: ColorMap;
@@ -2914,6 +2917,7 @@ export function MeetingsTable({
           repDay={calendarRepDay}
           dimDays={calendarDimDays}
           layout={calendarLayout}
+          collapsibleSections={calendarCollapsibleSections}
           userOptions={userOptions}
           colorMap={colorMap}
           companyTypeOptions={companyTypeOptions}
