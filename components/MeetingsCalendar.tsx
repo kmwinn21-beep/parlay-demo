@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatMeetingTime, hasNoStartTime, timeToMinutes, unscheduledLabel } from '@/lib/meetingTime';
 import { getValuePreset, type ColorMap } from '@/lib/colors';
@@ -77,6 +77,38 @@ function useStickyTop(): number {
     };
   }, []);
   return top;
+}
+
+/**
+ * The top padding of the box this scrolls inside.
+ *
+ * A sticky `top: 0` stops at the scrollport's CONTENT edge, not its padding
+ * edge, so a scroller with padding leaves exactly that much of a gap above a
+ * pinned heading — and the cards passing behind it show through it. The phone
+ * drawer's body has 12px of it; <main> has 16, or 24 from lg.
+ *
+ * Measured rather than named, because the padding belongs to the page that
+ * happens to be scrolling this and a constant here would go quietly wrong the
+ * day it changes.
+ */
+function useScrollerPaddingTop(ref: React.RefObject<HTMLElement | null>): number {
+  const [pad, setPad] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      for (let el = ref.current?.parentElement ?? null; el; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+          setPad(parseFloat(style.paddingTop) || 0);
+          return;
+        }
+      }
+      setPad(0);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [ref]);
+  return pad;
 }
 
 /** '7 AM', '12 PM' — the gutter's labels. */
@@ -216,6 +248,17 @@ export function MeetingsCalendar({
   onPickSlot?: (slot: CalendarSlotPick) => void;
 }) {
   const stickyTop = useStickyTop();
+  const phoneStackRef = useRef<HTMLDivElement>(null);
+  const scrollerPad = useScrollerPaddingTop(phoneStackRef);
+  /*
+   * Where a phone's day headings stop.
+   *
+   * Under the tab row where there is one — the same place the desktop's stop.
+   * In the tab drawer there is none, and the headings stop flush against the
+   * top of the scrolling area instead, which is what the padding is subtracted
+   * for: at 0 they stopped 12px lower and the cards showed through the strip.
+   */
+  const phoneHeadTop = stickyTop > 0 ? stickyTop : -scrollerPad;
   const [openId, setOpenId] = useState<number | null>(null);
   const [pickedPeople, setPickedPeople] = useState<Set<number>>(new Set());
   /** Types picked off the key. Null in the set is "No type set". */
@@ -776,7 +819,7 @@ export function MeetingsCalendar({
 
           The rep axis stacks the same way: one day, a section per person,
           and the name pins instead of the date. */}
-      <div className="lg:hidden">
+      <div className="lg:hidden" ref={phoneStackRef}>
         {axis === 'rep' && theDay && (
           <p className="text-[11px] font-medium text-gray-500 px-4 py-2 border-b border-gray-100">
             {dayParts(theDay).weekday}, {dayParts(theDay).label}
@@ -789,7 +832,7 @@ export function MeetingsCalendar({
               <div
                 className={`sticky z-10 flex items-center gap-2 border-y border-gray-100 bg-gray-50/95 px-4 py-2 backdrop-blur-sm transition-opacity ${
                   axis === 'date' && dayDimmed(col.day) ? 'opacity-60' : ''}`}
-                style={{ top: stickyTop }}
+                style={{ top: phoneHeadTop }}
               >
                 <p className="text-sm font-semibold text-brand-primary truncate">
                   {col.longLabel}

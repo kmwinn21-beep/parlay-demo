@@ -448,6 +448,17 @@ console.log('\n— and the board drawn from it —');
   eq('a phone stacks the columns', /<section key=\{col\.key\} data-calendar-section=\{col\.key\}>/.test(cal), true);
   eq('  and each heading pins while its own column runs under it',
     /className=\{`sticky z-10 flex items-center gap-2 border-y/.test(cal), true);
+  /*
+   * Reported: a strip of the grid showed between the tab bar and the pinned
+   * date. A sticky top of 0 stops at the scrollport's CONTENT edge, so the
+   * drawer body's 12px of padding was a gap the cards passed through. The
+   * padding is measured off whatever is scrolling this, rather than named
+   * here, and subtracted where there is no tab row to pin under instead.
+   */
+  eq('    flush to the top of the scrolling area',
+    /const phoneHeadTop = stickyTop > 0 \? stickyTop : -scrollerPad;/.test(cal), true);
+  eq('    with the padding measured, not assumed',
+    /if \(style\.overflowY === 'auto' \|\| style\.overflowY === 'scroll'\) \{/.test(cal), true);
 }
 
 console.log('\n— the view, wired in —');
@@ -508,7 +519,7 @@ console.log('\n— the view, wired in —');
    * nothing about where that day sat in the week.
    */
   eq('the grid is desktop only', /hidden lg:block p-4/.test(cal), true);
-  eq('  and the stack is the phone’s', /<div className="lg:hidden">/.test(cal), true);
+  eq('  and the stack is the phone’s', /<div className="lg:hidden" ref=\{phoneStackRef\}>/.test(cal), true);
   eq('  with no drawer left to open', /ColumnDrawer/.test(cal), false);
 }
 
