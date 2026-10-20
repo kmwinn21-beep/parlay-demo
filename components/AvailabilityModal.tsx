@@ -52,6 +52,14 @@ export function AvailabilityModal({
   const [startMinutes, setStartMinutes] = useState(DEFAULT_WINDOW.startMinutes);
   const [endMinutes, setEndMinutes] = useState(DEFAULT_WINDOW.endMinutes);
   const [day, setDay] = useState<string | null>(null);
+  /**
+   * The day sections that are open, across every column at once.
+   *
+   * Shared rather than per person on purpose: the board exists to compare one
+   * day across the team, and a Tuesday open in one column and shut in the next
+   * is four columns that cannot be read against each other.
+   */
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
 
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
   useEffect(() => {
@@ -73,6 +81,30 @@ export function AvailabilityModal({
     () => freeSlots({ meetings, people, days, startMinutes, endMinutes, duration }),
     [meetings, people, days, startMinutes, endMinutes, duration],
   );
+
+  /*
+   * Shut to start with, because the question the board answers first is which
+   * day has room rather than at what time — four people over four days is
+   * eighty cards, and a wall of them has to be scrolled before it can be read.
+   * Collapsed, a column is four lines with a count on each.
+   *
+   * Except where there is only one day in play: the picker above has already
+   * chosen it, and a board that answers a direct question with one shut
+   * drawer is a click asking to be made. Changing the picker re-seeds rather
+   * than remembering, so going back to All days closes everything again.
+   */
+  const daysKey = days.join();
+  useEffect(() => {
+    setOpenDays(days.length === 1 ? new Set(days) : new Set());
+    // daysKey IS the days, as a value that can be compared.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daysKey]);
+
+  const toggleDay = (value: string) => setOpenDays(prev => {
+    const next = new Set(prev);
+    if (next.has(value)) next.delete(value); else next.add(value);
+    return next;
+  });
 
   if (!mounted) return null;
 
@@ -251,18 +283,38 @@ export function AvailabilityModal({
                         </div>
                       )}
 
-                      {groups.map(group => (
+                      {groups.map(group => {
+                        const open = openDays.has(group.day);
+                        return (
                         <div key={group.day} className="flex flex-col gap-1.5">
-                          {/* Only where there is more than one day to tell apart. */}
-                          {groups.length > 1 && (
-                            <div className="flex items-center gap-2 pt-1">
-                              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                                {formatCardDate(group.day)}
-                              </p>
-                              <span className="flex-1 h-px bg-gray-200" />
-                            </div>
-                          )}
-                          {group.slots.map(slot => (
+                          {/* The day, what it holds, and the way into it. */}
+                          <button
+                            type="button"
+                            onClick={() => toggleDay(group.day)}
+                            aria-expanded={open}
+                            data-availability-day={group.day}
+                            title={`${formatCardDate(group.day)} — ${group.slots.length} open slot${group.slots.length === 1 ? '' : 's'}`}
+                            className="flex items-center gap-2 pt-1 text-left group/day"
+                          >
+                            <svg
+                              className={`w-3 h-3 flex-shrink-0 text-gray-400 transition-transform ${open ? 'rotate-90' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              aria-hidden
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                            </svg>
+                            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap group-hover/day:text-brand-primary transition-colors">
+                              {formatCardDate(group.day)}
+                            </p>
+                            <span className="flex-1 h-px bg-gray-200" />
+                            {/* Green, like the slots it is counting. */}
+                            <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[1.25rem] rounded-full border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                              {group.slots.length}
+                            </span>
+                          </button>
+                          {open && group.slots.map(slot => (
                             <SlotButton
                               key={`${slot.day}-${slot.startMinutes}`}
                               slot={slot}
@@ -276,7 +328,8 @@ export function AvailabilityModal({
                             />
                           ))}
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -306,12 +359,14 @@ function SlotButton({ slot, onPick }: { slot: AvailabilitySlot; onPick: () => vo
       type="button"
       onClick={onPick}
       data-availability-slot={`${slot.day}-${slot.startMinutes}`}
+      title={`${formatCardDate(slot.day)} · ${slotLabel(slot.startMinutes, slot.endMinutes)}`}
       className="w-full text-left rounded-lg border border-green-200 bg-green-50 px-2.5 py-2 hover:border-green-500 hover:bg-green-100 transition-colors"
     >
-      <span className="block text-[9px] font-semibold uppercase tracking-wide text-green-700">
-        {formatCardDate(slot.day)}
-      </span>
-      <span className="block text-xs font-semibold text-green-900 mt-0.5">
+      {/* The time alone. The date used to lead the card, from when the slots
+          were one flat list per person; the day's own heading sits directly
+          above it now, and saying Wednesday nine times under a line that says
+          Wednesday is the sort of thing a reader stops seeing. */}
+      <span className="block text-xs font-semibold text-green-900">
         {slotLabel(slot.startMinutes, slot.endMinutes)}
       </span>
     </button>
