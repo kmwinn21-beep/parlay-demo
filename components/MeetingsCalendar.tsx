@@ -223,7 +223,7 @@ export interface CalendarSlotPick {
 export function MeetingsCalendar({
   meetings, conferenceStart, conferenceEnd, userOptions, colorMap, renderDetail,
   companyTypeOptions = [], companyTypeColorMap = {},
-  axis = 'date', internalAttendees = null, repDay = null, dimDays = [],
+  axis = 'date', internalAttendees = null, repDay = null, dimDays = [], layout = 'auto',
   closeSignal = 0, detailLocked = false, onDetailClose, onPickSlot,
 }: {
   meetings: Meeting[];
@@ -249,6 +249,15 @@ export function MeetingsCalendar({
   internalAttendees?: string | null;
   /** Which day the rep axis shows, from the day filters. Null falls back. */
   repDay?: string | null;
+  /**
+   * Which of the two shapes to draw.
+   *
+   * 'auto' is the page's: a grid of columns from lg, the stack below it.
+   * 'stack' forces the stack at every width, for the places this is drawn
+   * inside something narrow — a 560px drawer is a phone's width whatever the
+   * window around it is doing, and four day columns in it are unreadable.
+   */
+  layout?: 'auto' | 'stack';
   /**
    * The days the picker above has lit, if any.
    *
@@ -896,7 +905,7 @@ export function MeetingsCalendar({
 
           The rep axis stacks the same way: one day, a section per person,
           and the name pins instead of the date. */}
-      <div className="lg:hidden" ref={phoneStackRef}>
+      <div className={layout === 'stack' ? '' : 'lg:hidden'} ref={phoneStackRef}>
         {axis === 'rep' && theDay && (
           <p className="text-[11px] font-medium text-gray-500 px-4 py-2 border-b border-gray-100">
             {dayParts(theDay).weekday}, {dayParts(theDay).label}
@@ -951,7 +960,7 @@ export function MeetingsCalendar({
       </div>
 
       {/* ── Desktop: the board ── */}
-      <div className={`hidden lg:block p-4 ${scrolls ? 'overflow-x-auto' : ''}`}>
+      <div className={`${layout === 'stack' ? 'hidden' : 'hidden lg:block'} p-4 ${scrolls ? 'overflow-x-auto' : ''}`}>
         <div className={scrolls ? 'min-w-max' : ''}>
           {/*
             The headings stay put while the day scrolls under them.

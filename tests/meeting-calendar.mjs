@@ -566,8 +566,9 @@ console.log('\n— the view, wired in —');
    * while its own column passes under it — a day at a time behind a tap said
    * nothing about where that day sat in the week.
    */
-  eq('the grid is desktop only', /hidden lg:block p-4/.test(cal), true);
-  eq('  and the stack is the phone’s', /<div className="lg:hidden" ref=\{phoneStackRef\}>/.test(cal), true);
+  eq('the grid is desktop only', /layout === 'stack' \? 'hidden' : 'hidden lg:block'\} p-4/.test(cal), true);
+  eq('  and the stack is the phone’s',
+    /className=\{layout === 'stack' \? '' : 'lg:hidden'\} ref=\{phoneStackRef\}>/.test(cal), true);
   eq('  with no drawer left to open', /ColumnDrawer/.test(cal), false);
 }
 

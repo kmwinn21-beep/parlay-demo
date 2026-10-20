@@ -12,6 +12,7 @@ import { SetConferenceButton } from '@/components/SetConferenceButton';
 import { resolveProductRelevance, type ProductRelevanceResult } from '@/lib/productRelevance';
 import { ProductRelevanceSection } from './ProductRelevanceSection';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
+import { internalIdsOn, type CalendarMeeting } from '@/lib/meetingCalendar';
 import { useMeetingNotesDrawer } from '@/lib/MeetingNotesDrawerContext';
 import { useUserOptions } from '@/lib/useUserOptions';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -1056,21 +1057,30 @@ export function TouchpointQuickModal({ onClose, ...defaults }: {
  * is a new type every render, which remounts it and stops the fill from ever
  * animating.
  */
-function ScopeToggle({ scope, onChange }: {
-  scope: 'upcoming' | 'all';
-  onChange: (scope: 'upcoming' | 'all') => void;
+/**
+ * One segmented control, three times over.
+ *
+ * The drawer's three questions are different ones — WHOSE meetings, WHICH of
+ * them, and HOW they are drawn — so they are three controls with gaps
+ * between them rather than seven buttons in one strip, which would read as
+ * one question with seven answers.
+ */
+function DrawerToggle<T extends string>({ value, options, onChange }: {
+  value: T;
+  options: ReadonlyArray<readonly [T, string]>;
+  onChange: (value: T) => void;
 }) {
   return (
     <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
-      {([['upcoming', 'Upcoming'], ['all', 'All']] as const).map(([key, label], i) => (
+      {options.map(([key, label], i) => (
         <button
           key={key}
           type="button"
           onClick={() => onChange(key)}
-          aria-pressed={scope === key}
-          className={`px-3 py-1 text-xs font-medium transition-colors duration-200 ease-out ${
+          aria-pressed={value === key}
+          className={`px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors duration-200 ease-out ${
             i > 0 ? 'border-l border-gray-200' : ''
-          } ${scope === key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+          } ${value === key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
         >
           {label}
         </button>
@@ -1101,6 +1111,17 @@ export function DashboardActionCard() {
   const [drawerBoothOnly, setDrawerBoothOnly] = useState(false);
   /** Upcoming by default: at a live conference, what is next is the question. */
   const [drawerScope, setDrawerScope] = useState<'upcoming' | 'all'>('upcoming');
+  /**
+   * Whose meetings. Mine by default — the drawer is titled with your own
+   * name, and the whole conference's book is the Meetings tab's job.
+   */
+  const [drawerOwner, setDrawerOwner] = useState<'mine' | 'all'>('mine');
+  /**
+   * How they are drawn. The board by default: this is opened mid-conference,
+   * where the question is nearly always what is next and where the day has a
+   * hole in it — which a list of cards cannot answer.
+   */
+  const [drawerView, setDrawerView] = useState<'calendar' | 'cards'>('calendar');
   // Whoever is signed in, by first name where we have one.
   const meetingsOwner = (user?.firstName || user?.displayName || user?.repName || 'My').split(' ')[0];
   const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -1139,12 +1160,17 @@ export function DashboardActionCard() {
       .filter(m => {
         if (!m.meeting_date) return false;
         if (drawerScope === 'upcoming' && m.meeting_date < today) return false;
+        if (drawerOwner === 'all') return true;
         if (myConfigId == null) return false;
-        const ids = (m.scheduled_by || '').split(',').map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n));
-        return ids.includes(myConfigId);
+        /* Mine means on it, not merely booked by me: internalIdsOn is the
+           union of the Rep field and Additional Attendees, which is the rule
+           the conference's own My Mtgs reads. Reading scheduled_by alone hid
+           every meeting somebody else booked and put me on — which at a
+           conference is most of the ones I am walking to. */
+        return internalIdsOn(m as unknown as CalendarMeeting).includes(myConfigId);
       })
       .sort((a, b) => `${a.meeting_date} ${a.meeting_time}`.localeCompare(`${b.meeting_date} ${b.meeting_time}`));
-  }, [meetings, user?.configId, drawerScope]);
+  }, [meetings, user?.configId, drawerScope, drawerOwner]);
 
   // Day buttons come from the meetings actually in the drawer rather than every
   // day of the conference, so a button can never filter down to nothing.
@@ -1156,11 +1182,14 @@ export function DashboardActionCard() {
     () => myMeetings.some(m => isBoothHours(m.meeting_time)),
     [myMeetings],
   );
-  const filteredDrawerMeetings = useMemo(() => myMeetings.filter(m => {
-    if (drawerDateFilter.length > 0 && !drawerDateFilter.includes(m.meeting_date)) return false;
-    if (drawerBoothOnly && !isBoothHours(m.meeting_time)) return false;
-    return true;
-  }), [myMeetings, drawerDateFilter, drawerBoothOnly]);
+  /* Everything but the day filter, which the calendar applies by dimming. */
+  const boothFilteredDrawerMeetings = useMemo(
+    () => myMeetings.filter(m => !drawerBoothOnly || isBoothHours(m.meeting_time)),
+    [myMeetings, drawerBoothOnly],
+  );
+  const filteredDrawerMeetings = useMemo(() => boothFilteredDrawerMeetings.filter(m => (
+    drawerDateFilter.length === 0 || drawerDateFilter.includes(m.meeting_date)
+  )), [boothFilteredDrawerMeetings, drawerDateFilter]);
 
   const handleOutcomeChange = useCallback(async (meetingId: number, outcome: string) => {
     setMeetings(prev => prev.map(m => (m.id === meetingId ? { ...m, outcome } : m)));
@@ -1418,7 +1447,7 @@ export function DashboardActionCard() {
         {/* Right — Meetings, which opens the drawer */}
         <button
           type="button"
-          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); setDrawerScope('upcoming'); }}
+          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); setDrawerScope('upcoming'); setDrawerOwner('mine'); setDrawerView('calendar'); }}
           aria-expanded={meetingsOpen}
           className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
         >
@@ -1441,8 +1470,25 @@ export function DashboardActionCard() {
           onClose={() => setMeetingsOpen(false)}
         >
           {activeConference && !loadingMeetings && (
-            <div className="px-4 pt-3 flex justify-end">
-              <ScopeToggle scope={drawerScope} onChange={setDrawerScope} />
+            /* Whose, which, how — left to right, and the row scrolls rather
+               than wrapping: three controls stacked in a 560px drawer would
+               push the board itself below the fold. */
+            <div className="px-4 pt-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+              <DrawerToggle
+                value={drawerOwner}
+                options={[['mine', 'My Mtgs'], ['all', 'All Mtgs']] as const}
+                onChange={setDrawerOwner}
+              />
+              <DrawerToggle
+                value={drawerScope}
+                options={[['upcoming', 'Upcoming'], ['all', 'All']] as const}
+                onChange={setDrawerScope}
+              />
+              <DrawerToggle
+                value={drawerView}
+                options={[['calendar', 'Calendar'], ['cards', 'Cards']] as const}
+                onChange={setDrawerView}
+              />
             </div>
           )}
           {!activeConference ? (
@@ -1468,7 +1514,36 @@ export function DashboardActionCard() {
                   />
                 </div>
               )}
-              {filteredDrawerMeetings.length === 0 ? (
+              {drawerView === 'calendar' ? (
+                /* The board, as one column at any width: 560px is a phone's
+                   width whatever the window around it is doing, so the days
+                   run end to end with each heading pinned rather than four
+                   columns sharing the space.
+
+                   The day chips DIM here rather than filter — a calendar's
+                   columns are its days, and dropping three of four leaves a
+                   board that cannot say where the picked one sits. Booth
+                   hours still filter, since they are not a day.
+
+                   Clicking a block opens the meeting's own card, the same
+                   popup the conference calendar opens. */
+                <MeetingsTable
+                  viewMode="calendar"
+                  calendarLayout="stack"
+                  tableName="conference_meetings"
+                  meetings={boothFilteredDrawerMeetings}
+                  calendarDimDays={drawerDateFilter}
+                  conferenceStart={activeConference.start_date ?? null}
+                  conferenceEnd={activeConference.end_date ?? null}
+                  companyTypeColorMap={colorMaps.company_type || {}}
+                  actionOptions={actionOptions}
+                  colorMap={colorMaps.action || {}}
+                  userOptions={userOptions}
+                  onOutcomeChange={handleOutcomeChange}
+                  onNotesClick={openMeetingNotes}
+                  onEdit={handleMeetingEdit}
+                />
+              ) : filteredDrawerMeetings.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-8">No meetings match those filters.</p>
               ) : (
             <MeetingsTable

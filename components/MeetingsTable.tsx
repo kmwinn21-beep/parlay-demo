@@ -10,6 +10,7 @@ import { QuickViewDrawer, type QuickViewTarget } from '@/components/QuickViewDra
 import { getPreset, getHex, type ColorMap } from '@/lib/colors';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { MEETING_TIME_OPTIONS, formatMeetingTime, formatCardDate } from '@/lib/meetingTime';
+import { DURATION_OPTIONS, normalizeDuration } from '@/lib/meetingCalendar';
 import { AttendeeInitialsAvatar } from '@/components/AttendeePhoto';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { RepMultiSelect } from '@/components/RepMultiSelect';
@@ -1031,6 +1032,9 @@ export interface EditFormData {
   /** Roster picks, kept by id so the row and their profile can show them. */
   additional_attendee_ids: string;
   meeting_type: string;
+  /** How long it runs. One of DURATION_OPTIONS — the calendar lays the day
+      out from it, so a free number would draw a card nothing lines up with. */
+  duration_minutes: number;
 }
 
 function EditMeetingRow({
@@ -1054,6 +1058,9 @@ function EditMeetingRow({
     location: meeting.location || '',
     additional_attendees: meeting.additional_attendees || '',
     meeting_type: meeting.meeting_type || '',
+    // Anything booked before the column existed reads as 30 rather than as
+    // blank, which is what the calendar already draws it as.
+    duration_minutes: normalizeDuration(meeting.duration_minutes),
   });
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(splitInternalIds(meeting).repIds)
@@ -1100,6 +1107,12 @@ function EditMeetingRow({
           <select className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))} required>
             <option value="">Select time...</option>
             {MEETING_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Duration</label>
+          <select className={inputClass} value={form.duration_minutes} onChange={e => setForm(f => ({ ...f, duration_minutes: normalizeDuration(e.target.value) }))}>
+            {DURATION_OPTIONS.map(mins => <option key={mins} value={mins}>{mins} min</option>)}
           </select>
         </div>
         <div>
@@ -1195,6 +1208,7 @@ function EditMeetingTableRow({
     location: meeting.location || '',
     additional_attendees: meeting.additional_attendees || '',
     meeting_type: meeting.meeting_type || '',
+    duration_minutes: normalizeDuration(meeting.duration_minutes),
   });
   const [selectedRepIds, setSelectedRepIds] = useState<number[]>(() =>
     parseRepIds(splitInternalIds(meeting).repIds)
@@ -1231,7 +1245,7 @@ function EditMeetingTableRow({
               Editing meeting with {meeting.first_name} {meeting.last_name}
             </span>
           </div>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="grid grid-cols-7 gap-2">
             <div>
               <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Date *</label>
               <input type="date" className={inputClass} value={form.meeting_date} onChange={e => setForm(f => ({ ...f, meeting_date: e.target.value }))} />
@@ -1241,6 +1255,14 @@ function EditMeetingTableRow({
               <select className={inputClass} value={form.meeting_time} onChange={e => setForm(f => ({ ...f, meeting_time: e.target.value }))}>
                 <option value="">Select time...</option>
                 {MEETING_TIME_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </div>
+            {/* Beside the time, since the two together are when the card sits
+                on the calendar and how tall it is drawn. */}
+            <div>
+              <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">Duration</label>
+              <select className={inputClass} value={form.duration_minutes} onChange={e => setForm(f => ({ ...f, duration_minutes: normalizeDuration(e.target.value) }))}>
+                {DURATION_OPTIONS.map(mins => <option key={mins} value={mins}>{mins} min</option>)}
               </select>
             </div>
             <div>
@@ -1457,6 +1479,7 @@ export function MeetingsTable({
   conferenceInternalAttendees = null,
   calendarRepDay = null,
   calendarDimDays = [],
+  calendarLayout = 'auto',
   companyTypeOptions = [],
   companyTypeColorMap = {},
   onCalendarSlotPick,
@@ -1516,6 +1539,9 @@ export function MeetingsTable({
    * a board that cannot say where the picked day sits.
    */
   calendarDimDays?: string[];
+  /** 'stack' draws the calendar as one column at every width — see the
+   *  calendar's own `layout`. */
+  calendarLayout?: 'auto' | 'stack';
   /** The configured company types in order, and their colours — the fill. */
   companyTypeOptions?: string[];
   companyTypeColorMap?: ColorMap;
@@ -2887,6 +2913,7 @@ export function MeetingsTable({
           internalAttendees={conferenceInternalAttendees}
           repDay={calendarRepDay}
           dimDays={calendarDimDays}
+          layout={calendarLayout}
           userOptions={userOptions}
           colorMap={colorMap}
           companyTypeOptions={companyTypeOptions}
