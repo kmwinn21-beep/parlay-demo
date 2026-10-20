@@ -7,8 +7,8 @@ import { getValuePreset, type ColorMap } from '@/lib/colors';
 import {
   SLOT_MINUTES, calendarDays, calendarPeople, cardMinutes, companyTypeOf, companyTypesPresent,
   conferencePeople, defaultCalendarDay, durationSuffix, hourWindow, isOutsideConference,
-  layoutDay, matchesCompanyTypes, matchesDays, matchesPeople, meetingsOfPerson,
-  meetingsWithoutColumn, openSlots, sharedMeetingIds,
+  conferenceIsRunning, isPastMeeting, layoutDay, matchesCompanyTypes, matchesDays,
+  matchesPeople, meetingsOfPerson, meetingsWithoutColumn, openSlots, sharedMeetingIds,
   type CalendarMeeting,
 } from '@/lib/meetingCalendar';
 import { minutesToTime, slotLabel } from '@/lib/availability';
@@ -77,6 +77,29 @@ function useStickyTop(): number {
     };
   }, []);
   return top;
+}
+
+/**
+ * The time, to the minute, for as long as this is on screen.
+ *
+ * A conference board is left open for an hour at a time, and what has passed
+ * is the thing that changes while nobody touches it. A minute is as fine as
+ * the grid can show.
+ */
+function useNowMinutes(): { today: string; minutes: number } {
+  const read = () => {
+    const d = new Date();
+    return {
+      today: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      minutes: d.getHours() * 60 + d.getMinutes(),
+    };
+  };
+  const [now, setNow] = useState(read);
+  useEffect(() => {
+    const id = setInterval(() => setNow(read()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
 }
 
 /**
@@ -261,6 +284,7 @@ export function MeetingsCalendar({
   onPickSlot?: (slot: CalendarSlotPick) => void;
 }) {
   const stickyTop = useStickyTop();
+  const now = useNowMinutes();
   const phoneStackRef = useRef<HTMLDivElement>(null);
   const scrollerPad = useScrollerPaddingTop(phoneStackRef);
   /*
@@ -498,6 +522,23 @@ export function MeetingsCalendar({
     || (tracedId != null && m.id !== tracedId);
 
   /**
+   * And a lighter fade for what has already happened.
+   *
+   * Only while the conference is actually on, which is the only time it says
+   * anything: before it starts nothing has passed, and after it ends
+   * everything has, which would dim the whole board to no purpose.
+   *
+   * Lighter than a filter's dim on purpose. A filtered-out meeting is one you
+   * asked not to see; a meeting at nine this morning is one you were at. They
+   * are different statements and the board should not make them in the same
+   * voice — so this one is still legible at a glance, and a card that is both
+   * takes the filter's, which is the stronger claim.
+   */
+  const running = conferenceIsRunning(conferenceStart, conferenceEnd, now.today);
+  const past = (m: Meeting) =>
+    running && isPastMeeting(m as CalendarMeeting, now.today, now.minutes);
+
+  /**
    * A day the picker has not lit.
    *
    * The meetings in it dim, and so does its heading — a dimmed column under a
@@ -526,13 +567,15 @@ export function MeetingsCalendar({
         style={opts.style}
         data-shared={sharedIds.has(m.id) ? 'true' : undefined}
         data-conflict={opts.conflict ? 'true' : undefined}
+        data-past={past(m) ? 'true' : undefined}
         title={`${name}${type ? ` — ${type}` : ''}${m.outcome ? ` — ${m.outcome}` : ''}${
+          past(m) ? ' — already started' : ''}${
           opts.conflict ? ' — conflict' : ''}${
           unscheduled ? ` — ${unscheduled}` : m.meeting_time ? ` — ${formatMeetingTime(m.meeting_time)}` : ''}${
           sharedIds.has(m.id) ? ' — on more than one column' : ''}`}
         className={`relative block w-full text-left overflow-hidden rounded-md px-1.5 py-1 transition-opacity ${tint} ${
           opts.conflict ? 'ring-2 ring-red-600' : ''} ${
-          dimmed(m) ? 'opacity-25' : 'opacity-100 hover:brightness-95'}`}
+          dimmed(m) ? 'opacity-25' : past(m) ? 'opacity-60 hover:opacity-100' : 'opacity-100 hover:brightness-95'}`}
       >
         {/* The outcome, which no longer has the fill.
             A dot rather than a tick and a cross, because outcomes are

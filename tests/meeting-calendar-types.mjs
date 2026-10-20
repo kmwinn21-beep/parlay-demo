@@ -204,6 +204,17 @@ console.log('\n— the board —');
   eq('  name the untyped', /const label = t\.value \?\? 'No type set';/.test(cal), true);
   eq('  and clear in one click', /onClick=\{\(\) => setPickedTypes\(new Set\(\)\)\}/.test(cal), true);
 
+  /*
+   * And a lighter fade for what has happened, which is a different statement
+   * from a filter's: one is a meeting you asked not to see, the other one you
+   * were at. A card that is both takes the filter's, the stronger claim.
+   */
+  eq('what has passed fades, less than a filter dims',
+    /dimmed\(m\) \? 'opacity-25' : past\(m\) \? 'opacity-60 hover:opacity-100' : 'opacity-100 hover:brightness-95'/.test(cal), true);
+  eq('  only while the conference is on',
+    /const running = conferenceIsRunning\(conferenceStart, conferenceEnd, now\.today\);/.test(cal), true);
+  eq('  and the board keeps its own clock', /setInterval\(\(\) => setNow\(read\(\)\), 60_000\)/.test(cal), true);
+
   eq('four things dim a card', /!matchesDays\(m as CalendarMeeting, dimDays\)\n\s*\|\| !matchesCompanyTypes\(m as CalendarMeeting, pickedTypes\)\n\s*\|\| !matchesPeople\(m as CalendarMeeting, pickedPeople\)/.test(cal), true);
   eq('  and a day nobody picked dims its heading too',
     /const dayDimmed = \(day: string\) => dimDays\.length > 0 && !dimDays\.includes\(day\);/.test(cal), true);
