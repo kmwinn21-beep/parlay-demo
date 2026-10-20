@@ -227,6 +227,46 @@ export function timedOn<T extends CalendarMeeting>(meetings: T[], day: string): 
     m.meeting_date === day && timeToMinutes(m.meeting_time) != null);
 }
 
+/* ── What has already happened ────────────────────────────────────────── */
+
+/**
+ * Whether the conference is on today.
+ *
+ * The only time dimming what has passed says anything. Before it starts
+ * nothing has; after it ends everything has, and a board where every card is
+ * dimmed has simply lost a channel.
+ */
+export function conferenceIsRunning(
+  start: string | null | undefined,
+  end: string | null | undefined,
+  today: string,
+): boolean {
+  if (!isDate(start) || !isDate(end) || start > end) return false;
+  return today >= start && today <= end;
+}
+
+/**
+ * Whether a meeting's own moment has passed.
+ *
+ * Measured against its START, which is what "past the scheduled time" says:
+ * a meeting that has begun is no longer one of the ones left to get to, and
+ * the board is read for the ones that are.
+ *
+ * A meeting with no time on the clock — booth hours, TBD — passes with its
+ * DAY and not before: there is no minute it can be said to be over, but
+ * yesterday is still yesterday.
+ */
+export function isPastMeeting(
+  meeting: CalendarMeeting,
+  today: string,
+  nowMinutes: number,
+): boolean {
+  if (!isDate(meeting.meeting_date)) return false;
+  if (meeting.meeting_date !== today) return meeting.meeting_date < today;
+  const start = timeToMinutes(meeting.meeting_time);
+  return start == null ? false : start < nowMinutes;
+}
+
 /* ── Where there is room ──────────────────────────────────────────────── */
 
 /** The grain the board offers a free slot at, same as the availability board. */

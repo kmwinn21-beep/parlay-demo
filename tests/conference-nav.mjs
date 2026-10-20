@@ -165,11 +165,13 @@ console.log('\n— and the menu says which empty it is —');
   eq('a failed load reads as one', /Couldn&rsquo;t load conferences\./.test(header), true);
   eq('  with a way to try again', /onClick=\{refreshConferences\}[\s\S]{0,160}Try again/.test(header), true);
   eq('  while an empty account still reads as empty',
-    /conferences\.length === 0 \? \([\s\S]{0,160}No conferences found\./.test(header), true);
+    /if \(conferences\.length === 0\) \{[\s\S]{0,160}No conferences found\./.test(header), true);
   // The failure branch has to come first, or an empty list from a failed load
-  // falls through to "No conferences found." again.
+  // falls through to "No conferences found." again. (Early returns now, since
+  // the list is drawn by a dropdown and a phone drawer alike; the order is
+  // the thing that matters either way.)
   eq('  and the failure is tested first',
-    header.indexOf('confsFailed ?') < header.indexOf('conferences.length === 0 ?'), true);
+    header.indexOf('if (confsFailed)') < header.indexOf('if (conferences.length === 0)'), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

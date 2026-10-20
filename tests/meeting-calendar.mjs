@@ -24,10 +24,10 @@
 import { readFileSync } from 'node:fs';
 import {
   DEFAULT_DURATION, DURATION_OPTIONS, MIN_CARD_MINUTES,
-  calendarDays, calendarPeople, cardMinutes, conferencePeople, defaultCalendarDay,
-  durationSuffix, hourWindow, internalIdsOn, isOutsideConference, layoutDay,
-  matchesPeople, meetingsOfPerson, meetingsWithoutColumn, normalizeDuration,
-  sharedMeetingIds, timedOn, untimedOn,
+  calendarDays, calendarPeople, cardMinutes, conferenceIsRunning, conferencePeople,
+  defaultCalendarDay, durationSuffix, hourWindow, internalIdsOn, isOutsideConference,
+  isPastMeeting, layoutDay, matchesPeople, meetingsOfPerson, meetingsWithoutColumn,
+  normalizeDuration, sharedMeetingIds, timedOn, untimedOn,
 } from '@/lib/meetingCalendar';
 
 let pass = 0;
@@ -459,6 +459,50 @@ console.log('\n— and the board drawn from it —');
     /const phoneHeadTop = stickyTop > 0 \? stickyTop : -scrollerPad;/.test(cal), true);
   eq('    with the padding measured, not assumed',
     /if \(style\.overflowY === 'auto' \|\| style\.overflowY === 'scroll'\) \{/.test(cal), true);
+}
+
+console.log('\n— what has already happened —');
+{
+  const at = (date, time) => ({ id: 1, meeting_date: date, meeting_time: time, duration_minutes: null });
+
+  // Only while the conference is on. Before it, nothing has passed; after it,
+  // everything has, and a board where every card is dimmed has lost a channel.
+  eq('the fade is for the days of the conference',
+    conferenceIsRunning('2026-03-10', '2026-03-12', '2026-03-11'), true);
+  eq('  including the first and the last',
+    [conferenceIsRunning('2026-03-10', '2026-03-12', '2026-03-10'),
+      conferenceIsRunning('2026-03-10', '2026-03-12', '2026-03-12')], [true, true]);
+  eq('  and nothing before it', conferenceIsRunning('2026-03-10', '2026-03-12', '2026-03-09'), false);
+  eq('  or after', conferenceIsRunning('2026-03-10', '2026-03-12', '2026-03-13'), false);
+  eq('  a conference with no dates is never running',
+    [conferenceIsRunning(null, null, '2026-03-11'),
+      conferenceIsRunning('2026-03-12', '2026-03-10', '2026-03-11')], [false, false]);
+
+  // Measured against the START: a meeting that has begun is no longer one of
+  // the ones left to get to, which is what the board is read for.
+  eq('nine o’clock is past at half past',
+    isPastMeeting(at('2026-03-11', '09:00'), '2026-03-11', 9 * 60 + 30), true);
+  eq('  and not at a quarter to',
+    isPastMeeting(at('2026-03-11', '09:00'), '2026-03-11', 8 * 60 + 45), false);
+  eq('  nor at the very minute it starts',
+    isPastMeeting(at('2026-03-11', '09:00'), '2026-03-11', 9 * 60), false);
+  eq('yesterday is past whatever the hour',
+    isPastMeeting(at('2026-03-10', '23:00'), '2026-03-11', 1), true);
+  eq('  and tomorrow is not', isPastMeeting(at('2026-03-12', '01:00'), '2026-03-11', 23 * 60), false);
+
+  /*
+   * A meeting with no time on the clock passes with its DAY and not before:
+   * there is no minute booth hours can be said to be over, but yesterday is
+   * still yesterday.
+   */
+  eq('booth hours today have not passed',
+    [isPastMeeting(at('2026-03-11', 'booth'), '2026-03-11', 23 * 60),
+      isPastMeeting(at('2026-03-11', 'tbd'), '2026-03-11', 23 * 60),
+      isPastMeeting(at('2026-03-11', null), '2026-03-11', 23 * 60)], [false, false, false]);
+  eq('  but yesterday’s have', isPastMeeting(at('2026-03-10', 'booth'), '2026-03-11', 1), true);
+
+  // A row with nothing usable in its date column cannot be placed in time.
+  eq('a meeting with no date has not passed', isPastMeeting(at('', '09:00'), '2026-03-11', 23 * 60), false);
 }
 
 console.log('\n— the view, wired in —');

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { refreshUnreadNotifications, subscribeUnreadNotifications } from '@/lib/unreadNotifications';
 import Link from 'next/link';
+import { MobileMenuDrawer, isInsideMobileMenuDrawer } from '@/components/MobileMenuDrawer';
+import { useIsPhone } from '@/lib/useIsPhone';
 
 interface Notification {
   id: number;
@@ -116,6 +118,8 @@ export function NotificationBell() {
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
+      // The phone drawer is a portal, so it is not inside panelRef.
+      if (isInsideMobileMenuDrawer(e.target)) return;
       if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
@@ -158,52 +162,12 @@ export function NotificationBell() {
   }, [isDemo]);
 
 
-  return (
-    <div className="relative" ref={panelRef}>
-      {/* Bell button */}
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className={`header-bar-btn relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${open ? 'header-bar-btn-active' : ''}`}
-        title="Notifications"
-        aria-label="Notifications"
-        aria-expanded={open}
-      >
-        <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-        </svg>
-        {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
-      </button>
+  const isPhone = useIsPhone();
 
-      {/* Dropdown panel */}
-      {open && (
-        <div className="fixed inset-x-2 top-[60px] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl z-[200] overflow-hidden">
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-brand-primary">Notifications</p>
-              <p className="text-xs text-gray-400">{unreadCount} unread</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={markAllRead}
-                  className="text-xs text-brand-secondary hover:underline font-medium"
-                >
-                  Mark all read
-                </button>
-              )}
-            </div>
-          </div>
+  /* The rows, drawn by the desktop dropdown and the phone drawer alike. */
+  const listRows = (
+    <>
 
-          {/* List */}
-          <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">
             {loading ? (
               <div className="flex justify-center items-center py-8">
                 <div className="animate-spin w-5 h-5 border-2 border-brand-secondary border-t-transparent rounded-full" />
@@ -241,7 +205,9 @@ export function NotificationBell() {
                   <button
                     type="button"
                     onClick={e => { e.stopPropagation(); markRead(n.id); }}
-                    className="flex-shrink-0 mt-0.5 p-1 rounded hover:bg-gray-200 transition-colors opacity-0 group-hover:opacity-100"
+                    /* Always there below sm: opacity-0 until hover is a
+                       control a finger can never reach. */
+                    className="flex-shrink-0 mt-0.5 p-2 sm:p-1 rounded hover:bg-gray-200 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
                     title="Mark as read"
                   >
                     <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,7 +217,55 @@ export function NotificationBell() {
                 </div>
               ))
             )}
+    </>
+  );
+
+  return (
+    <div className="relative" ref={panelRef}>
+      {/* Bell button */}
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className={`header-bar-btn relative flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 transition-colors ${open ? 'header-bar-btn-active' : ''}`}
+        title="Notifications"
+        aria-label="Notifications"
+        aria-expanded={open}
+      >
+        <svg className="header-bar-icon w-5 h-5 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        {unreadCount > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {/* ── A desktop dropdown ── */}
+      {open && !isPhone && (
+        <div className="hidden sm:block absolute right-0 top-full mt-2 w-96 bg-white border border-gray-200 rounded-2xl shadow-2xl z-[200] overflow-hidden">
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-brand-primary">Notifications</p>
+              <p className="text-xs text-gray-400">{unreadCount} unread</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllRead}
+                  className="text-xs text-brand-secondary hover:underline font-medium"
+                >
+                  Mark all read
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* List */}
+          <div className="max-h-[420px] overflow-y-auto divide-y divide-gray-50">{listRows}</div>
 
           {/* Footer */}
           <div className="border-t border-gray-100 px-4 py-2.5">
@@ -264,6 +278,40 @@ export function NotificationBell() {
             </Link>
           </div>
         </div>
+      )}
+
+      {/* ── A phone drawer ──
+
+          It was already half a drawer: a fixed panel two thumbs from the top
+          of the screen with the page showing round it. Full height it holds a
+          day's worth rather than four, and Mark all read stops being a 10px
+          word in a corner. */}
+      {open && isPhone && (
+        <MobileMenuDrawer
+          title="Notifications"
+          subtitle={`${unreadCount} unread`}
+          action={unreadCount > 0 ? (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="flex-shrink-0 h-8 px-3 rounded-lg border border-gray-300 text-xs font-semibold text-brand-secondary"
+            >
+              Mark all read
+            </button>
+          ) : undefined}
+          onClose={() => setOpen(false)}
+        >
+          <div className="divide-y divide-gray-50">{listRows}</div>
+          <div className="border-t border-gray-100 px-4 py-3">
+            <Link
+              href="/notifications"
+              onClick={() => setOpen(false)}
+              className="block text-center text-sm font-semibold text-brand-secondary"
+            >
+              View all notifications →
+            </Link>
+          </div>
+        </MobileMenuDrawer>
       )}
     </div>
   );
