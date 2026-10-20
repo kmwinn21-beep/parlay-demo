@@ -127,6 +127,9 @@ export function AgendaDrawer({ onClose }: { onClose: () => void }) {
         <DashboardAgendaSection
           conferenceId={selected.id}
           conferenceName={selected.name}
+          /* So the cards of a day already gone can fade while it is on. */
+          conferenceStart={selected.start_date}
+          conferenceEnd={selected.end_date}
           view={view}
           onViewChange={setView}
         />

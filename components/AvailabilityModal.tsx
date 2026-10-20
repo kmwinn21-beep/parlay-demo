@@ -90,6 +90,16 @@ export function AvailabilityModal({
   const [filtersOpen, setFiltersOpen] = useState(false);
   /** Whose availability is open in the phone's drawer. */
   const [openPerson, setOpenPerson] = useState<number | null>(null);
+  /**
+   * The half hour being pointed at, if any.
+   *
+   * Pointing at one slot dims every slot that is not that same half hour, so
+   * the ones left lit across the other columns are the people who are ALSO
+   * free then — which is the question a board of four columns is open to
+   * answer, and which reading four lists of times side by side answers
+   * slowly and often wrongly.
+   */
+  const [hoveredSlot, setHoveredSlot] = useState<{ day: string; startMinutes: number } | null>(null);
 
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
   useEffect(() => {
@@ -176,6 +186,18 @@ export function AvailabilityModal({
 
   const windowValid = endMinutes > startMinutes;
 
+  /** Whether a slot fades while another half hour is being pointed at. */
+  const slotDimmed = (slot: AvailabilitySlot) =>
+    hoveredSlot != null
+    && !(slot.day === hoveredSlot.day && slot.startMinutes === hoveredSlot.startMinutes);
+
+  /* Leaving clears only what this slot set: moving from one button to the
+     next fires the new one's enter before the old one's leave. */
+  const onSlotHover = (slot: AvailabilitySlot, on: boolean) => setHoveredSlot(prev => {
+    if (on) return { day: slot.day, startMinutes: slot.startMinutes };
+    return prev && prev.day === slot.day && prev.startMinutes === slot.startMinutes ? null : prev;
+  });
+
   /** Whose days the phone drawer is showing, and what they are. */
   const drawerPerson = isPhone && openPerson != null
     ? people.find(p => p.id === openPerson) ?? null
@@ -197,7 +219,12 @@ export function AvailabilityModal({
         role="dialog"
         aria-modal="true"
         aria-label="Availability"
-        className="drawer-mobile-responsive sheet-below-header relative w-full max-w-6xl bg-white rounded-t-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden sm:h-[88vh] sm:rounded-2xl"
+        /* Wide enough for two slots to a row in every column: a time range
+           is "11:30 AM – 12:00 PM" at its longest, and a column that cannot
+           hold two of those side by side either wraps the text inside the
+           button or drops to one slot a line, which makes a day of half
+           hours forty lines long. */
+        className="drawer-mobile-responsive sheet-below-header relative w-full max-w-[1500px] bg-white rounded-t-2xl border border-gray-200 shadow-2xl flex flex-col overflow-hidden sm:h-[88vh] sm:rounded-2xl"
       >
         {/* Header */}
         <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 flex-shrink-0">
@@ -362,7 +389,7 @@ export function AvailabilityModal({
               className="flex flex-col gap-2 sm:grid sm:gap-3 sm:min-w-0 sm:h-full"
               /* Ignored while the box is a column of sections; it is what the
                  sm: grid lays its columns out with. */
-              style={{ gridTemplateColumns: `repeat(${Math.max(people.length, 1)}, minmax(220px, 1fr))` }}
+              style={{ gridTemplateColumns: `repeat(${Math.max(people.length, 1)}, minmax(320px, 1fr))` }}
             >
               {people.map(person => {
                 const mine = slotsOf(slots, person.id);
@@ -451,12 +478,19 @@ export function AvailabilityModal({
                             <div className="overflow-hidden">
                               {/* Shut means out of reach as well as out of sight: a clipped
                                   slot is still a tab stop without this. */}
-                              <div className="flex flex-col gap-1.5 pt-1.5" inert={!open}>
+                              {/* Two to a row, and every button the same
+                                  size: a grid of equal tracks rather than a
+                                  row that sizes each one to its own text, so
+                                  "1:00 – 1:30 PM" and "11:30 AM – 12:00 PM"
+                                  are the same button. */}
+                              <div className="grid grid-cols-2 gap-1.5 pt-1.5" inert={!open}>
                                 {group.slots.map(slot => (
                                   <SlotButton
                                     key={`${slot.day}-${slot.startMinutes}`}
                                     slot={slot}
                                     hue={hue}
+                                    dimmed={slotDimmed(slot)}
+                                    onHoverChange={on => onSlotHover(slot, on)}
                                     onPick={() => onPick({
                                       personId: person.id,
                                       personName: person.name,
@@ -622,13 +656,17 @@ export function AvailabilityModal({
 }
 
 /** One free slot: the day, the time, and a booking waiting to happen. */
-function SlotButton({ slot, onPick, hue, compact = false }: {
+function SlotButton({ slot, onPick, hue, compact = false, dimmed = false, onHoverChange }: {
   slot: AvailabilitySlot;
   onPick: () => void;
   /** The day's colour — see DAY_HUES. */
   hue: DayHue;
   /** Three to a row: there is width for a start time and nothing else. */
   compact?: boolean;
+  /** Another half hour is being pointed at, and this is not it. */
+  dimmed?: boolean;
+  /** Pointed at, or no longer — the board dims the rest while it is. */
+  onHoverChange?: (hovering: boolean) => void;
 }) {
   return (
     <button
@@ -636,8 +674,14 @@ function SlotButton({ slot, onPick, hue, compact = false }: {
       onClick={onPick}
       data-availability-slot={`${slot.day}-${slot.startMinutes}`}
       title={`${formatCardDate(slot.day)} · ${slotLabel(slot.startMinutes, slot.endMinutes)}`}
-      className={`w-full rounded-lg border transition-colors ${hue.pill} ${
-        compact ? 'px-1 py-2 text-center' : 'px-2.5 py-2 text-left'}`}
+      onMouseEnter={() => onHoverChange?.(true)}
+      onMouseLeave={() => onHoverChange?.(false)}
+      onFocus={() => onHoverChange?.(true)}
+      onBlur={() => onHoverChange?.(false)}
+      data-availability-dimmed={dimmed ? 'true' : undefined}
+      className={`w-full rounded-lg border transition-[opacity,background-color,border-color] ${hue.pill} ${
+        compact ? 'px-1 py-2 text-center' : 'px-2.5 py-2 text-center'} ${
+        dimmed ? 'opacity-25' : 'opacity-100'}`}
     >
       {/* The time alone. The date used to lead the card, from when the slots
           were one flat list per person; the day's own heading sits directly

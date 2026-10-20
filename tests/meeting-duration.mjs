@@ -20,7 +20,7 @@
  * Exits non-zero on the first failing expectation, so it can gate a build.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@libsql/client';
@@ -147,14 +147,37 @@ console.log('\n— and kept when the meeting is edited —');
   eq('a meeting booked at an hour', r[7].stored, 60);
 
   /*
-   * The table's inline edit row sends the fields it shows — date, time,
-   * location, rep, type — and knows nothing about the duration. Writing the
-   * column on every PUT would set every meeting edited there back to thirty.
+   * The edit forms now show the length, but anything else that PUTs a
+   * meeting — and every PUT written before the column existed — sends the
+   * fields it knows. Writing the column on every PUT regardless would set
+   * each of those meetings back to thirty.
    */
   eq('  survives an edit that does not mention it', r[8].stored, 60);
   // And an edit that does mention it changes it, through the same guard.
   eq('  changes when the edit says so', r[9].stored, 15);
   eq('  and is still one of the four', r[10].stored, 30);
+}
+
+console.log('\n— and editable where the meeting is edited —');
+{
+  /*
+   * Both edit forms — the one inside a meeting card and the one that opens as
+   * a table row — offer the length, so a meeting booked for half an hour that
+   * runs an hour can be put right without being deleted and booked again.
+   */
+  const table = readFileSync('components/MeetingsTable.tsx', 'utf8');
+  eq('the saved shape carries it', /duration_minutes: number;/.test(table), true);
+  const selects = table.match(/value=\{form\.duration_minutes\}/g) ?? [];
+  eq('both forms offer it', selects.length, 2);
+  const seeds = table.match(/duration_minutes: normalizeDuration\(meeting\.duration_minutes\)/g) ?? [];
+  eq('  seeded from the meeting, so a null reads as thirty', seeds.length, 2);
+  // The four lengths, from the one place that defines them — not a second
+  // list that could drift from the booking form's.
+  eq('  from the four the booking form offers',
+    (table.match(/DURATION_OPTIONS\.map\(mins => <option key=\{mins\} value=\{mins\}>\{mins\} min<\/option>\)/g) ?? []).length, 2);
+  // A select hands back a string; the guard is what keeps the type honest.
+  eq('  and what the select hands back is normalised',
+    (table.match(/duration_minutes: normalizeDuration\(e\.target\.value\)/g) ?? []).length, 2);
 }
 
 console.log('\n— and handed back as it is —');

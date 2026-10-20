@@ -553,17 +553,22 @@ console.log('\n— the view, wired in —');
   eq('  and so is Availability', /aria-label="Availability"/.test(page), true);
   eq('  both left of the kebab',
     page.indexOf('aria-label="Availability"') < page.indexOf('title="Meeting actions"'), true);
-  // Which leaves the word-and-all button to the desktop row.
-  eq('  where the desktop keeps the labelled one',
-    /className="hidden lg:inline-flex flex-shrink-0 items-center gap-1\.5 rounded-lg bg-brand-secondary/.test(page), true);
+  // Which leaves the word-and-all button to the desktop, where it now sits
+  // with the view toggle rather than at the end of the day filters — and
+  // wears what an unpicked toggle wears. tests/meeting-search.mjs has the
+  // detail of that move; what matters here is that the phone's icon pair did
+  // not take the desktop's labelled button with it.
+  eq('  where the desktop keeps a labelled one',
+    /Find Availability/.test(page), true);
 
   /*
    * A phone runs the columns end to end, one scroll, each heading pinning
    * while its own column passes under it — a day at a time behind a tap said
    * nothing about where that day sat in the week.
    */
-  eq('the grid is desktop only', /hidden lg:block p-4/.test(cal), true);
-  eq('  and the stack is the phone’s', /<div className="lg:hidden" ref=\{phoneStackRef\}>/.test(cal), true);
+  eq('the grid is desktop only', /layout === 'stack' \? 'hidden' : 'hidden lg:block'\} p-4/.test(cal), true);
+  eq('  and the stack is the phone’s',
+    /className=\{layout === 'stack' \? '' : 'lg:hidden'\} ref=\{phoneStackRef\}>/.test(cal), true);
   eq('  with no drawer left to open', /ColumnDrawer/.test(cal), false);
 }
 
