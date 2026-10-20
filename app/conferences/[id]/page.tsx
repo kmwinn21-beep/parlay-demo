@@ -52,6 +52,7 @@ import { MeetingsCalendar } from '@/components/MeetingsCalendar';
 import { AvailabilityModal } from '@/components/AvailabilityModal';
 import { additionalAttendeesFor } from '@/lib/availability';
 import { DEFAULT_DURATION, defaultCalendarDay } from '@/lib/meetingCalendar';
+import { matchesMeetingSearch } from '@/lib/meetingSearch';
 import { BackButton } from '@/components/BackButton';
 import { TargetToggleButton } from '@/components/TargetToggleButton';
 import { ConferenceLogoField } from '@/components/ConferenceLogoField';
@@ -590,6 +591,8 @@ export default function ConferenceDetailPage() {
   const [quickNoteMeeting, setQuickNoteMeeting] = useState<Meeting | null>(null);
   const [meetingViewMode, setMeetingViewMode] = useState<'table' | 'kanban' | 'calendar'>('table');
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  /** The meetings search box: narrows whichever view is drawn. */
+  const [meetingSearch, setMeetingSearch] = useState('');
   /** The calendar drawn as people rather than days — one day at a time. */
   const calendarByRep = meetingViewMode === 'calendar' && meetingGroupMode === 'rep';
   /** The one view where picking a day lights it rather than emptying the week. */
@@ -5167,6 +5170,9 @@ export default function ConferenceDetailPage() {
             if (!att) return false;
             if (!meetingFilterSeniorities.includes(effectiveSeniority(att.seniority, att.title))) return false;
           }
+          // Last, and only when there is something typed: it builds a string
+          // per meeting where the tests above read one field each.
+          if (!matchesMeetingSearch(m, meetingSearch, userOptions)) return false;
           return true;
         });
         const activePills: { label: string; shortLabel: string; onRemove: () => void }[] = [
@@ -5308,6 +5314,23 @@ export default function ConferenceDetailPage() {
                       ))}
                     </div>
                   </div>
+                  {/* Find Availability, in the same clothes as an unpicked
+                      toggle beside it: it opens a board rather than choosing
+                      a view, and a filled button in a row of outlined ones
+                      read as the thing already chosen. */}
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityOpen(true)}
+                    title="Where the team has room"
+                    className="hidden lg:inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="9" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 7v5l3 2" />
+                    </svg>
+                    Find Availability
+                  </button>
+
                   {/* A phone's two openers, icon only and in the title row.
 
                       Availability used to sit at the end of the day filters,
@@ -5405,21 +5428,44 @@ export default function ConferenceDetailPage() {
                     onBoothHoursChange={setBoothHoursOnly}
                   />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setAvailabilityOpen(true)}
-                  title="Where the team has room"
-                  /* A phone has this as an icon in the title row; here it
-                     would be a third thing competing for a line that already
-                     has to scroll. */
-                  className="hidden lg:inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-brand-secondary px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-primary transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="9" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 7v5l3 2" />
+
+                {/* Where Availability used to sit.
+
+                    The filters above answer "which of these", one field at a
+                    time; this answers "the one with Bridge in it", which is
+                    how anybody looks for a particular meeting. It narrows
+                    whichever view is drawn — the table's rows, the kanban's
+                    cards, the calendar's blocks — rather than being a search
+                    of its own. */}
+                <div className="relative flex-shrink-0 w-56">
+                  <svg
+                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
-                  Availability
-                </button>
+                  <label className="sr-only" htmlFor="meeting-search">Search meetings</label>
+                  <input
+                    id="meeting-search"
+                    type="search"
+                    value={meetingSearch}
+                    onChange={e => setMeetingSearch(e.target.value)}
+                    placeholder="Search meetings…"
+                    className="w-full rounded-lg border border-gray-200 bg-white pl-8 pr-7 py-1.5 text-xs text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent"
+                  />
+                  {meetingSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setMeetingSearch('')}
+                      aria-label="Clear search"
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Mobile row 3 — how the meetings are grouped, on its own
