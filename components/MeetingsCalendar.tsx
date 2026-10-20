@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatMeetingTime, hasNoStartTime, timeToMinutes, unscheduledLabel } from '@/lib/meetingTime';
-import { useIsPhone } from '@/lib/useIsPhone';
 import { getValuePreset, type ColorMap } from '@/lib/colors';
 import {
   SLOT_MINUTES, calendarDays, calendarPeople, cardMinutes, companyTypeOf, companyTypesPresent,
@@ -80,6 +79,38 @@ function useStickyTop(): number {
   return top;
 }
 
+/**
+ * The top padding of the box this scrolls inside.
+ *
+ * A sticky `top: 0` stops at the scrollport's CONTENT edge, not its padding
+ * edge, so a scroller with padding leaves exactly that much of a gap above a
+ * pinned heading — and the cards passing behind it show through it. The phone
+ * drawer's body has 12px of it; <main> has 16, or 24 from lg.
+ *
+ * Measured rather than named, because the padding belongs to the page that
+ * happens to be scrolling this and a constant here would go quietly wrong the
+ * day it changes.
+ */
+function useScrollerPaddingTop(ref: React.RefObject<HTMLElement | null>): number {
+  const [pad, setPad] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      for (let el = ref.current?.parentElement ?? null; el; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+          setPad(parseFloat(style.paddingTop) || 0);
+          return;
+        }
+      }
+      setPad(0);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [ref]);
+  return pad;
+}
+
 /** '7 AM', '12 PM' — the gutter's labels. */
 function hourLabel(hour: number): string {
   const h = hour % 24;
@@ -96,6 +127,19 @@ function hourLabel(hour: number): string {
  * are also a nudge, since the fix is a field on the company record.
  */
 const UNTYPED_CLASS = 'bg-white text-gray-600 border border-dashed border-gray-400';
+
+/**
+ * The three key rows, which are also the filters.
+ *
+ * A phone puts the label above what it labels, as an eyebrow: at 390px
+ * "Company type:" and the first swatch took the width between them and the
+ * rest of the row was off screen. From lg the label leads the line, which is
+ * what there is room for and what the rest of the app does.
+ */
+const KEY_ROW = 'flex flex-col gap-1.5 px-4 py-2.5 border-b border-gray-100 '
+  + 'lg:flex-row lg:items-center lg:gap-2';
+const KEY_LABEL = 'flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-gray-500 '
+  + 'lg:text-[11px] lg:font-medium lg:normal-case lg:tracking-normal';
 
 /** A neutral fill for the legend's conflict swatch, which has no value. */
 const NEUTRAL_CLASS = 'bg-brand-secondary/10 text-brand-primary border border-brand-secondary/30';
@@ -216,15 +260,33 @@ export function MeetingsCalendar({
    */
   onPickSlot?: (slot: CalendarSlotPick) => void;
 }) {
-  const isPhone = useIsPhone();
   const stickyTop = useStickyTop();
+  const phoneStackRef = useRef<HTMLDivElement>(null);
+  const scrollerPad = useScrollerPaddingTop(phoneStackRef);
+  /*
+   * Where a phone's day headings stop.
+   *
+   * Under the tab row where there is one — the same place the desktop's stop.
+   * In the tab drawer there is none, and the headings stop flush against the
+   * top of the scrolling area instead, which is what the padding is subtracted
+   * for: at 0 they stopped 12px lower and the cards showed through the strip.
+   */
+  const phoneHeadTop = stickyTop > 0 ? stickyTop : -scrollerPad;
   const [openId, setOpenId] = useState<number | null>(null);
   const [pickedPeople, setPickedPeople] = useState<Set<number>>(new Set());
   /** Types picked off the key. Null in the set is "No type set". */
   const [pickedTypes, setPickedTypes] = useState<Set<string | null>>(new Set());
-  const [openColumn, setOpenColumn] = useState<string | null>(null);
   /** The shared meeting being pointed at, if any — see `sharedIds` below. */
   const [tracedId, setTracedId] = useState<number | null>(null);
+  /**
+   * The empty half hour a phone has tapped, if any.
+   *
+   * A pointer reveals the + Meeting outline by hovering it; a finger has no
+   * hover, and a board where every empty half hour books a meeting the moment
+   * it is brushed is a board nobody can scroll. So the first tap shows the
+   * outline — one at a time — and the second takes it.
+   */
+  const [revealedSlot, setRevealedSlot] = useState<string | null>(null);
 
   const days = useMemo(
     () => calendarDays(conferenceStart, conferenceEnd, meetings),
@@ -381,7 +443,6 @@ export function MeetingsCalendar({
 
   const bandHeight = useMemo(() => untimedBandHeight(columns), [columns]);
   const openMeeting = openId != null ? meetings.find(m => m.id === openId) ?? null : null;
-  const drawerColumn = openColumn != null ? columns.find(c => c.key === openColumn) ?? null : null;
 
   // Esc closes whatever is open, innermost first.
   const closeDetail = useCallback(() => {
@@ -395,23 +456,15 @@ export function MeetingsCalendar({
       // What is inside the popup closes first, and closes itself.
       if (detailLocked) return;
       if (openId != null) closeDetail();
-      else if (openColumn != null) setOpenColumn(null);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [openId, openColumn, detailLocked, closeDetail]);
+  }, [openId, detailLocked, closeDetail]);
 
   useEffect(() => {
     if (closeSignal === 0) return;
     setOpenId(null);
-    // On a phone the column drawer is above those layers too.
-    if (isPhone) setOpenColumn(null);
-    // isPhone is read, not depended on: the signal is the event.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
-
-  // A column open on one axis means nothing on the other.
-  useEffect(() => { setOpenColumn(null); }, [axis, theDay]);
 
   const togglePerson = (id: number) => setPickedPeople(prev => {
     const next = new Set(prev);
@@ -425,8 +478,8 @@ export function MeetingsCalendar({
     return next;
   });
 
-  // Nothing to trace once the columns change under the pointer.
-  useEffect(() => { setTracedId(null); }, [axis, theDay]);
+  // Nothing to trace or reveal once the columns change under the pointer.
+  useEffect(() => { setTracedId(null); setRevealedSlot(null); }, [axis, theDay]);
 
   /**
    * Dimmed, not hidden: the board keeps its shape while one thing stands out.
@@ -558,19 +611,28 @@ export function MeetingsCalendar({
             scrolling and there is no hover to reveal anything; the + Meeting
             button above the list is already a tap away there.
           */}
-          {!phone && col.offersSlots && onPickSlot
-            && openSlots(col.meetings as CalendarMeeting[], startHour, endHour).map(start => (
+          {col.offersSlots && onPickSlot
+            && openSlots(col.meetings as CalendarMeeting[], startHour, endHour).map(start => {
+              const slotKey = `${col.key}-${start}`;
+              const revealed = revealedSlot === slotKey;
+              return (
               <button
                 key={start}
                 type="button"
-                onClick={() => onPickSlot({
-                  day: col.day,
-                  time: minutesToTime(start),
-                  personId: col.personId,
-                })}
-                aria-label={`Schedule a meeting, ${slotLabel(start, start + SLOT_MINUTES)}`}
+                onClick={() => {
+                  // A finger asks to see it first, then asks for it.
+                  if (phone && !revealed) { setRevealedSlot(slotKey); return; }
+                  onPickSlot({ day: col.day, time: minutesToTime(start), personId: col.personId });
+                }}
+                aria-label={phone && !revealed
+                  ? `Book this half hour, ${slotLabel(start, start + SLOT_MINUTES)}`
+                  : `Schedule a meeting, ${slotLabel(start, start + SLOT_MINUTES)}`}
                 title={`Schedule a meeting · ${slotLabel(start, start + SLOT_MINUTES)}`}
-                className="absolute inset-x-0 flex items-center px-0.5 py-px opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
+                data-calendar-slot={slotKey}
+                className={`absolute inset-x-0 flex items-center px-0.5 py-px transition-opacity ${
+                  phone
+                    ? (revealed ? 'opacity-100' : 'opacity-0')
+                    : 'opacity-0 hover:opacity-100 focus-visible:opacity-100'}`}
                 style={{
                   top: (start - startHour * 60) * PX_PER_MINUTE,
                   height: SLOT_MINUTES * PX_PER_MINUTE,
@@ -583,7 +645,8 @@ export function MeetingsCalendar({
                   + Meeting
                 </span>
               </button>
-            ))}
+              );
+            })}
 
           {placed.map(p => {
             const width = 100 / p.columns;
@@ -632,8 +695,8 @@ export function MeetingsCalendar({
    * configured types gets the four that are in the room.
    */
   const typeKey = typeTallies.length > 0 && (
-    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-      <span className="text-[11px] font-medium text-gray-500 flex-shrink-0">Company type:</span>
+    <div className={`${KEY_ROW} bg-gray-50/60`}>
+      <span className={KEY_LABEL}>Type</span>
       <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
         {typeTallies.map(t => {
           const on = pickedTypes.has(t.value);
@@ -680,10 +743,11 @@ export function MeetingsCalendar({
    * board is a row of noise.
    */
   const outcomeKey = (outcomesPresent.length > 0 || axis === 'rep') && (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 border-b border-gray-100">
+    <div className={KEY_ROW}>
       {outcomesPresent.length > 0 && (
         <>
-          <span className="text-[11px] font-medium text-gray-500">Outcome:</span>
+          <span className={KEY_LABEL}>Outcome</span>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           {outcomesPresent.map(outcome => (
             <span key={outcome} className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
               <span
@@ -694,6 +758,7 @@ export function MeetingsCalendar({
             </span>
           ))}
           <span className="text-[11px] text-gray-400">no dot · nothing recorded yet</span>
+          </div>
         </>
       )}
       {/* Only where it can happen: on the date axis two cards side by side
@@ -719,8 +784,8 @@ export function MeetingsCalendar({
    * what a column each already does.
    */
   const peopleFilter = axis === 'date' && whosePeople.length > 0 && (
-    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
-      <span className="text-[11px] font-medium text-gray-500 flex-shrink-0">Whose:</span>
+    <div className={KEY_ROW}>
+      <span className={KEY_LABEL}>Rep</span>
       <div className="flex-1 min-w-0 overflow-x-auto scrollbar-hide flex items-center gap-1.5">
         {whosePeople.map(p => {
           const on = pickedPeople.has(p.id);
@@ -777,44 +842,64 @@ export function MeetingsCalendar({
         </div>
       )}
 
-      {/* ── Phone: the columns as buttons, one at a time in a drawer ──
+      {/* ── Phone: one column, run end to end ──
+
           An hour grid four columns wide is unreadable at 390px, so a phone
-          picks a column and gets it in full width. */}
-      <div className="lg:hidden p-3 flex flex-col gap-2">
+          gets them stacked: Tuesday's grid, then Wednesday's, in one scroll.
+          Each heading pins to the top while its own day runs under it and is
+          pushed off by the next one, so the day a card belongs to is never
+          more than a glance away — which a board of four taps-to-open could
+          not say at all.
+
+          The rep axis stacks the same way: one day, a section per person,
+          and the name pins instead of the date. */}
+      <div className="lg:hidden" ref={phoneStackRef}>
         {axis === 'rep' && theDay && (
-          <p className="text-[11px] font-medium text-gray-500 px-1">
-            {dayParts(theDay).weekday}, {dayParts(theDay).label} — pick a person
+          <p className="text-[11px] font-medium text-gray-500 px-4 py-2 border-b border-gray-100">
+            {dayParts(theDay).weekday}, {dayParts(theDay).label}
           </p>
         )}
-        {columns.map(col => (
-          <button
-            key={col.key}
-            type="button"
-            onClick={() => setOpenColumn(col.key)}
-            className={`w-full flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-gray-300 transition-colors ${
-              axis === 'date' && dayDimmed(col.day) ? 'opacity-50' : ''}`}
-          >
-            <div className="flex-1 min-w-0">
-              {axis === 'date' ? (
-                <>
-                  <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{dayParts(col.day).weekday}</p>
-                  <p className="text-sm font-semibold text-brand-primary">{dayParts(col.day).label}</p>
-                </>
-              ) : (
-                <p className="text-sm font-semibold text-brand-primary truncate">{col.longLabel}</p>
-              )}
-            </div>
-            {axis === 'date' && isOutsideConference(col.day, conferenceStart, conferenceEnd) && (
-              <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                Outside
-              </span>
-            )}
-            <span className="text-xs font-semibold text-gray-500">{col.meetings.length}</span>
-            <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        ))}
+        {columns.map(col => {
+          const band = untimedBandHeight([col]);
+          return (
+            <section key={col.key} data-calendar-section={col.key}>
+              <div
+                className={`sticky z-10 flex items-center gap-2 border-y border-gray-100 bg-gray-50/95 px-4 py-2 backdrop-blur-sm transition-opacity ${
+                  axis === 'date' && dayDimmed(col.day) ? 'opacity-60' : ''}`}
+                style={{ top: phoneHeadTop }}
+              >
+                <p className="text-sm font-semibold text-brand-primary truncate">
+                  {col.longLabel}
+                </p>
+                {axis === 'date' && isOutsideConference(col.day, conferenceStart, conferenceEnd) && (
+                  <span className="flex-shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+                    Outside
+                  </span>
+                )}
+                <span className="ml-auto flex-shrink-0 text-[11px] font-semibold text-gray-500">
+                  {col.meetings.length === 0 ? 'Nothing booked' : col.meetings.length}
+                </span>
+              </div>
+              <div className="flex px-3 py-2">
+                {/* Padded by the band so an hour's label and its line are at
+                    the same height — the untimed stack sits above the grid
+                    inside the column beside it. */}
+                <div className="w-14 flex-shrink-0" style={{ paddingTop: band }}>
+                  <div className="relative" style={{ height: gridHeight }}>
+                    {hours.map((h, i) => (
+                      <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * HOUR_PX - 6 }}>
+                        {hourLabel(h)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0 border-l border-gray-200">
+                  {columnBody(col, true, band)}
+                </div>
+              </div>
+            </section>
+          );
+        })}
         {columns.length === 0 && (
           <p className="text-xs text-gray-400 text-center py-6">
             No internal attendees on this conference yet — add them to the conference to draw their days.
@@ -901,24 +986,6 @@ export function MeetingsCalendar({
         </div>
       </div>
 
-      {/* ── One column, on a phone ── */}
-      {drawerColumn && isPhone && (
-        <ColumnDrawer
-          column={drawerColumn}
-          columns={columns}
-          axis={axis}
-          onPick={setOpenColumn}
-          onClose={() => setOpenColumn(null)}
-          conferenceStart={conferenceStart}
-          conferenceEnd={conferenceEnd}
-          hours={hours}
-          gridHeight={gridHeight}
-          hourLabelOf={hourLabel}
-          bandHeight={untimedBandHeight([drawerColumn])}
-          body={columnBody(drawerColumn, true, untimedBandHeight([drawerColumn]))}
-        />
-      )}
-
       {/* ── The meeting, in full ── */}
       {openMeeting && (
         <DetailPopup onClose={closeDetail} locked={detailLocked}>
@@ -984,113 +1051,6 @@ function DetailPopup({ children, onClose, locked = false }: {
         </div>
       </div>
     </div>,
-    document.body,
-  );
-}
-
-/** One column, full width, with the others a tap away. */
-function ColumnDrawer({
-  column, columns, axis, onPick, onClose, conferenceStart, conferenceEnd,
-  hours, gridHeight, hourLabelOf, bandHeight, body,
-}: {
-  column: Column;
-  columns: Column[];
-  axis: CalendarAxis;
-  onPick: (key: string) => void;
-  onClose: () => void;
-  conferenceStart: string | null;
-  conferenceEnd: string | null;
-  hours: number[];
-  gridHeight: number;
-  hourLabelOf: (hour: number) => string;
-  /** The untimed stack's height, which the gutter has to clear. */
-  bandHeight: number;
-  body: ReactNode;
-}) {
-  const [mounted, setMounted] = useState(false);
-  const activeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
-  // Keep the open column's button in view as the reader moves along.
-  useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, [column.key]);
-  if (!mounted) return null;
-
-  const parts = dayParts(column.day);
-  return createPortal(
-    <>
-      <div className="fixed inset-0 bg-black/30 z-[110]" onClick={onClose} aria-hidden />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={axis === 'date' ? `Meetings on ${parts.weekday} ${parts.label}` : `${column.longLabel} on ${parts.weekday} ${parts.label}`}
-        className="drawer-mobile-responsive fixed inset-x-0 bottom-0 z-[115] h-[82vh] rounded-t-2xl border border-gray-200 bg-white flex flex-col overflow-hidden"
-      >
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100 flex-shrink-0">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-              {axis === 'date' ? parts.weekday : `${parts.weekday}, ${parts.label}`}
-            </p>
-            <p className="text-sm font-semibold text-brand-primary truncate">
-              {axis === 'date' ? parts.label : column.longLabel}
-              {axis === 'date' && isOutsideConference(column.day, conferenceStart, conferenceEnd) && (
-                <span className="ml-1.5 align-middle text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
-                  Outside
-                </span>
-              )}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex-shrink-0 text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        {/* The other columns, to move between them without closing. */}
-        <div className="flex gap-1.5 px-4 py-2 border-b border-gray-100 overflow-x-auto scrollbar-hide flex-shrink-0">
-          {columns.map(c => {
-            const on = c.key === column.key;
-            return (
-              <button
-                key={c.key}
-                ref={on ? activeRef : undefined}
-                type="button"
-                onClick={() => onPick(c.key)}
-                aria-pressed={on}
-                className={`flex-shrink-0 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                  on ? 'bg-brand-secondary text-white border-brand-secondary' : 'bg-white text-gray-600 border-gray-200'}`}
-              >
-                {c.shortLabel}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="flex p-3">
-            {/* Padded by the band, so an hour's label and its line are at the
-                same height — the untimed stack sits above the grid inside the
-                column beside it. */}
-            <div className="w-14 flex-shrink-0" style={{ paddingTop: bandHeight }}>
-              <div className="relative" style={{ height: gridHeight }}>
-                {hours.map((h, i) => (
-                  <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * 60 - 6 }}>
-                    {hourLabelOf(h)}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="flex-1 min-w-0 border-l border-gray-200">{body}</div>
-          </div>
-        </div>
-      </div>
-    </>,
     document.body,
   );
 }

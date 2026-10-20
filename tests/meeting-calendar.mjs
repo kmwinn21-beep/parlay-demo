@@ -444,9 +444,21 @@ console.log('\n— and the board drawn from it —');
   eq('past six columns the board scrolls', /const scrolls = columns\.length > COLUMNS_BEFORE_SCROLL;/.test(cal), true);
   eq('  with the hour gutter pinned', /sticky left-0 bg-white z-10/.test(cal), true);
 
-  // A phone takes one column at a time, whichever the columns are.
-  eq('a phone picks a column', /onClick=\{\(\) => setOpenColumn\(col\.key\)\}/.test(cal), true);
-  eq('  and the drawer’s chips are the other columns', /\{columns\.map\(c => \{/.test(cal), true);
+  // A phone runs the columns end to end instead, each with its own heading.
+  eq('a phone stacks the columns', /<section key=\{col\.key\} data-calendar-section=\{col\.key\}>/.test(cal), true);
+  eq('  and each heading pins while its own column runs under it',
+    /className=\{`sticky z-10 flex items-center gap-2 border-y/.test(cal), true);
+  /*
+   * Reported: a strip of the grid showed between the tab bar and the pinned
+   * date. A sticky top of 0 stops at the scrollport's CONTENT edge, so the
+   * drawer body's 12px of padding was a gap the cards passed through. The
+   * padding is measured off whatever is scrolling this, rather than named
+   * here, and subtracted where there is no tab row to pin under instead.
+   */
+  eq('    flush to the top of the scrolling area',
+    /const phoneHeadTop = stickyTop > 0 \? stickyTop : -scrollerPad;/.test(cal), true);
+  eq('    with the padding measured, not assumed',
+    /if \(style\.overflowY === 'auto' \|\| style\.overflowY === 'scroll'\) \{/.test(cal), true);
 }
 
 console.log('\n— the view, wired in —');
@@ -483,23 +495,32 @@ console.log('\n— the view, wired in —');
    * between; the calendar is a different thing on a phone, so the choice is
    * offered on the row the grouping toggle sits on.
    */
-  // The phone row the grouping toggle sits on, which is where the choice is.
+  // The phone row the grouping toggle sits on. Cards or Calendar used to
+  // share it; that choice is an icon in the title row now, where the things
+  // that OPEN something live.
   const rowStart = page.indexOf('<ScrollRow className="lg:hidden mt-2"');
   const phoneToggle = page.slice(rowStart, page.indexOf('</ScrollRow>', rowStart));
   eq('the phone row exists', rowStart > 0, true);
-  eq('a phone is offered Cards or Calendar',
-    /label: 'Cards'/.test(phoneToggle) && /label: 'Calendar'/.test(phoneToggle), true);
-  eq('  beside the grouping toggle', /<GroupToggle short \/>/.test(phoneToggle), true);
-  eq('  and the buttons set the view', /onClick=\{\(\) => setMeetingViewMode\(opt\.key\)\}/.test(phoneToggle), true);
+  eq('  and holds the grouping toggle', /<GroupToggle short \/>/.test(phoneToggle), true);
+  eq('a phone switches view from the title row',
+    /onClick=\{\(\) => setMeetingViewMode\(m => \(m === 'calendar' \? 'table' : 'calendar'\)\)\}/.test(page), true);
+  eq('  as an icon, with the word in its label',
+    /aria-label=\{meetingViewMode === 'calendar' \? 'Show the cards' : 'Show the calendar'\}/.test(page), true);
+  eq('  and so is Availability', /aria-label="Availability"/.test(page), true);
+  eq('  both left of the kebab',
+    page.indexOf('aria-label="Availability"') < page.indexOf('title="Meeting actions"'), true);
+  // Which leaves the word-and-all button to the desktop row.
+  eq('  where the desktop keeps the labelled one',
+    /className="hidden lg:inline-flex flex-shrink-0 items-center gap-1\.5 rounded-lg bg-brand-secondary/.test(page), true);
 
   /*
-   * A phone gets one COLUMN in a drawer — a day on the date axis, a person
-   * on the rep one — with the others as chips to move between them.
+   * A phone runs the columns end to end, one scroll, each heading pinning
+   * while its own column passes under it — a day at a time behind a tap said
+   * nothing about where that day sat in the week.
    */
-  eq('a phone opens a column in a drawer', /<ColumnDrawer/.test(cal), true);
-  eq('  and the grid is desktop only', /hidden lg:block p-4/.test(cal), true);
-  eq('  with the columns as buttons below it', /onClick=\{\(\) => setOpenColumn\(col\.key\)\}/.test(cal), true);
-  eq('  and the others inside it', /onClick=\{\(\) => onPick\(c\.key\)\}/.test(cal), true);
+  eq('the grid is desktop only', /hidden lg:block p-4/.test(cal), true);
+  eq('  and the stack is the phone’s', /<div className="lg:hidden" ref=\{phoneStackRef\}>/.test(cal), true);
+  eq('  with no drawer left to open', /ColumnDrawer/.test(cal), false);
 }
 
 console.log('\n— and what the card opens, opens where the calendar is —');

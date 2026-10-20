@@ -54,6 +54,70 @@ export const WINDOW_OPTIONS: Array<{ value: number; label: string }> =
     return { value, label: minutesToLabel(value) };
   });
 
+/* ── A colour per day ─────────────────────────────────────────────────── */
+
+/**
+ * What one day's slots wear.
+ *
+ * Every time on the board looked the same, so a column of forty of them read
+ * as one list and the day headings were the only thing dividing it — which is
+ * exactly the thing a reader scrolling past stops seeing. A hue per day makes
+ * the division visible without another line.
+ *
+ * The conference tabs' palette, so the two places this app colours by
+ * position agree. Written out in full because Tailwind reads class names out
+ * of the source: a template string generates nothing and every pill comes out
+ * unstyled.
+ *
+ * Ordered to keep neighbours apart rather than to match the tabs' order —
+ * rose, sky, indigo, violet in a row would give three blues to three
+ * consecutive days of a conference.
+ */
+export interface DayHue {
+  /** The slot button. */
+  pill: string;
+  /** The count beside the day's heading. */
+  badge: string;
+  /** The heading itself. */
+  heading: string;
+}
+
+export const DAY_HUES: DayHue[] = [
+  { pill: 'border-rose-200 bg-rose-50 text-rose-900 hover:border-rose-500 hover:bg-rose-100',
+    badge: 'border-rose-200 bg-rose-50 text-rose-700', heading: 'text-rose-700' },
+  { pill: 'border-teal-200 bg-teal-50 text-teal-900 hover:border-teal-500 hover:bg-teal-100',
+    badge: 'border-teal-200 bg-teal-50 text-teal-700', heading: 'text-teal-700' },
+  { pill: 'border-violet-200 bg-violet-50 text-violet-900 hover:border-violet-500 hover:bg-violet-100',
+    badge: 'border-violet-200 bg-violet-50 text-violet-700', heading: 'text-violet-700' },
+  { pill: 'border-amber-200 bg-amber-50 text-amber-900 hover:border-amber-500 hover:bg-amber-100',
+    badge: 'border-amber-200 bg-amber-50 text-amber-700', heading: 'text-amber-700' },
+  { pill: 'border-sky-200 bg-sky-50 text-sky-900 hover:border-sky-500 hover:bg-sky-100',
+    badge: 'border-sky-200 bg-sky-50 text-sky-700', heading: 'text-sky-700' },
+  { pill: 'border-pink-200 bg-pink-50 text-pink-900 hover:border-pink-500 hover:bg-pink-100',
+    badge: 'border-pink-200 bg-pink-50 text-pink-700', heading: 'text-pink-700' },
+  { pill: 'border-emerald-200 bg-emerald-50 text-emerald-900 hover:border-emerald-500 hover:bg-emerald-100',
+    badge: 'border-emerald-200 bg-emerald-50 text-emerald-700', heading: 'text-emerald-700' },
+  { pill: 'border-indigo-200 bg-indigo-50 text-indigo-900 hover:border-indigo-500 hover:bg-indigo-100',
+    badge: 'border-indigo-200 bg-indigo-50 text-indigo-700', heading: 'text-indigo-700' },
+  { pill: 'border-yellow-200 bg-yellow-50 text-yellow-900 hover:border-yellow-500 hover:bg-yellow-100',
+    badge: 'border-yellow-200 bg-yellow-50 text-yellow-700', heading: 'text-yellow-700' },
+  { pill: 'border-blue-200 bg-blue-50 text-blue-900 hover:border-blue-500 hover:bg-blue-100',
+    badge: 'border-blue-200 bg-blue-50 text-blue-700', heading: 'text-blue-700' },
+];
+
+/**
+ * The hue a day wears, by where it falls in the conference.
+ *
+ * Keyed off the day's place in the conference's own dates rather than its
+ * place in whatever is on screen, so Wednesday is the same colour whether
+ * every day is showing or only Wednesday is. A conference longer than the
+ * palette starts round again, which is ten days later and nowhere near
+ * anything it could be confused with.
+ */
+export function dayHue(index: number): DayHue {
+  return DAY_HUES[((index % DAY_HUES.length) + DAY_HUES.length) % DAY_HUES.length];
+}
+
 /** A column on the board: id is the config_options id the columns key on. */
 export type AvailabilityPerson = { id: number; name: string; initials: string };
 
