@@ -603,6 +603,17 @@ console.log('\n— and what the card opens, opens where the calendar is —');
    * themselves; without this, Escape closed the panel and the popup under it
    * at once, losing the meeting as well as the notes.
    */
+  /*
+   * And it is as wide as the same card is in the dashboard's meetings
+   * drawer, which is the size people read it at everywhere else: that drawer
+   * is 560px with 16px of padding either side, so the card's box is 528 —
+   * plus this frame's two 1px borders. At max-w-md it was 446, and a card
+   * holding a name, a title, a time, a place and six pills spent the
+   * difference on wrapping.
+   */
+  eq('the popup is the width of the card it holds',
+    /className="relative w-full max-w-\[530px\] max-h-\[85vh\]/.test(cal), true);
+
   eq('what is inside the popup owns Escape', /if \(detailLocked\) return;/.test(cal), true);
   eq('  and the click outside', /onClick=\{locked \? undefined : onClose\}/.test(cal), true);
   eq('  while it is a notes panel or the edit form',
