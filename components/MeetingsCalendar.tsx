@@ -1073,7 +1073,15 @@ function DetailPopup({ children, onClose, locked = false }: {
         role="dialog"
         aria-modal="true"
         aria-label="Meeting details"
-        className="relative w-full max-w-md max-h-[85vh] overflow-visible rounded-2xl bg-white shadow-2xl border border-gray-200"
+        /*
+         * As wide as the same card is in the dashboard's meetings drawer,
+         * which is the size people read it at everywhere else: that drawer is
+         * 560px with 16px of padding either side, so the card's own box is
+         * 528 — plus this frame's two 1px borders. At max-w-md it was 446,
+         * and a card holding a name, a title, a time, a place and six pills
+         * spent the difference on wrapping.
+         */
+        className="relative w-full max-w-[530px] max-h-[85vh] overflow-visible rounded-2xl bg-white shadow-2xl border border-gray-200"
       >
         <div className="max-h-[85vh] overflow-y-auto rounded-2xl">
         {/* Outside the card's corner, because the card already has its notes
