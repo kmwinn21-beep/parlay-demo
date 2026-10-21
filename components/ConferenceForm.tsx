@@ -365,7 +365,11 @@ export function ConferenceForm() {
             onSeasonChange={setSelectedSeasonId}
           />
 
-          <div className="md:col-span-2" ref={industryDropdownRef}>
+          {/* Industry Focus and Conference Strategy share a row from md: what
+              the conference is about and why the team is going are the two
+              halves of the same question, and each was taking a full row to
+              hold one control. */}
+          <div ref={industryDropdownRef}>
             <label className="label flex items-center gap-2">
               Industry Focus
               {selectedSeries && <span className="text-xs font-normal text-teal-600">• Synced to series</span>}
@@ -407,6 +411,19 @@ export function ConferenceForm() {
               )}
             </div>
           </div>
+
+          {conferenceMode === 'new' && (
+          <div>
+            <label className="label">Conference Strategy *</label>
+            <select {...register('conference_strategy_type_id', { required: conferenceMode === 'new' ? 'Conference strategy is required' : false })} className="input-field">
+              <option value="">Select conference strategy...</option>
+              {conferenceStrategyOptions.map((opt) => <option key={opt.id} value={String(opt.id)}>{opt.value}</option>)}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Select the primary reason your team is attending this conference. This helps Parlay evaluate the event using the right success lens.</p>
+            {conferenceStrategyOptions.length === 0 && <p className="text-xs text-amber-600 mt-1">No Conference Strategy options configured. Configure in Admin Settings → Types.</p>}
+            {errors.conference_strategy_type_id && <p className="text-red-500 text-xs mt-1">{errors.conference_strategy_type_id.message}</p>}
+          </div>
+          )}
 
           <div>
             <label className="label flex items-center gap-2">
@@ -656,19 +673,6 @@ export function ConferenceForm() {
               )}
             </div>
           </div>
-
-          {conferenceMode === 'new' && (
-          <div className="md:col-span-2">
-            <label className="label">Conference Strategy *</label>
-            <select {...register('conference_strategy_type_id', { required: conferenceMode === 'new' ? 'Conference strategy is required' : false })} className="input-field">
-              <option value="">Select conference strategy...</option>
-              {conferenceStrategyOptions.map((opt) => <option key={opt.id} value={String(opt.id)}>{opt.value}</option>)}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">Select the primary reason your team is attending this conference. This helps Parlay evaluate the event using the right success lens.</p>
-            {conferenceStrategyOptions.length === 0 && <p className="text-xs text-amber-600 mt-1">No Conference Strategy options configured. Configure in Admin Settings → Types.</p>}
-            {errors.conference_strategy_type_id && <p className="text-red-500 text-xs mt-1">{errors.conference_strategy_type_id.message}</p>}
-          </div>
-          )}
 
           <div className="md:col-span-2">
             <label className="label">Notes</label>
