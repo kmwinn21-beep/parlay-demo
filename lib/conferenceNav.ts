@@ -32,7 +32,14 @@ export interface ConferenceOption {
   name: string;
   start_date: string;
   end_date: string;
+  location?: string | null;
   internal_attendees?: string | null;
+  /* What the active-conference pick reads — Market Coverage, and the three
+     fields that decide which stage a conference is in. */
+  territory_scope?: string | null;
+  post_conference_days?: number | null;
+  stage_override?: string | null;
+  is_historical?: number | null;
 }
 
 export interface ConferenceLoad {

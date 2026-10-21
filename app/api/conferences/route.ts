@@ -240,9 +240,20 @@ export async function GET(request: NextRequest) {
     // Excludes conferences still only being evaluated in a future year's Plan tab
     // (committed_to_program = 0) — they don't have a real Conference Details
     // profile yet, so there's nowhere for this menu to send the user.
+    //
+    // It also answers the active-conference pick (see lib/activeConference),
+    // which is what the columns past internal_attendees are for. The stage a
+    // conference is in decides which bucket it falls in, and a row without
+    // stage_override, is_historical or post_conference_days was staged by its
+    // dates alone — so a conference held at a stage by hand, or marked
+    // historical, was auto-set as though it were neither, and one set this way
+    // carried no location. Scalar columns on a row already being read; the
+    // weight this query avoids is the JOIN and the COUNT.
     if (request.nextUrl.searchParams.get('nav') === '1') {
       const result = await db.execute({
-        sql: `SELECT id, name, start_date, end_date, internal_attendees FROM conferences WHERE committed_to_program = 1 ORDER BY start_date DESC`,
+        sql: `SELECT id, name, start_date, end_date, location, internal_attendees, territory_scope,
+                     post_conference_days, stage_override, is_historical
+              FROM conferences WHERE committed_to_program = 1 ORDER BY start_date DESC`,
         args: [],
       });
       return NextResponse.json(result.rows.map((r) => ({ ...r })), {

@@ -4,12 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { loadConferenceNav } from '@/lib/conferenceNav';
 import { useUser } from '@/components/UserContext';
 import { useActiveConference, type ActiveConference } from '@/components/ActiveConferenceContext';
-import { computeConferenceStage, type ConferenceStage } from '@/lib/conference-stage';
-
-function safeConferenceStage(c: ConferenceRow): ConferenceStage {
-  if (c.is_historical) return 'closed';
-  return computeConferenceStage(c);
-}
+import { attendeeNames, candidateStage, pickActiveConference } from '@/lib/activeConference';
 
 interface ConferenceRow {
   id: number;
@@ -18,6 +13,7 @@ interface ConferenceRow {
   end_date: string;
   location: string | null;
   internal_attendees: string | null;
+  territory_scope?: string | null;
   post_conference_days?: number | null;
   stage_override?: string | null;
   is_historical?: number | null;
@@ -37,7 +33,13 @@ export function SetConferenceButton() {
   const [panelLoading, setPanelLoading] = useState(false);
   const autoSetAttempted = useRef(false);
 
-  // Auto-set: runs once when user becomes available, only if not already manually set
+  /*
+   * Auto-set: once, when the user lands, unless they have chosen one here.
+   *
+   * The rules are in lib/activeConference — two passes, the first over the
+   * conferences this person is an internal attendee of and the second over
+   * the whole program — so they can be read and tested without a browser.
+   */
   useEffect(() => {
     if (!user || isManuallySet || autoSetAttempted.current) return;
     autoSetAttempted.current = true;
@@ -50,52 +52,18 @@ export function SetConferenceButton() {
            answers the second one from memory. */
         const { conferences, failed } = await loadConferenceNav();
         if (failed) return;
-        const data = conferences as ConferenceRow[];
-        const userNames = [user.displayName, user.repName]
-          .filter(Boolean)
-          .map(s => s!.trim().toLowerCase());
-        if (userNames.length === 0) return;
-
-        const isUserInternal = (conf: ConferenceRow) => {
-          if (!conf.internal_attendees) return false;
-          const attendees = conf.internal_attendees.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-          return userNames.some(n => attendees.includes(n));
-        };
-
-        // Priority 1: in-progress conference where user is internal attendee
-        const inProgress = data
-          .filter(c => !c.is_historical && safeConferenceStage(c) === 'in_progress' && isUserInternal(c));
-        if (inProgress.length > 0) {
-          const conf = inProgress.sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
-          setActiveConference(
-            { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: conf.location ?? null },
-            false,
-          );
-          return;
-        }
-
-        // Priority 2: earliest upcoming conference where user is internal attendee
-        const upcoming = data
-          .filter(c => !c.is_historical && safeConferenceStage(c) === 'planning' && isUserInternal(c));
-        if (upcoming.length > 0) {
-          const conf = upcoming.sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
-          setActiveConference(
-            { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: conf.location ?? null },
-            false,
-          );
-          return;
-        }
-
-        // Priority 3: most recent past conference where user is internal attendee
-        const past = data
-          .filter(c => isUserInternal(c) && (c.is_historical || ['post_conference', 'closed'].includes(safeConferenceStage(c))));
-        if (past.length > 0) {
-          const conf = past.sort((a, b) => b.start_date.localeCompare(a.start_date))[0];
-          setActiveConference(
-            { id: conf.id, name: conf.name, start_date: conf.start_date, end_date: conf.end_date, location: conf.location ?? null },
-            false,
-          );
-        }
+        const conf = pickActiveConference(conferences as ConferenceRow[], attendeeNames(user));
+        if (!conf) return;
+        setActiveConference(
+          {
+            id: conf.id,
+            name: conf.name,
+            start_date: conf.start_date,
+            end_date: conf.end_date,
+            location: conf.location ?? null,
+          },
+          false,
+        );
       } catch {}
     })();
   }, [user, isManuallySet, setActiveConference]);
@@ -176,7 +144,7 @@ export function SetConferenceButton() {
               ) : (
                 <>
                   {(['in_progress', 'planning', 'post_conference', 'closed'] as const).map(groupStage => {
-                    const group = panelConferences.filter(c => safeConferenceStage(c) === groupStage);
+                    const group = panelConferences.filter(c => candidateStage(c) === groupStage);
                     if (group.length === 0) return null;
                     const groupLabel = groupStage === 'in_progress' ? 'In Progress'
                       : groupStage === 'planning' ? 'Upcoming'
