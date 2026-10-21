@@ -161,7 +161,28 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <ChatPanelProvider>
       <FloatingNavProvider>
       <BottomNavProvider>
-        <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-gray-50">
+        {/*
+          Pinned to the screen rather than measured in viewport units.
+
+          Reported from an iPhone with the app on the Home Screen: the last
+          62px of the screen were the body's background, with the shell —
+          and so the page — stopping short of it. Measured off the
+          screenshot: the gap is exactly env(safe-area-inset-top).
+
+          That is iOS's standalone bug. With apple-mobile-web-app-status-bar-
+          style=black-translucent the page is laid out from the PHYSICAL top
+          of the screen, under the clock, but `100vh` and `100dvh` are still
+          computed as the screen MINUS the status bar. A shell that is one
+          viewport tall therefore ends one status bar short of the bottom.
+
+          `inset-0` has no such arithmetic in it: the shell is pinned to all
+          four edges of the initial containing block, which in this mode is
+          the whole screen. Whatever the insets turn out to be, the shell
+          reaches them — the header still pads itself by the top inset and
+          <main> by the bottom one, so nothing lands under the clock or the
+          home indicator.
+        */}
+        <div className="fixed inset-0 flex overflow-hidden bg-gray-50">
           {/* Sidebar — desktop only */}
           <div className="hidden lg:flex">
             <Sidebar />
@@ -239,7 +260,8 @@ function EmbedChecker({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   if (searchParams.get('embed') === 'true') {
     // Render only the page content with no chrome (sidebar, header, nav, footer)
-    return <main className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
+    // Pinned for the same reason the shell is — see the comment there.
+    return <main className="fixed inset-0 overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
   }
   return <AppShellInner>{children}</AppShellInner>;
 }
