@@ -112,30 +112,38 @@ console.log('\n— which days the week shows —');
 
 console.log('\n— which hours —');
 {
-  // Opens on the earliest and closes after the latest, with an hour of air:
-  // a fixed midnight-to-midnight grid is 24 rows of which four are used.
-  eq('an hour either side of the day',
+  /*
+   * The working day is the floor, not the fallback. It used to open an hour
+   * before the earliest meeting and close an hour after the latest, which on
+   * a day with meetings at 9 and 10 drew a grid that stopped at 11am — no
+   * afternoon to book into and nothing saying the afternoon was free.
+   */
+  eq('seven to seven, whatever is in it',
     hourWindow([mtg('a', '2026-10-21', '09:00', 30), mtg('b', '2026-10-21', '16:00', 30)]),
-    { startHour: 8, endHour: 18 });
-  // The last meeting's END decides the bottom, not its start.
-  eq('  measured to the end of the last meeting',
-    hourWindow([mtg('a', '2026-10-21', '16:45', 60)]).endHour, 19);
-  // A 15-minute meeting is drawn as 30, so the window has to allow for that.
-  eq('  including the height a quarter-hour is drawn at',
-    hourWindow([mtg('a', '2026-10-21', '16:45', 15)]).endHour, 19);
-
-  eq('nothing timed is a working day', hourWindow([]), { startHour: 8, endHour: 18 });
+    { startHour: 7, endHour: 19 });
+  eq('nothing timed is the same day', hourWindow([]), { startHour: 7, endHour: 19 });
   eq('  and so is a day of untimed meetings',
     hourWindow([mtg('a', '2026-10-21', 'tbd'), mtg('b', '2026-10-21', 'booth')]),
-    { startHour: 8, endHour: 18 });
+    { startHour: 7, endHour: 19 });
+  eq('  and so is a single meeting in the middle of it',
+    hourWindow([mtg('a', '2026-10-21', '09:00', 30)]), { startHour: 7, endHour: 19 });
 
-  // One meeting must not leave a grid two rows tall that reads as a broken
-  // table, and midnight must not produce a negative first hour.
-  eq('never fewer than four hours', (() => {
-    const w = hourWindow([mtg('a', '2026-10-21', '09:00', 30)]);
-    return w.endHour - w.startHour >= 4;
-  })(), true);
-  eq('  and never before midnight', hourWindow([mtg('a', '2026-10-21', '00:15', 30)]).startHour, 0);
+  // It only ever grows, and only for something actually booked out there.
+  eq('an early meeting opens it earlier',
+    hourWindow([mtg('a', '2026-10-21', '06:30', 30)]).startHour, 6);
+  eq('  a late one closes it later',
+    hourWindow([mtg('a', '2026-10-21', '19:30', 30)]).endHour, 20);
+  // The last meeting's END decides the bottom, not its start.
+  eq('  measured to the end of the last meeting',
+    hourWindow([mtg('a', '2026-10-21', '18:45', 60)]).endHour, 20);
+  // A 15-minute meeting is drawn as 30, so the window has to allow for that.
+  eq('  including the height a quarter-hour is drawn at',
+    hourWindow([mtg('a', '2026-10-21', '18:45', 15)]).endHour, 20);
+  eq('  and a 7am meeting changes nothing',
+    hourWindow([mtg('a', '2026-10-21', '07:00', 30)]).startHour, 7);
+
+  // Midnight must not produce a negative first hour, nor the last one a 25th.
+  eq('never before midnight', hourWindow([mtg('a', '2026-10-21', '00:15', 30)]).startHour, 0);
   eq('  nor past it', hourWindow([mtg('a', '2026-10-21', '23:30', 60)]).endHour, 24);
 }
 
