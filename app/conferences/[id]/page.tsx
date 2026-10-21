@@ -5573,6 +5573,14 @@ export default function ConferenceDetailPage() {
                 });
                 setNewMeetingOpen(true);
               }}
+              /* And the same form from the empty state, with nothing picked
+                 off a board to prefill — the conference is this one and the
+                 rep is whoever is signed in, both of which the form does on
+                 its own. Closed logging leaves the empty state as text. */
+              onNewMeeting={newMeetingBlocked ? undefined : () => {
+                setMeetingPrefill(null);
+                setNewMeetingOpen(true);
+              }}
               onQuickNote={m => setQuickNoteMeeting(m)}
               showAttendeeAvatar
               meetings={filteredMeetings}
