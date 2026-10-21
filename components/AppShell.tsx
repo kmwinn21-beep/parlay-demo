@@ -14,6 +14,7 @@ import { UserProvider } from './UserContext';
 import { TrialBanner } from './TrialBanner';
 import ImpersonationBanner from './ImpersonationBanner';
 import { OnboardingProvider } from '@/lib/OnboardingContext';
+import { useViewportOverhang } from '@/lib/useViewportOverhang';
 import { WelcomeInterstitial } from './onboarding/WelcomeInterstitial';
 import { UpgradeModalProvider } from '@/lib/UpgradeModalContext';
 import { PlanSelectionModal } from './PlanSelectionModal';
@@ -162,27 +163,21 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <FloatingNavProvider>
       <BottomNavProvider>
         {/*
-          Pinned to the screen rather than measured in viewport units.
+          The screen, not the viewport — see .app-viewport and
+          useViewportOverhang.
 
           Reported from an iPhone with the app on the Home Screen: the last
-          62px of the screen were the body's background, with the shell —
-          and so the page — stopping short of it. Measured off the
-          screenshot: the gap is exactly env(safe-area-inset-top).
+          62px of the screen were the body's background, with the page
+          stopping short of it. 62px is that phone's status bar, and on iOS
+          standalone the layout viewport is the screen minus exactly that
+          while the page is laid out from the physical top — so `h-dvh`,
+          `h-screen`, `100%` and a fixed `bottom: 0` all land in the same
+          wrong place. The shell measures the difference instead and adds it.
 
-          That is iOS's standalone bug. With apple-mobile-web-app-status-bar-
-          style=black-translucent the page is laid out from the PHYSICAL top
-          of the screen, under the clock, but `100vh` and `100dvh` are still
-          computed as the screen MINUS the status bar. A shell that is one
-          viewport tall therefore ends one status bar short of the bottom.
-
-          `inset-0` has no such arithmetic in it: the shell is pinned to all
-          four edges of the initial containing block, which in this mode is
-          the whole screen. Whatever the insets turn out to be, the shell
-          reaches them — the header still pads itself by the top inset and
-          <main> by the bottom one, so nothing lands under the clock or the
-          home indicator.
+          The insets are still paid for where they hide something: the header
+          pads by the top one, <main>'s last gutter by the bottom one.
         */}
-        <div className="fixed inset-0 flex overflow-hidden bg-gray-50">
+        <div className="app-viewport flex overflow-hidden bg-gray-50">
           {/* Sidebar — desktop only */}
           <div className="hidden lg:flex">
             <Sidebar />
@@ -260,14 +255,17 @@ function EmbedChecker({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   if (searchParams.get('embed') === 'true') {
     // Render only the page content with no chrome (sidebar, header, nav, footer)
-    // Pinned for the same reason the shell is — see the comment there.
-    return <main className="fixed inset-0 overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
+    // Covers the screen for the same reason the shell does — see there.
+    return <main className="app-viewport overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
   }
   return <AppShellInner>{children}</AppShellInner>;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // Every path below — the shell, the embed, the auth pages — is laid out
+  // against this, so it is measured once here rather than per branch.
+  useViewportOverhang();
 
   // Auth pages render without the shell (no sidebar/header/nav)
   // Exception: /auth/account is a protected app page that needs the full shell

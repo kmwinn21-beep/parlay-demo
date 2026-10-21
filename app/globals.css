@@ -354,6 +354,28 @@ h1, h2, h3 {
 }
 
 /**
+ * The app shell, covering the screen rather than the layout viewport.
+ *
+ * Pinned to three edges and given the height of the fourth, because on iOS
+ * standalone the fourth edge is in the wrong place: see useViewportOverhang
+ * for the bug and the measurement. --viewport-overhang is 0 wherever the two
+ * agree, so this is `height: 100%` in every browser but that one.
+ *
+ * A class rather than `fixed inset-0` on the element, deliberately. That pair
+ * of utilities is what the rule above keys the status-bar padding off, and
+ * the shell is the one full-screen box that must NOT have it — the header
+ * pays for the inset itself, and 62px of padding above it left the mobile
+ * header looking twice its height with the fill of the status bar missing.
+ */
+.app-viewport {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100% + var(--viewport-overhang, 0px));
+}
+
+/**
  * The same clearance for an overlay that is not `inset-0`.
  *
  * Opt-in, because a top-anchored drawer that is not full-viewport has no
