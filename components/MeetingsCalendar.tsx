@@ -249,7 +249,7 @@ export function MeetingsCalendar({
   meetings, conferenceStart, conferenceEnd, userOptions, colorMap, renderDetail,
   companyTypeOptions = [], companyTypeColorMap = {},
   axis = 'date', internalAttendees = null, repDay = null, dimDays = [], layout = 'auto',
-  collapsibleSections = false,
+  collapsibleSections = false, showOutcomeKey = true,
   closeSignal = 0, detailLocked = false, onDetailClose, onPickSlot,
 }: {
   meetings: Meeting[];
@@ -295,6 +295,15 @@ export function MeetingsCalendar({
    * dim, because a folded day still says it is there.
    */
   collapsibleSections?: boolean;
+  /**
+   * Whether to draw the outcome key.
+   *
+   * On where the board is the conference's own record of what happened. Off
+   * in the dashboard's drawer, which is read mid-conference to find what is
+   * next: three key rows above a 560px board is most of the first screen,
+   * and the dot on a card says the same thing in place.
+   */
+  showOutcomeKey?: boolean;
   /**
    * The days the picker above has lit, if any.
    *
@@ -865,7 +874,7 @@ export function MeetingsCalendar({
    * meeting is still to happen, and a key to marks that are nowhere on the
    * board is a row of noise.
    */
-  const outcomeKey = (outcomesPresent.length > 0 || axis === 'rep') && (
+  const outcomeKey = showOutcomeKey && (outcomesPresent.length > 0 || axis === 'rep') && (
     <div className={KEY_ROW}>
       {outcomesPresent.length > 0 && (
         <>

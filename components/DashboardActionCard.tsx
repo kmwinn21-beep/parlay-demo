@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { BoothInteractionPicker } from './BoothInteractionPicker';
 import { BatchCardScanModal, makeCard, type ScannedCard, type CardDraft } from './BatchCardScanModal';
@@ -1059,27 +1059,40 @@ export function TouchpointQuickModal({ onClose, ...defaults }: {
  * animating.
  */
 /**
- * One segmented control, three times over.
+ * One segmented control, twice over.
  *
- * The drawer's three questions are different ones — WHOSE meetings, WHICH of
- * them, and HOW they are drawn — so they are three controls with gaps
- * between them rather than seven buttons in one strip, which would read as
- * one question with seven answers.
+ * The drawer asks two different things — WHOSE meetings, and HOW they are
+ * drawn — so they are two controls with a gap between them rather than four
+ * buttons in one strip, which would read as one question with four answers.
+ *
+ * An option is a key, something to put in the button, and a name for it. The
+ * name is the button's title and its label for a screen reader, which is
+ * what makes an icon-only option legible at all: Calendar and Cards are two
+ * drawings of the same meetings, and a picture of a grid says that in less
+ * than a quarter of the width the word does.
  */
+interface DrawerToggleOption<T extends string> {
+  key: T;
+  label: ReactNode;
+  name: string;
+}
+
 function DrawerToggle<T extends string>({ value, options, onChange }: {
   value: T;
-  options: ReadonlyArray<readonly [T, string]>;
+  options: ReadonlyArray<DrawerToggleOption<T>>;
   onChange: (value: T) => void;
 }) {
   return (
     <div className="inline-flex flex-shrink-0 rounded-lg border border-gray-200 overflow-hidden">
-      {options.map(([key, label], i) => (
+      {options.map(({ key, label, name }, i) => (
         <button
           key={key}
           type="button"
           onClick={() => onChange(key)}
           aria-pressed={value === key}
-          className={`px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors duration-200 ease-out ${
+          aria-label={name}
+          title={name}
+          className={`flex items-center justify-center px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors duration-200 ease-out ${
             i > 0 ? 'border-l border-gray-200' : ''
           } ${value === key ? 'bg-brand-secondary text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
         >
@@ -1089,6 +1102,28 @@ function DrawerToggle<T extends string>({ value, options, onChange }: {
     </div>
   );
 }
+
+/** The two drawings, as icons: a month grid, and a list of rows. */
+const VIEW_OPTIONS = [
+  {
+    key: 'calendar' as const,
+    name: 'Calendar',
+    label: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
+    key: 'cards' as const,
+    name: 'Cards',
+    label: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    ),
+  },
+];
 
 export function DashboardActionCard() {
   const { user } = useUser();
@@ -1110,8 +1145,6 @@ export function DashboardActionCard() {
   const [attendeesOpen, setAttendeesOpen] = useState(false);
   const [drawerDateFilter, setDrawerDateFilter] = useState<string[]>([]);
   const [drawerBoothOnly, setDrawerBoothOnly] = useState(false);
-  /** Upcoming by default: at a live conference, what is next is the question. */
-  const [drawerScope, setDrawerScope] = useState<'upcoming' | 'all'>('upcoming');
   /**
    * Whose meetings. Mine by default — the drawer is titled with your own
    * name, and the whole conference's book is the Meetings tab's job.
@@ -1160,16 +1193,19 @@ export function DashboardActionCard() {
     return () => { cancelled = true; };
   }, [meetingsOpen, activeConference?.id]);
 
-  // Mine — booked by me or on support — in time order. Upcoming drops what has
-  // already happened; All keeps the whole conference, which is what you want
-  // once it is under way and you are looking back at what was said.
+  /*
+   * Mine — booked by me or on support — in time order.
+   *
+   * The whole conference, not just what is left of it. There was an
+   * Upcoming/All toggle here that dropped every earlier day; the board
+   * already fades what has passed, which says the same thing without taking
+   * the morning off the screen while the afternoon is still being read.
+   */
   const myMeetings = useMemo(() => {
     const myConfigId = user?.configId ?? null;
-    const today = new Date().toISOString().slice(0, 10);
     return meetings
       .filter(m => {
         if (!m.meeting_date) return false;
-        if (drawerScope === 'upcoming' && m.meeting_date < today) return false;
         if (drawerOwner === 'all') return true;
         if (myConfigId == null) return false;
         /* Mine means on it, not merely booked by me: internalIdsOn is the
@@ -1180,7 +1216,7 @@ export function DashboardActionCard() {
         return internalIdsOn(m as unknown as CalendarMeeting).includes(myConfigId);
       })
       .sort((a, b) => `${a.meeting_date} ${a.meeting_time}`.localeCompare(`${b.meeting_date} ${b.meeting_time}`));
-  }, [meetings, user?.configId, drawerScope, drawerOwner]);
+  }, [meetings, user?.configId, drawerOwner]);
 
   // Day buttons come from the meetings actually in the drawer rather than every
   // day of the conference, so a button can never filter down to nothing.
@@ -1457,7 +1493,7 @@ export function DashboardActionCard() {
         {/* Right — Meetings, which opens the drawer */}
         <button
           type="button"
-          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); setDrawerScope('upcoming'); setDrawerOwner('mine'); setDrawerView('calendar'); }}
+          onClick={() => { setMeetingsOpen(true); setAgendaOpen(false); setDrawerDateFilter([]); setDrawerBoothOnly(false); setDrawerOwner('mine'); setDrawerView('calendar'); }}
           aria-expanded={meetingsOpen}
           className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-yellow-50 transition-colors group"
         >
@@ -1480,25 +1516,19 @@ export function DashboardActionCard() {
           onClose={() => setMeetingsOpen(false)}
         >
           {activeConference && !loadingMeetings && (
-            /* Whose, which, how — left to right, and the row scrolls rather
-               than wrapping: three controls stacked in a 560px drawer would
-               push the board itself below the fold. */
+            /* Whose, then how — and the row scrolls rather than wrapping,
+               since a control on its own line in a 560px drawer pushes the
+               board below the fold. */
             <div className="px-4 pt-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
               <DrawerToggle
                 value={drawerOwner}
-                options={[['mine', 'My Mtgs'], ['all', 'All Mtgs']] as const}
+                options={[
+                  { key: 'mine' as const, label: 'My Mtgs', name: 'My meetings' },
+                  { key: 'all' as const, label: 'All Mtgs', name: 'Everyone’s meetings' },
+                ]}
                 onChange={setDrawerOwner}
               />
-              <DrawerToggle
-                value={drawerScope}
-                options={[['upcoming', 'Upcoming'], ['all', 'All']] as const}
-                onChange={setDrawerScope}
-              />
-              <DrawerToggle
-                value={drawerView}
-                options={[['calendar', 'Calendar'], ['cards', 'Cards']] as const}
-                onChange={setDrawerView}
-              />
+              <DrawerToggle value={drawerView} options={VIEW_OPTIONS} onChange={setDrawerView} />
             </div>
           )}
           {!activeConference ? (
@@ -1507,7 +1537,7 @@ export function DashboardActionCard() {
             <p className="text-xs text-gray-400 text-center py-8">Loading meetings…</p>
           ) : myMeetings.length === 0 ? (
             <p className="text-xs text-gray-400 text-center py-8">
-              {drawerScope === 'upcoming' ? 'No upcoming meetings' : 'No meetings'} for you at {activeConference.name}.
+              No meetings for you at {activeConference.name}.
             </p>
           ) : (
             <>
@@ -1541,6 +1571,7 @@ export function DashboardActionCard() {
                   viewMode="calendar"
                   calendarLayout="stack"
                   calendarCollapsibleSections
+                  calendarShowOutcomeKey={false}
                   onCalendarSlotPick={slot => setSlotPrefill({ date: slot.day, time: slot.time })}
                   tableName="conference_meetings"
                   meetings={boothFilteredDrawerMeetings}
