@@ -14,7 +14,6 @@ import { UserProvider } from './UserContext';
 import { TrialBanner } from './TrialBanner';
 import ImpersonationBanner from './ImpersonationBanner';
 import { OnboardingProvider } from '@/lib/OnboardingContext';
-import { useViewportOverhang } from '@/lib/useViewportOverhang';
 import { WelcomeInterstitial } from './onboarding/WelcomeInterstitial';
 import { UpgradeModalProvider } from '@/lib/UpgradeModalContext';
 import { PlanSelectionModal } from './PlanSelectionModal';
@@ -162,22 +161,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       <ChatPanelProvider>
       <FloatingNavProvider>
       <BottomNavProvider>
-        {/*
-          The screen, not the viewport — see .app-viewport and
-          useViewportOverhang.
-
-          Reported from an iPhone with the app on the Home Screen: the last
-          62px of the screen were the body's background, with the page
-          stopping short of it. 62px is that phone's status bar, and on iOS
-          standalone the layout viewport is the screen minus exactly that
-          while the page is laid out from the physical top — so `h-dvh`,
-          `h-screen`, `100%` and a fixed `bottom: 0` all land in the same
-          wrong place. The shell measures the difference instead and adds it.
-
-          The insets are still paid for where they hide something: the header
-          pads by the top one, <main>'s last gutter by the bottom one.
-        */}
-        <div className="app-viewport flex overflow-hidden bg-gray-50">
+        <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-gray-50">
           {/* Sidebar — desktop only */}
           <div className="hidden lg:flex">
             <Sidebar />
@@ -255,17 +239,13 @@ function EmbedChecker({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   if (searchParams.get('embed') === 'true') {
     // Render only the page content with no chrome (sidebar, header, nav, footer)
-    // Covers the screen for the same reason the shell does — see there.
-    return <main className="app-viewport overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
+    return <main className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto overscroll-y-contain p-4 lg:p-6 bg-gray-50">{children}</main>;
   }
   return <AppShellInner>{children}</AppShellInner>;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  // Every path below — the shell, the embed, the auth pages — is laid out
-  // against this, so it is measured once here rather than per branch.
-  useViewportOverhang();
 
   // Auth pages render without the shell (no sidebar/header/nav)
   // Exception: /auth/account is a protected app page that needs the full shell

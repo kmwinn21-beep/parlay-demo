@@ -26,12 +26,11 @@ body {
 }
 
 /*
- * The app shell covers exactly one screen and scrolls inside itself, so the
+ * The app shell is exactly one viewport tall and scrolls inside itself, so the
  * document must never scroll as well. On iOS with viewport-fit=cover, 100vh is
  * the viewport as it would be with the browser toolbars hidden — taller than
  * what is on screen — which left the whole shell draggable and took the header
- * up behind Safari's URL pill. The shell is now pinned to the screen's four
- * edges rather than measured in any viewport unit (see AppShell); this stops
+ * up behind Safari's URL pill. The shell now measures itself in dvh; this stops
  * anything above it from scrolling regardless.
  */
 html,
@@ -351,28 +350,6 @@ h1, h2, h3 {
  */
 .fixed.inset-0:not(:empty):not(.items-center):not(.justify-center) {
   padding-top: env(safe-area-inset-top);
-}
-
-/**
- * The app shell, covering the screen rather than the layout viewport.
- *
- * Pinned to three edges and given the height of the fourth, because on iOS
- * standalone the fourth edge is in the wrong place: see useViewportOverhang
- * for the bug and the measurement. --viewport-overhang is 0 wherever the two
- * agree, so this is `height: 100%` in every browser but that one.
- *
- * A class rather than `fixed inset-0` on the element, deliberately. That pair
- * of utilities is what the rule above keys the status-bar padding off, and
- * the shell is the one full-screen box that must NOT have it — the header
- * pays for the inset itself, and 62px of padding above it left the mobile
- * header looking twice its height with the fill of the status bar missing.
- */
-.app-viewport {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: calc(100% + var(--viewport-overhang, 0px));
 }
 
 /**

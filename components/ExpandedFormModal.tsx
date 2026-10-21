@@ -995,10 +995,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   const overlay = (
     <div
       style={{
-        // The four edges decide the size. `height: 100vh` undid `bottom: 0`,
-        // and on iOS standalone a viewport unit is a status bar short of the
-        // screen — see the comment in AppShell.
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        width: '100vw', height: '100vh',
         zIndex: 9999,
         overflow: 'hidden',
         background: accentBg,
