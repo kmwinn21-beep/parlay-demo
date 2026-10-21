@@ -716,5 +716,35 @@ console.log('\n— and the table says it too, under the company name —');
   eq('  the cell is top-aligned', /key="company"[^>]*align-top/.test(cell), true);
 }
 
+console.log('\n— booking the first one —');
+{
+  /*
+   * An empty list is where somebody is most likely to want the form, and it
+   * said "No meetings scheduled yet." and nothing else. The button wears the
+   * calendar's dashed outline and its words, so the two empty places — a
+   * board with a gap in it and a list with nothing in it — offer the same
+   * thing in the same hand.
+   */
+  eq('the empty state offers the form', /\+ Meeting\n          <\/button>/.test(table), true);
+  eq('  dashed and grey, like an empty half hour',
+    /rounded-lg border border-dashed border-gray-400 bg-white px-4 py-2 text-xs font-medium text-gray-500/.test(table), true);
+  // Only where there is something to book into: a company's record passes
+  // nothing and keeps the line of text it has always had.
+  eq('  and only when the caller offers one', /\{onNewMeeting && \(/.test(table), true);
+
+  const conf = strip('app/conferences/[id]/page.tsx');
+  eq('the conference tab opens its own modal', /onNewMeeting=\{newMeetingBlocked \? undefined : \(\) => \{/.test(conf), true);
+  eq('  with nothing picked off a board to prefill', /setMeetingPrefill\(null\);\n                setNewMeetingOpen\(true\);/.test(conf), true);
+  // The conference is the one being looked at and the rep is whoever is
+  // signed in — the form fills both in without being told.
+  const modal = strip('components/NewMeetingModal.tsx');
+  eq('  the form fills the rep in itself', /if \(user\?\.configId\) setSelectedRepIds\(\[user\.configId\]\);/.test(modal), true);
+  eq('  and the conference it was opened from',
+    /defaultConferenceId=\{conference\?\.id\}/.test(conf), true);
+  // Closed logging has no form to offer, so the button is not drawn at all.
+  eq('  and nothing is offered where logging is closed',
+    /onNewMeeting=\{newMeetingBlocked \? undefined/.test(conf), true);
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

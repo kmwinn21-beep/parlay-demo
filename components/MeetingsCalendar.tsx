@@ -1044,7 +1044,7 @@ export function MeetingsCalendar({
                     <div className="w-14 flex-shrink-0" style={{ paddingTop: band }}>
                       <div className="relative" style={{ height: gridHeight }}>
                         {hours.map((h, i) => (
-                          <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: i * HOUR_PX - 6 }}>
+                          <span key={h} className="absolute right-2 text-[11px] text-gray-400" style={{ top: Math.max(0, i * HOUR_PX - 6) }}>
                             {hourLabel(h)}
                           </span>
                         ))}
@@ -1116,7 +1116,7 @@ export function MeetingsCalendar({
                   <span
                     key={h}
                     className="absolute right-2 text-[11px] text-gray-400"
-                    style={{ top: i * HOUR_PX - 6 }}
+                    style={{ top: Math.max(0, i * HOUR_PX - 6) }}
                   >
                     {hourLabel(h)}
                   </span>

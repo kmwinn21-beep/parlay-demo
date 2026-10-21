@@ -1484,6 +1484,7 @@ export function MeetingsTable({
   companyTypeOptions = [],
   companyTypeColorMap = {},
   onCalendarSlotPick,
+  onNewMeeting,
   cardsOnly = false,
   showConferencePill = false,
   showAttendeeAvatar = false,
@@ -1550,6 +1551,14 @@ export function MeetingsTable({
   companyTypeColorMap?: ColorMap;
   /** An empty half hour on the calendar was clicked. */
   onCalendarSlotPick?: (slot: CalendarSlotPick) => void;
+  /**
+   * Open the booking form from the empty state.
+   *
+   * Left out where there is nothing to book into — a company's record, a
+   * list of someone else's meetings — and the empty state is then the line
+   * of text it has always been.
+   */
+  onNewMeeting?: () => void;
   /** Keep the mobile card layout at every width — for narrow containers. */
   cardsOnly?: boolean;
   /** Adds the conference name to the card's pill row. */
@@ -2761,6 +2770,19 @@ export function MeetingsTable({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         <p className="text-gray-400 text-xs">No meetings scheduled yet.</p>
+        {/* The same dashed outline the calendar's empty half hours wear, and
+            the same words: a meeting is booked here or booked there, and the
+            board and this are the two places with nothing in them. The form
+            it opens fills in the conference and the rep itself. */}
+        {onNewMeeting && (
+          <button
+            type="button"
+            onClick={onNewMeeting}
+            className="mt-3 inline-flex items-center justify-center rounded-lg border border-dashed border-gray-400 bg-white px-4 py-2 text-xs font-medium text-gray-500 transition-colors hover:border-brand-secondary hover:text-brand-secondary"
+          >
+            + Meeting
+          </button>
+        )}
       </div>
     );
   }

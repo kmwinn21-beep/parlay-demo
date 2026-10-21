@@ -119,15 +119,28 @@ export function isOutsideConference(
 
 /* ── Which hours the calendar shows ───────────────────────────────────── */
 
-/** The hours drawn when nothing is booked: a working day. */
-export const DEFAULT_WINDOW = { startHour: 8, endHour: 18 };
+/**
+ * The day the calendar always draws: 7am to 7pm.
+ *
+ * A conference day is this long whether or not anything is booked in it, and
+ * the empty hours are the useful ones — a board is read to find the gap as
+ * often as to find the meeting.
+ */
+export const DEFAULT_WINDOW = { startHour: 7, endHour: 19 };
 
 /**
- * The hours this conference actually uses, with an hour of air either side.
+ * The hours to draw: the working day, plus whatever falls outside it.
  *
- * A fixed midnight-to-midnight grid is 24 rows of which four are used. This
- * one opens on the earliest meeting and closes after the latest, so the week
- * fills the space it is given.
+ * This used to open an hour before the earliest meeting and close an hour
+ * after the latest, which on a day with two meetings at 9 and 10 drew a
+ * four-hour grid — a calendar that stopped at 11am, with nowhere to put the
+ * afternoon and nothing to say the afternoon was free. Two meetings and
+ * twenty are the same day.
+ *
+ * So 7am to 7pm is the floor rather than the fallback, and the window only
+ * grows: a 6:30 meeting opens the grid at 6, a 7:30pm one closes it at 8, and
+ * both are rounded to the hour the grid is drawn in. Twelve hours is taller
+ * than a phone and most windows, which is what the scroll is for.
  */
 export function hourWindow(meetings: CalendarMeeting[]): { startHour: number; endHour: number } {
   let earliest = Infinity;
@@ -139,11 +152,10 @@ export function hourWindow(meetings: CalendarMeeting[]): { startHour: number; en
     latest = Math.max(latest, start + cardMinutes(m.duration_minutes));
   }
   if (earliest === Infinity) return { ...DEFAULT_WINDOW };
-  const startHour = Math.max(0, Math.floor(earliest / 60) - 1);
-  const endHour = Math.min(24, Math.ceil(latest / 60) + 1);
-  // Never fewer than four hours: one meeting at 9:00 should not leave a grid
-  // two rows tall that reads as a broken table.
-  return { startHour, endHour: Math.max(endHour, Math.min(24, startHour + 4)) };
+  return {
+    startHour: Math.max(0, Math.min(DEFAULT_WINDOW.startHour, Math.floor(earliest / 60))),
+    endHour: Math.min(24, Math.max(DEFAULT_WINDOW.endHour, Math.ceil(latest / 60))),
+  };
 }
 
 /* ── Where a card sits ────────────────────────────────────────────────── */
