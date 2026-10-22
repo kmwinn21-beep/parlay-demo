@@ -13,7 +13,7 @@ import { invalidateConferenceNav } from '@/lib/conferenceNav';
 import { FollowUpsTable, type FollowUp } from '@/components/FollowUpsTable';
 import { AssignFollowUpModal } from '@/components/AssignFollowUpModal';
 import { MeetingsTable, type Meeting, type EditFormData } from '@/components/MeetingsTable';
-import { MeetingDateFilterBar, MeetingDayStepper } from '@/components/MeetingDateFilterBar';
+import { MeetingDateFilterBar } from '@/components/MeetingDateFilterBar';
 import { isBoothHours } from '@/lib/meetingTime';
 import { useIsPhone } from '@/lib/useIsPhone';
 import { ConferenceTabStrip } from '@/components/ConferenceTabStrip';
@@ -5414,33 +5414,19 @@ export default function ConferenceDetailPage() {
                   than narrowing what is already on screen. */}
               <div className="mt-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  {calendarByRep ? (
+                  <MeetingDateFilterBar
+                    dates={conferenceDates}
+                    selected={meetingFilterDates}
+                    onChange={setMeetingFilterDates}
+                    variant="short"
                     /* A calendar of people is one day at a time, so the row
-                       is not a filter with several answers but a place on the
-                       calendar with a day either side of it. */
-                    <MeetingDayStepper
-                      dates={conferenceDates}
-                      selected={meetingFilterDates[0] ?? null}
-                      onChange={d => setMeetingFilterDates([d])}
-                      showBoothHours={hasBoothHoursMeetings}
-                      boothHoursOnly={boothHoursOnly}
-                      onBoothHoursChange={setBoothHoursOnly}
-                    />
-                  ) : (
-                    <MeetingDateFilterBar
-                      dates={conferenceDates}
-                      selected={meetingFilterDates}
-                      onChange={setMeetingFilterDates}
-                      variant="short"
-                      /* Centred on the calendar, where the row reads as the
-                         board's own header rather than as a filter above a
-                         list. */
-                      centered={meetingViewMode === 'calendar'}
-                      showBoothHours={hasBoothHoursMeetings}
-                      boothHoursOnly={boothHoursOnly}
-                      onBoothHoursChange={setBoothHoursOnly}
-                    />
-                  )}
+                       stops being a filter that can be cleared and becomes
+                       the picker that chooses which day is drawn. */
+                    requireOne={calendarByRep}
+                    showBoothHours={hasBoothHoursMeetings}
+                    boothHoursOnly={boothHoursOnly}
+                    onBoothHoursChange={setBoothHoursOnly}
+                  />
                 </div>
 
                 {/* Where Availability used to sit.

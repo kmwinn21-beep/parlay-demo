@@ -415,27 +415,11 @@ console.log('\n— and the board drawn from it —');
     /if \(people\.length === 0\) return \[\];/.test(cal), true);
   eq('  which names what is missing', /No internal attendees on this conference yet/.test(cal), true);
 
-  /*
-   * One day at a time — and the row above it says so in the shape of the
-   * thing. Four chips with one lit made Thursday something to find; a
-   * stepper makes it the next press, and leaves room for the day to be
-   * spelled out rather than abbreviated to fit beside three others.
-   */
-  eq('the day comes from the row above', /calendarRepDay=\{meetingFilterDates\[0\] \?\? null\}/.test(page), true);
-  eq('  which is a stepper on the rep axis', /\{calendarByRep \? \(/.test(page), true);
-  eq('    stepping the one day it holds', /onChange=\{d => setMeetingFilterDates\(\[d\]\)\}/.test(page), true);
-  eq('    spelled out in full', /return `\$\{weekday\}, \$\{month\} \$\{ordinal\(dt\.getDate\(\)\)\}`;/.test(bar), true);
-  eq('    with the ordinal teens spelled right', /if \(day % 100 >= 11 && day % 100 <= 13\) return `\$\{day\}th`;/.test(bar), true);
-  // The ends stop rather than wrap: a conference has a first day and a last.
-  eq('    and the ends stopping rather than wrapping',
-    /disabled=\{at === 0\}/.test(bar) && /disabled=\{at === dates\.length - 1\}/.test(bar), true);
-  eq('  and chips everywhere else', /centered=\{meetingViewMode === 'calendar'\}/.test(page), true);
-  eq('    centred only while they fit',
-    /centered && !canLeft && !canRight \? 'justify-center' : ''/.test(bar), true);
+  // One day at a time, chosen by the day filters.
+  eq('the day comes from the filter row', /calendarRepDay=\{meetingFilterDates\[0\] \?\? null\}/.test(page), true);
+  eq('  which stops being clearable', /requireOne=\{calendarByRep\}/.test(page), true);
+  eq('  and insists on one', /onChange\(active && selected\.length === 1 && !requireOne \? \[\] : \[d\]\)/.test(bar), true);
   eq('  with one lit on arrival', /if \(day\) setMeetingFilterDates\(\[day\]\);/.test(page), true);
-  // The board used to repeat the day under the keys. The stepper says it.
-  eq('  and the board no longer repeating it',
-    /dayParts\(theDay\)\.weekday\}, \{dayParts\(theDay\)\.label/.test(cal), false);
   eq('  and the board falling back to the same day',
     /repDay && days\.includes\(repDay\) \? repDay : defaultCalendarDay\(days, todayYmd\(\)\)/.test(cal), true);
 

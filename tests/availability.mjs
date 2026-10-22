@@ -240,7 +240,7 @@ console.log('\n— the board, and the button that opens it —');
    * what is already on screen.
    */
   eq('the day filters have a row of their own',
-    /<div className="mt-3 flex items-center gap-3">[\s\S]{0,900}<Meeting(DateFilterBar|DayStepper)/.test(page), true);
+    /<div className="mt-3 flex items-center gap-3">[\s\S]{0,400}<MeetingDateFilterBar/.test(page), true);
   eq('  with Availability at its end', /onClick=\{\(\) => setAvailabilityOpen\(true\)\}/.test(page), true);
   eq('  and no copy left on the title row',
     (page.match(/<MeetingDateFilterBar/g) ?? []).length, 1);
