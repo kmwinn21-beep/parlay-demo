@@ -964,15 +964,11 @@ export function MeetingsCalendar({
       {outcomeKey}
       {peopleFilter}
 
-      {/* The rep axis says which day it is about, since the columns no longer
-          can and the picker that chose it is a row away. */}
-      {axis === 'rep' && theDay && (
-        <div className="hidden lg:flex items-center gap-2 px-4 py-2 border-b border-gray-100">
-          <p className="text-xs font-semibold text-brand-primary">
-            {dayParts(theDay).weekday}, {dayParts(theDay).label}
-          </p>
-        </div>
-      )}
+      {/* The rep axis used to repeat its day here, since the columns are
+          people and the picker that chose it was a row away wearing one lit
+          chip among four. That picker is now a stepper that spells the day
+          out — Wednesday, October 21st, with a day either side — so saying it
+          again under the keys was saying it twice. */}
 
       {/* ── Phone: one column, run end to end ──
 
@@ -986,11 +982,6 @@ export function MeetingsCalendar({
           The rep axis stacks the same way: one day, a section per person,
           and the name pins instead of the date. */}
       <div className={layout === 'stack' ? '' : 'lg:hidden'} ref={phoneStackRef}>
-        {axis === 'rep' && theDay && (
-          <p className="text-[11px] font-medium text-gray-500 px-4 py-2 border-b border-gray-100">
-            {dayParts(theDay).weekday}, {dayParts(theDay).label}
-          </p>
-        )}
         {columns.map(col => {
           const band = untimedBandHeight([col]);
           const folded = collapsibleSections && isFolded(col.key);
