@@ -37,36 +37,70 @@ const card = strip('components/DashboardActionCard.tsx');
 const table = strip('components/MeetingsTable.tsx');
 const calendar = strip('components/MeetingsCalendar.tsx');
 
-console.log('\n— three controls, not seven buttons —');
+console.log('\n— two controls, not four buttons —');
 {
-  eq('one toggle component, used three times',
+  eq('one toggle component, used twice',
     /function DrawerToggle<T extends string>\(\{ value, options, onChange \}/.test(card), true);
-  eq('  whose', /options=\{\[\['mine', 'My Mtgs'\], \['all', 'All Mtgs'\]\] as const\}/.test(card), true);
-  eq('  which', /options=\{\[\['upcoming', 'Upcoming'\], \['all', 'All'\]\] as const\}/.test(card), true);
-  eq('  how', /options=\{\[\['calendar', 'Calendar'\], \['cards', 'Cards'\]\] as const\}/.test(card), true);
+  eq('  whose', /\{ key: 'mine' as const, label: 'My Mtgs', name: 'My meetings' \}/.test(card), true);
+  eq('  and how', /<DrawerToggle value=\{drawerView\} options=\{VIEW_OPTIONS\} onChange=\{setDrawerView\} \/>/.test(card), true);
 
-  // Order left to right: whose, which, how. The owner toggle sits to the
-  // LEFT of Upcoming/All, which is what was asked for.
-  const order = ['drawerOwner', 'drawerScope', 'drawerView']
-    .map(s => card.indexOf(`value={${s}}`));
-  eq('they run whose, which, how', order[0] < order[1] && order[1] < order[2], true);
+  /*
+   * Upcoming/All is gone. It dropped every earlier day of the conference,
+   * which is a strange thing to do to a board being read at four in the
+   * afternoon — the morning is what you are checking against. The fade on a
+   * past block says the same thing and leaves the day where it was.
+   */
+  eq('nothing filters by when any more', /drawerScope/.test(card), false);
+  eq('  because the board fades what has passed instead',
+    /isPastMeeting/.test(strip('components/MeetingsCalendar.tsx')), true);
+
+  // Whose, then how, left to right.
+  const order = ['drawerOwner', 'drawerView'].map(s => card.indexOf(`value={${s}}`));
+  eq('they run whose, then how', order[0] < order[1], true);
   eq('  in one row that scrolls rather than wraps',
     /flex items-center gap-2 overflow-x-auto scrollbar-hide/.test(card), true);
+}
+
+console.log('\n— the two drawings, as pictures —');
+{
+  // A word that long is most of the width of a 560px drawer's control row.
+  eq('calendar is a calendar', /name: 'Calendar',\n    label: \(/.test(card), true);
+  eq('  and cards are a list', /name: 'Cards',\n    label: \(/.test(card), true);
+  eq('  drawn as rows', /d="M4 6h16M4 12h16M4 18h16"/.test(card), true);
+  // An icon with no name is a rebus. Every option carries one, and it is
+  // both the tooltip and what a screen reader announces.
+  eq('each carries a name', /aria-label=\{name\}\n          title=\{name\}/.test(card), true);
 }
 
 console.log('\n— what the drawer opens on —');
 {
   eq('mine', /useState<'mine' \| 'all'>\('mine'\)/.test(card), true);
-  eq('upcoming', /useState<'upcoming' \| 'all'>\('upcoming'\)/.test(card), true);
   eq('the calendar', /useState<'calendar' \| 'cards'>\('calendar'\)/.test(card), true);
 
   // Opening it again has to start over, or yesterday's filters are still on.
   const opener = card.match(/setMeetingsOpen\(true\);[^\n]*/)?.[0] ?? '';
-  eq('and opening it resets all three',
-    ["setDrawerScope('upcoming')", "setDrawerOwner('mine')", "setDrawerView('calendar')"]
-      .every(s => opener.includes(s)), true);
+  eq('and opening it resets both',
+    ["setDrawerOwner('mine')", "setDrawerView('calendar')"].every(s => opener.includes(s)), true);
   eq('  along with the day and booth filters',
     opener.includes('setDrawerDateFilter([])') && opener.includes('setDrawerBoothOnly(false)'), true);
+}
+
+console.log('\n— one key row fewer —');
+{
+  /*
+   * Three key rows above a 560px board is most of the first screen, and the
+   * outcome one is the least useful of them here: the drawer is read
+   * mid-conference to find what is next, and the dot on a card already says
+   * what was recorded. The conference's own board keeps it.
+   */
+  eq('the drawer asks for the board without it', /calendarShowOutcomeKey=\{false\}/.test(card), true);
+  eq('  the table passes it on', /showOutcomeKey=\{calendarShowOutcomeKey\}/.test(strip('components/MeetingsTable.tsx')), true);
+  eq('  and the calendar honours it',
+    /const outcomeKey = showOutcomeKey && \(outcomesPresent\.length > 0/.test(strip('components/MeetingsCalendar.tsx')), true);
+  eq('  while everywhere else still draws it',
+    /calendarShowOutcomeKey = true,/.test(strip('components/MeetingsTable.tsx')), true);
+  // The type and rep rows stay: they are what the board is filtered by.
+  eq('the rows that filter stay', /const typeKey = typeTallies\.length > 0/.test(strip('components/MeetingsCalendar.tsx')), true);
 }
 
 console.log('\n— whose meetings “mine” means —');
