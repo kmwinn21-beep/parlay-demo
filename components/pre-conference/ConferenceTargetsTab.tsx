@@ -262,8 +262,20 @@ export function ConferenceTargetsTab({
   const [draggingId, setDraggingId] = useState<number | null>(null);
   const [dragOverTier, setDragOverTier] = useState<string | null>(null);
   const [myTargetsOnly, setMyTargetsOnly] = useState(false);
-  // Default: Must Target / High Priority / Worth Engaging shown, Monitor minimized to a pill.
-  const [minimizedTiers, setMinimizedTiers] = useState<Set<string>>(new Set(['unassigned']));
+  /*
+   * Every tier open, Monitor included.
+   *
+   * Monitor used to start minimized to a pill beside the heading, on the
+   * reasoning that it is the tier nobody is working. What that actually did
+   * was hide where targets land: somebody adds one, it is a Monitor, and the
+   * board they are looking at has four columns none of which contain it. The
+   * pill says MONITOR $0 in grey next to the title, which is not where anyone
+   * looks for a column.
+   *
+   * Minimizing still works — it is the same control on all four — but it is
+   * now something the reader chose rather than something they inherited.
+   */
+  const [minimizedTiers, setMinimizedTiers] = useState<Set<string>>(new Set());
   const minimizeTier = (key: string) => setMinimizedTiers(prev => new Set(prev).add(key));
   const restoreTier = (key: string) => setMinimizedTiers(prev => {
     const next = new Set(prev);
