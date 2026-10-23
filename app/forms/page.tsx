@@ -477,9 +477,37 @@ function PublicFormInner() {
     );
   }
 
+  /*
+   * Centred in the viewport that is actually on screen.
+   *
+   * It was min-h-screen — 100vh — which on a phone browser is the viewport as
+   * it would be with the toolbars hidden, taller than what anyone is looking
+   * at. The card centred itself in that taller box, so it sat low behind the
+   * address bar with a band of background above it. dvh is the height the
+   * browser is currently giving the page, toolbars and all, and it follows
+   * them as they collapse on scroll.
+   *
+   * One viewport tall rather than at least one, because the document itself
+   * cannot scroll: html and body are overflow:hidden for the app shell's
+   * sake, so a page that merely grows past the fold puts the rest of itself
+   * out of reach. Fixing the height makes this div the scroller.
+   *
+   * The card centres with auto margins rather than justify-center: free space
+   * is shared when there is some, and resolves to zero when the card is
+   * taller than the screen, so a long form scrolls from its top instead of
+   * having it cut off.
+   */
   return (
-    <div className="min-h-screen flex flex-col p-6 py-12 overflow-y-auto" style={{ background: accentBg }}>
-      <div className="my-auto mx-auto w-full max-w-[480px] rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor, border: '2px solid rgba(255,255,255,0.2)' }}>
+    <div
+      className="h-screen supports-[height:100dvh]:h-dvh flex flex-col p-6 py-12 overflow-y-auto"
+      style={{ background: accentBg }}
+    >
+      {/* flex-shrink-0, or the card gives up its own height to fit a fixed
+          container: a flex item whose overflow is hidden may shrink below its
+          content, and a fourteen-question form quietly lost its Submit button
+          off the bottom of a card that had been squashed to fit. It keeps its
+          height; the container scrolls. */}
+      <div className="my-auto mx-auto w-full max-w-[480px] flex-shrink-0 rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor, border: '2px solid rgba(255,255,255,0.2)' }}>
         {formCard}
       </div>
     </div>
