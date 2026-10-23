@@ -35,6 +35,23 @@ function r2Client() {
   });
 }
 
+/**
+ * What actually went wrong, in words the person can act on.
+ *
+ * Both halves of this route can fail, and for a long time both came back as
+ * "Failed to save photo" with the reason in a server log nobody was reading.
+ * An afternoon was spent on a 500 that turned out to be object storage being
+ * switched off at the provider — which the toast could have said outright.
+ *
+ * The provider's own error name is included because it is the diagnostic bit
+ * and it is not sensitive: NoSuchBucket, AccessDenied and NetworkingError
+ * each name a different thing to go and fix.
+ */
+function storageFailure(err: unknown): string {
+  const name = err instanceof Error && err.name && err.name !== 'Error' ? err.name : null;
+  return `Image storage rejected the upload${name ? ` (${name})` : ''}. The photo was not saved.`;
+}
+
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const authResult = await requireAuth(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -59,23 +76,36 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     let url: string;
 
     if (r2Configured()) {
-      const key = `attendee-photos/${attendeeId}-${randomBytes(6).toString('hex')}.${ext}`;
-      await r2Client().send(new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: key,
-        Body: buffer,
-        ContentType: file.type,
-        CacheControl: 'public, max-age=31536000, immutable',
-      }));
-      url = `${process.env.R2_PUBLIC_URL}/${key}`;
+      try {
+        const key = `attendee-photos/${attendeeId}-${randomBytes(6).toString('hex')}.${ext}`;
+        await r2Client().send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: key,
+          Body: buffer,
+          ContentType: file.type,
+          CacheControl: 'public, max-age=31536000, immutable',
+        }));
+        url = `${process.env.R2_PUBLIC_URL}/${key}`;
+      } catch (err) {
+        console.error('[attendee-photo] R2 upload failed:', err);
+        return NextResponse.json({ error: storageFailure(err) }, { status: 502 });
+      }
     } else {
       url = `data:${file.type};base64,${buffer.toString('base64')}`;
     }
 
-    await db.execute({
-      sql: 'UPDATE attendees SET photo_url = ? WHERE id = ?',
-      args: [url, attendeeId],
-    });
+    try {
+      await db.execute({
+        sql: 'UPDATE attendees SET photo_url = ? WHERE id = ?',
+        args: [url, attendeeId],
+      });
+    } catch (err) {
+      console.error('[attendee-photo] database write failed:', err);
+      return NextResponse.json(
+        { error: 'The photo was uploaded but could not be recorded. Try again.' },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({ photo_url: url });
   } catch (error) {
