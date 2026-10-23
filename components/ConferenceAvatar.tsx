@@ -1,3 +1,7 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
 /**
  * A conference's logo, or its initials where it hasn't got one.
  *
@@ -17,6 +21,21 @@ export function ConferenceAvatar({ name, logoUrl, size = 40, muted = false, clas
 }) {
   const words = name.trim().split(/\s+/).filter(Boolean);
   const initials = words.length === 0 ? '?' : (words[0][0] + (words[1]?.[0] ?? '')).toUpperCase();
+  /*
+   * A URL that does not load falls back to the initials.
+   *
+   * A stored logo is a URL into object storage, and object storage has bad
+   * days: the bucket's public access was switched off for an afternoon and
+   * every conference in the program drew the browser's broken-image glyph —
+   * which reads as data lost rather than as a picture that did not arrive.
+   * The initials are already the answer for a conference with no logo, and a
+   * logo that cannot be fetched is in the same position.
+   *
+   * Reset when the URL changes, so replacing a broken logo shows the new one
+   * rather than staying failed.
+   */
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [logoUrl]);
 
   return (
     <div
@@ -26,9 +45,16 @@ export function ConferenceAvatar({ name, logoUrl, size = 40, muted = false, clas
       } ${className}`}
       aria-hidden="true"
     >
-      {logoUrl
+      {logoUrl && !failed
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={logoUrl} alt="" className={`w-full h-full object-contain ${muted ? 'opacity-40' : ''}`} />
+        ? (
+          <img
+            src={logoUrl}
+            alt=""
+            onError={() => setFailed(true)}
+            className={`w-full h-full object-contain ${muted ? 'opacity-40' : ''}`}
+          />
+        )
         : initials}
     </div>
   );

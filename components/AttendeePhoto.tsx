@@ -312,9 +312,22 @@ export function AttendeeAvatar({
   const [showPhoto, setShowPhoto] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const name = `${firstName} ${lastName}`.trim();
+  /*
+   * A photo that does not load is treated as no photo at all.
+   *
+   * A stored photo is a URL into object storage, and when that storage went
+   * dark every avatar in the app drew the browser's broken-image glyph —
+   * which reads as a lost record rather than as a picture that did not
+   * arrive. Falling back to the initials says the true thing, and it also
+   * puts the "add a photo" prompt back within reach, which is the right
+   * offer for a face nobody can see.
+   */
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [photoUrl]);
+  const shown = photoUrl && !failed ? photoUrl : null;
 
   const handleClick = () => {
-    if (photoUrl) { setShowPhoto(true); return; }
+    if (shown) { setShowPhoto(true); return; }
     if (!onUploadRequest && !onPasteRequest) return;
     setShowSource(true);
   };
@@ -324,20 +337,20 @@ export function AttendeeAvatar({
       <button
         type="button"
         onClick={handleClick}
-        title={photoUrl ? `View ${name}'s photo` : 'Add a photo'}
+        title={shown ? `View ${name}'s photo` : 'Add a photo'}
         className={`${className} rounded-full bg-brand-primary flex items-center justify-center text-white font-bold font-serif flex-shrink-0 overflow-hidden transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand-secondary`}
       >
-        {photoUrl
+        {shown
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+          ? <img src={shown} alt={name} onError={() => setFailed(true)} className="w-full h-full object-cover" />
           : <>{firstName[0]}{lastName[0]}</>}
       </button>
-      {showPhoto && photoUrl && (
+      {showPhoto && shown && (
         <AttendeePhotoModal
           name={name}
           title={title}
           companyName={companyName}
-          photoUrl={photoUrl}
+          photoUrl={shown}
           onClose={() => setShowPhoto(false)}
         />
       )}
@@ -381,11 +394,14 @@ export function AttendeeInitialsAvatar({
   style?: CSSProperties;
 }) {
   const [showPhoto, setShowPhoto] = useState(false);
+  // A URL that will not load falls back to the initials — see AttendeeAvatar.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [photoUrl]);
   const initials = initialsOverride
     ?? name.trim().split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
   const shell = `${className} ${baseClass} ${shapeClass} inline-flex items-center justify-center font-bold flex-shrink-0 overflow-hidden`;
 
-  if (!photoUrl) return <span className={shell} style={style}>{initials}</span>;
+  if (!photoUrl || failed) return <span className={shell} style={style}>{initials}</span>;
 
   return (
     <>
@@ -397,7 +413,7 @@ export function AttendeeInitialsAvatar({
         className={`${shell} transition-shadow hover:shadow-md`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+        <img src={photoUrl} alt={name} onError={() => setFailed(true)} className="w-full h-full object-cover" />
       </button>
       {showPhoto && (
         <AttendeePhotoModal
