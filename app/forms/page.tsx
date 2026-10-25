@@ -275,7 +275,10 @@ function PublicFormInner() {
   const renderField = (field: FormField) => {
     if (field.field_key === 'attendee_name') {
       return (
-        <div key={field.id} className="grid grid-cols-2 gap-3">
+        /* Stacked on a phone, side by side from sm. Two name boxes sharing a
+           360px line leave about 150px each, which is narrower than the
+           names people type into them. */
+        <div key={field.id} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: textColor }}>First Name *</label>
             <input type="text" required value={firstName} onChange={e => setFirstName(e.target.value)}

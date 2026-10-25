@@ -40,13 +40,24 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    const { element_type, x, y, width, height, content, z_index } = await request.json();
+    const { element_type, x, y, width, height, content, z_index,
+            object_fit, focal_x, focal_y, corner_style } = await request.json();
     if (!['image', 'text', 'video'].includes(element_type)) {
       return NextResponse.json({ error: 'element_type must be image, text, or video' }, { status: 400 });
     }
+    /*
+     * How a media element is framed travels with it.
+     *
+     * These four used to be insert-time defaults only — a new element has no
+     * crop to speak of, so nothing missed them. Duplicating one does: a copy
+     * that quietly lost its crop, its focal point and its corners is a copy
+     * of something else, and the editor would have shown it correctly until
+     * the next reload.
+     */
     const result = await db.execute({
-      sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content,
+                                       object_fit, focal_x, focal_y, corner_style)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       args: [
         params.id,
         element_type,
@@ -56,6 +67,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         height != null ? Number(height) : (element_type === 'text' ? 200 : 240),
         z_index != null ? Number(z_index) : 0,
         content ?? null,
+        object_fit === 'cover' ? 'cover' : 'contain',
+        focal_x != null ? Number(focal_x) : 50,
+        focal_y != null ? Number(focal_y) : 50,
+        corner_style === 'square' ? 'square' : 'rounded',
       ],
     });
     return NextResponse.json({ id: Number(result.rows[0].id) }, { status: 201 });

@@ -58,6 +58,9 @@ export interface ConferenceForm {
   template_id?: number | null;
 }
 
+/** How far a duplicate lands from the thing it was copied from. */
+const DUPLICATE_OFFSET = 24;
+
 interface FormElement {
   id: number;
   conference_form_id: number;
@@ -274,8 +277,22 @@ function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
     immediatelyRender: false,
   });
 
+  /*
+   * Typed over the page, not over a white card.
+   *
+   * The editor used to sit on bg-white, so text being written was black on
+   * white however it was going to look once saved — which on a photograph or
+   * a dark panel is a different piece of text entirely. The surface is
+   * transparent now and carries the colour the element will be drawn in, so
+   * what is typed is what will be read. The toolbar keeps its own fill; it is
+   * chrome rather than content, and it has to stay legible over anything.
+   */
   if (isEditMode) {
-    return <div className="w-full h-full overflow-hidden rounded-xl bg-white"><RichTextEditor editor={editor} minHeight="100%" /></div>;
+    return (
+      <div className="w-full h-full overflow-hidden rounded-xl" style={{ color: textColor }}>
+        <RichTextEditor editor={editor} minHeight="100%" />
+      </div>
+    );
   }
   return (
     <div
@@ -298,6 +315,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   const [attendeeDropOpen, setAttendeeDropOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [mounted, setMounted] = useState(false);
+  /** Elements moving together, and where they stood when the drag began. */
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const groupDrag = useRef<Map<number, { x: number; y: number }> | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanBanner, setScanBanner] = useState(false);
   const [scanCompanyMatches, setScanCompanyMatches] = useState<{ id: number; name: string }[]>([]);
@@ -375,8 +395,62 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
 
   const removeElement = useCallback((id: number) => {
     setElements(prev => prev.filter(e => e.id !== id));
+    setSelectedIds(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     fetch(`/api/conference-forms/${form.id}/elements/${id}`, { method: 'DELETE' }).catch(() => {});
   }, [form.id]);
+
+  /*
+   * Moving several things at once.
+   *
+   * A form built out of a heading, a rule and three captions is laid out once
+   * and then nudged as a group, and doing that one element at a time undoes
+   * the alignment between them every time. Elements are put in a set by the
+   * tick in their own toolbar, and dragging any one of them carries the rest
+   * by the same offset.
+   *
+   * The offsets are measured from where each element stood when the drag
+   * began rather than accumulated frame by frame, so a long drag cannot
+   * drift: the positions are a function of the pointer, not a sum of its
+   * steps.
+   */
+  const toggleSelected = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const beginGroupDrag = useCallback((id: number) => {
+    if (!selectedIds.has(id)) {
+      // Dragging something outside the selection is an ordinary single move,
+      // and leaving the old rings lit would say otherwise.
+      setSelectedIds(new Set());
+      groupDrag.current = null;
+      return;
+    }
+    groupDrag.current = new Map(
+      elements.filter(e => selectedIds.has(e.id)).map(e => [e.id, { x: e.x, y: e.y }]),
+    );
+  }, [elements, selectedIds]);
+
+  /** Where each of the others lands, given how far the dragged one has gone. */
+  const groupOffsets = (origins: Map<number, { x: number; y: number }>, id: number, x: number, y: number) => {
+    const from = origins.get(id);
+    if (!from) return null;
+    const dx = Math.round(x - from.x);
+    const dy = Math.round(y - from.y);
+    return Array.from(origins.entries())
+      .filter(([otherId]) => otherId !== id)
+      // Clamped at the edges, as the dragged one is by bounds="parent" — a
+      // group dragged into the corner must not push its other members off.
+      .map(([otherId, o]) => [otherId, { x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) }] as const);
+  };
 
   // Unified layering stack: the form card is just another item alongside the image/text
   // elements, so it can be sent behind or brought in front of them too.
@@ -446,8 +520,63 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     }
   }, [form.id, elements]);
 
+  /*
+   * The same element again, a little down and to the right.
+   *
+   * Offset rather than exactly on top, or the copy is invisible and the next
+   * drag moves whichever one the stack happened to put in front. Stacked
+   * above everything, like a new element, so what was just made is the thing
+   * being looked at.
+   *
+   * Everything about the element travels: a duplicated image keeps its crop
+   * and its focal point, a duplicated text keeps its markup. Only the
+   * position and the id are new.
+   */
+  const duplicateElement = useCallback(async (el: FormElement) => {
+    const nextZ = elements.length > 0 ? Math.max(...elements.map(e => e.z_index)) + 1 : 0;
+    const copy = {
+      element_type: el.element_type,
+      x: el.x + DUPLICATE_OFFSET,
+      y: el.y + DUPLICATE_OFFSET,
+      width: el.width,
+      height: el.height,
+      z_index: nextZ,
+      content: el.content,
+      object_fit: el.object_fit,
+      focal_x: el.focal_x,
+      focal_y: el.focal_y,
+      corner_style: el.corner_style,
+    };
+    try {
+      const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(copy),
+      });
+      if (!res.ok) throw new Error();
+      const { id } = await res.json();
+      setElements(prev => [...prev, { ...copy, id, conference_form_id: form.id }]);
+    } catch {
+      toast.error('Failed to duplicate element');
+    }
+  }, [form.id, elements]);
+
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
+
+  /*
+   * Escape lets the group go, and leaving edit mode does too.
+   *
+   * A selection that outlives the editing it was made for is a set of lit
+   * rings nobody asked for, and worse, a drag that quietly carries elements
+   * the person has stopped thinking about.
+   */
+  useEffect(() => {
+    if (!isEditMode) { setSelectedIds(new Set()); return; }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedIds(new Set()); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isEditMode]);
 
   useEffect(() => {
     const mq = window.matchMedia('(orientation: landscape) and (min-width: 768px)');
@@ -1070,8 +1199,31 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
               dragHandleClassName="rnd-drag-handle"
               bounds="parent"
               style={{ zIndex: el.z_index }}
-              className={isEditMode ? 'ring-2 ring-white/60 rounded-xl' : ''}
-              onDragStop={(_e, d) => updateElement(el.id, { x: Math.round(d.x), y: Math.round(d.y) })}
+              className={isEditMode
+                ? `rounded-xl ring-2 ${selectedIds.has(el.id) ? 'ring-brand-highlight' : 'ring-white/60'}`
+                : ''}
+              onDragStart={() => beginGroupDrag(el.id)}
+              onDrag={(_e, d) => {
+                const origins = groupDrag.current;
+                if (!origins) return;
+                const moves = groupOffsets(origins, el.id, d.x, d.y);
+                if (!moves) return;
+                // Local only while the pointer is down; the writes go out once,
+                // on drop, rather than once per frame per element.
+                setElements(prev => prev.map(e => {
+                  const move = moves.find(([id]) => id === e.id);
+                  return move ? { ...e, ...move[1] } : e;
+                }));
+              }}
+              onDragStop={(_e, d) => {
+                const origins = groupDrag.current;
+                groupDrag.current = null;
+                updateElement(el.id, { x: Math.round(d.x), y: Math.round(d.y) });
+                if (!origins) return;
+                for (const [id, pos] of groupOffsets(origins, el.id, d.x, d.y) ?? []) {
+                  updateElement(id, pos);
+                }
+              }}
               onResizeStop={(_e, _dir, ref, _delta, pos) => updateElement(el.id, {
                 width: ref.offsetWidth, height: ref.offsetHeight, x: Math.round(pos.x), y: Math.round(pos.y),
               })}
@@ -1107,6 +1259,23 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                           )}
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => toggleSelected(el.id)}
+                        aria-pressed={selectedIds.has(el.id)}
+                        title={selectedIds.has(el.id) ? 'Remove from the group' : 'Move with others'}
+                        className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                          selectedIds.has(el.id) ? 'text-brand-highlight' : 'text-white/70 hover:text-white'}`}
+                      >
+                        {selectedIds.has(el.id) ? (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><rect x="4" y="4" width="16" height="16" rx="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 12l3 3 5-6" /></svg>
+                        ) : (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="4" y="4" width="16" height="16" rx="3" /></svg>
+                        )}
+                      </button>
+                      <button type="button" onClick={() => duplicateElement(el)} title="Duplicate" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="9" y="9" width="11" height="11" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1" /></svg>
+                      </button>
                       <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-5 5m5-5l5 5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 19h14" /></svg>
                       </button>
