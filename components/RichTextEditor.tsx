@@ -43,6 +43,82 @@ export const FontSize = Extension.create({
   },
 });
 
+
+// ─── Block Layout: alignment and indent ───────────────────────────────────────
+
+/** How far one press of Indent moves a line. */
+export const INDENT_STEP = 24;
+/** As far in as a line can go — eight steps is most of a 280px text element. */
+export const MAX_INDENT = 8;
+
+/**
+ * Where a line sits across the width, and how far in it starts.
+ *
+ * Both are properties of the BLOCK rather than of the text in it, which is
+ * what makes them work the way a word processor's do: the caret sitting in a
+ * paragraph is enough to align or indent that paragraph, and a selection
+ * spanning three of them does all three. Nothing has to be selected.
+ *
+ * Written as inline style rather than classes because this HTML is stored and
+ * then rendered in three different places — the editor, the form card, and
+ * the public page — and a class would have to exist in all of them.
+ */
+export const BlockLayout = Extension.create({
+  name: 'blockLayout',
+  addOptions() { return { types: ['paragraph', 'heading'] }; },
+  addGlobalAttributes() {
+    return [{
+      types: this.options.types as string[],
+      attributes: {
+        textAlign: {
+          default: null,
+          parseHTML: (element: HTMLElement) => element.style.textAlign || null,
+          renderHTML: (attributes: Record<string, unknown>) =>
+            (attributes.textAlign ? { style: `text-align: ${attributes.textAlign}` } : {}),
+        },
+        indent: {
+          default: 0,
+          parseHTML: (element: HTMLElement) => {
+            const px = parseInt(element.style.marginLeft || '0', 10);
+            return Number.isFinite(px) && px > 0 ? Math.round(px / INDENT_STEP) : 0;
+          },
+          // Two attributes, one style: mergeAttributes joins them rather than
+          // letting the second overwrite the first, so an indented centred
+          // line keeps both.
+          renderHTML: (attributes: Record<string, unknown>) => {
+            const steps = Number(attributes.indent) || 0;
+            return steps > 0 ? { style: `margin-left: ${steps * INDENT_STEP}px` } : {};
+          },
+        },
+      },
+    }];
+  },
+  addCommands(): Record<string, unknown> {
+    /* eslint-disable */
+    const shift = (by: number) => () => ({ state, chain }: { state: any; chain: any }) => {
+      const { from, to } = state.selection;
+      let c = chain();
+      // Every block the selection touches, not just the one the caret is in.
+      state.doc.nodesBetween(from, to, (node: any, pos: number) => {
+        if (!(this.options.types as string[]).includes(node.type.name)) return;
+        const next = Math.min(MAX_INDENT, Math.max(0, (node.attrs.indent || 0) + by));
+        c = c.command(({ tr }: { tr: any }) => {
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, indent: next });
+          return true;
+        });
+      });
+      return c.run();
+    };
+    return {
+      setTextAlign: (align: string | null) => ({ commands }: { commands: any }) =>
+        (this.options.types as string[]).every(type => commands.updateAttributes(type, { textAlign: align })),
+      indentBlock: shift(1),
+      outdentBlock: shift(-1),
+    };
+    /* eslint-enable */
+  },
+});
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const FONT_FAMILIES = [
@@ -71,6 +147,7 @@ export function getEditorExtensions({ withImage = false }: { withImage?: boolean
     FontFamily,
     Color,
     FontSize,
+    BlockLayout,
   ];
   /* eslint-enable */
   if (withImage) exts.push(Image.configure({ inline: false, allowBase64: true }));
@@ -209,6 +286,46 @@ export function RichTextToolbar({ editor, withImage = false }: RichTextToolbarPr
       </ToolbarButton>
       <ToolbarButton title="Underline" onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')}>
         <span className="underline">U</span>
+      </ToolbarButton>
+
+      <span className="w-px h-4 bg-gray-200 mx-0.5" />
+
+      {/* Alignment and indent, drawn rather than named: three words would
+          take more of this toolbar than the formatting that comes before
+          them, and the icons are the ones every editor uses. Each acts on
+          whatever blocks the selection touches, with nothing selected
+          meaning the line the caret is in. */}
+      {([
+        ['left', 'Align left', ['M4 6h16', 'M4 12h10', 'M4 18h14']],
+        ['center', 'Align centre', ['M4 6h16', 'M7 12h10', 'M5 18h14']],
+        ['right', 'Align right', ['M4 6h16', 'M10 12h10', 'M6 18h14']],
+      ] as const).map(([align, label, paths]) => (
+        <ToolbarButton
+          key={align}
+          title={label}
+          /* eslint-disable-next-line */
+          onClick={() => (editor.chain().focus() as any)
+            .setTextAlign(editor.isActive({ textAlign: align }) ? null : align).run()}
+          active={editor.isActive({ textAlign: align })}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            {paths.map(d => <path key={d} strokeLinecap="round" d={d} />)}
+          </svg>
+        </ToolbarButton>
+      ))}
+      {/* eslint-disable-next-line */}
+      <ToolbarButton title="Indent" onClick={() => (editor.chain().focus() as any).indentBlock().run()}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" d="M11 6h9M11 12h9M11 18h9" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 9l3 3-3 3" />
+        </svg>
+      </ToolbarButton>
+      {/* eslint-disable-next-line */}
+      <ToolbarButton title="Outdent" onClick={() => (editor.chain().focus() as any).outdentBlock().run()}>
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" d="M11 6h9M11 12h9M11 18h9" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 9l-3 3 3 3" />
+        </svg>
       </ToolbarButton>
 
       <span className="w-px h-4 bg-gray-200 mx-0.5" />

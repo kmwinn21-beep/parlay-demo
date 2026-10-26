@@ -235,6 +235,58 @@ console.log('\n— shapes —');
       > migrations.indexOf('CREATE TABLE IF NOT EXISTS form_elements_new'), true);
 }
 
+console.log('\n— aligning and indenting a line —');
+{
+  const editor = strip('components/RichTextEditor.tsx');
+  const publicPage = strip('app/forms/page.tsx');
+
+  /*
+   * Both are properties of the BLOCK, which is what makes them behave the
+   * way a word processor's do: a caret sitting in a paragraph aligns that
+   * paragraph, and a selection across three does all three. Nothing has to
+   * be selected, and nothing else is touched.
+   */
+  eq('alignment and indent live on the block', /export const BlockLayout = Extension\.create\(\{/.test(editor), true);
+  eq('  on paragraphs and headings', /addOptions\(\) \{ return \{ types: \['paragraph', 'heading'\] \}; \}/.test(editor), true);
+  eq('  and the editor loads it', /FontSize,\n    BlockLayout,/.test(editor), true);
+
+  eq('three alignments', /\['left', 'Align left'[\s\S]{0,200}\['right', 'Align right'/.test(editor), true);
+  eq('  and pressing the active one clears it',
+    /setTextAlign\(editor\.isActive\(\{ textAlign: align \}\) \? null : align\)/.test(editor), true);
+
+  eq('indent moves in steps', /export const INDENT_STEP = 24;/.test(editor), true);
+  eq('  with a floor and a ceiling', /Math\.min\(MAX_INDENT, Math\.max\(0, \(node\.attrs\.indent \|\| 0\) \+ by\)\)/.test(editor), true);
+  // Every block the selection touches, not just the one the caret is in.
+  eq('  across everything the selection touches', /state\.doc\.nodesBetween\(from, to, /.test(editor), true);
+
+  /*
+   * Two attributes, one style attribute. mergeAttributes joins them rather
+   * than letting the second overwrite the first — measured: an indented
+   * centred line stores `text-align: center; margin-left: 48px`.
+   */
+  eq('alignment is written as style', /style: `text-align: \$\{attributes\.textAlign\}`/.test(editor), true);
+  eq('  and indent as a margin', /style: `margin-left: \$\{steps \* INDENT_STEP\}px`/.test(editor), true);
+  // Stored HTML is read back when the element is opened again.
+  eq('  both read back out of the HTML',
+    /parseHTML: \(element: HTMLElement\) => element\.style\.textAlign \|\| null/.test(editor)
+      && /parseInt\(element\.style\.marginLeft \|\| '0', 10\)/.test(editor), true);
+}
+
+console.log('\n— and the spaces somebody types —');
+{
+  const publicPage = strip('app/forms/page.tsx');
+  /*
+   * Measured: six typed spaces put the first glyph 31px in while editing and
+   * 0px in once rendered, because HTML collapses a run of spaces to one. The
+   * editor keeps them (ProseMirror sets pre-wrap on its own content), so
+   * every place that renders the stored HTML has to keep them too or the
+   * text moves on save.
+   */
+  eq('the form card keeps them', /background: fill, whiteSpace: 'pre-wrap'/.test(modal), true);
+  eq('  the public page keeps them', /style=\{\{ whiteSpace: 'pre-wrap' \}\}/.test(publicPage), true);
+  eq('  and so does the details panel', /color: textColor, whiteSpace: 'pre-wrap'/.test(publicPage), true);
+}
+
 console.log('\n— the form card\u2019s actions, named —');
 {
   const tab = strip('components/ConferenceFormsTab.tsx');

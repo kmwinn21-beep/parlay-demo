@@ -114,7 +114,12 @@ function ElementView({ el }: { el: FormElement }) {
           background: elementFill(el.background_color, el.background_opacity),
         }}
       >
-        <div className="prose prose-sm max-w-none h-full overflow-y-auto" dangerouslySetInnerHTML={{ __html: sanitizeHtml(src) }} />
+        {/* pre-wrap: the spaces typed into the editor survive the trip. */}
+        <div
+          className="prose prose-sm max-w-none h-full overflow-y-auto"
+          style={{ whiteSpace: 'pre-wrap' }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(src) }}
+        />
       </div>
     );
   }
@@ -610,7 +615,7 @@ function PublicFormInner() {
                 directions is longer than the form it covers. */}
             <div
               className="prose prose-sm max-w-none flex-1 overflow-y-auto px-6 py-4"
-              style={{ color: textColor }}
+              style={{ color: textColor, whiteSpace: 'pre-wrap' }}
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(detailsField.rich_content ?? '') }}
             />
             <div className="px-6 pb-6 pt-2">
