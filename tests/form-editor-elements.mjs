@@ -44,9 +44,10 @@ console.log('\n— a copy of an element —');
 {
   eq('the toolbar offers one', /title="Duplicate"/.test(modal), true);
   eq('  landing clear of the original', /x: el\.x \+ DUPLICATE_OFFSET/.test(modal), true);
+  // Above everything, by the one rule that also clears the form card — see
+  // "where a new element lands" below.
   eq('  and above everything, like a new element',
-    /const nextZ = elements\.length > 0 \? Math\.max\(\.\.\.elements\.map\(e => e\.z_index\)\) \+ 1 : 0;[\s\S]{0,400}duplicate/i.test(modal)
-      || /duplicateElement[\s\S]{0,300}Math\.max\(\.\.\.elements\.map\(e => e\.z_index\)\) \+ 1/.test(modal), true);
+    /duplicateElement = useCallback\(async \(el: FormElement\) => \{\n    const nextZ = nextElementZ\(\);/.test(modal), true);
 
   /*
    * How a media element is framed has to travel with the copy. The insert
@@ -86,6 +87,49 @@ console.log('\n— several at once —');
   eq('escape lets the group go', /if \(e\.key === 'Escape'\) setSelectedIds\(new Set\(\)\);/.test(modal), true);
   eq('  and so does leaving edit mode', /if \(!isEditMode\) \{ setSelectedIds\(new Set\(\)\); return; \}/.test(modal), true);
   eq('  a removed element leaves it too', /if \(!prev\.has\(id\)\) return prev;/.test(modal), true);
+}
+
+console.log('\n— where a new element lands —');
+{
+  /*
+   * Reported: clicking Add Text appeared to do nothing. It did — the element
+   * was created, centred in the viewport where the form card also is, with a
+   * z of zero against the card's 1000. It was underneath the card the whole
+   * time.
+   */
+  eq('new elements clear the form card, not just the other elements',
+    /Math\.max\(formMeta\.form_z_index, \.\.\.elements\.map\(e => e\.z_index\), -1\) \+ 1/.test(modal), true);
+  eq('  and a duplicate uses the same rule', /const nextZ = nextElementZ\(\);/.test(modal), true);
+
+  // And they are put beside the card rather than over it, on the side that
+  // has room — never under the settings drawer, which is where they used to
+  // be dropped before the centring.
+  eq('they are placed beside the card', /const right = cardX \+ cardWidth \+ GAP;/.test(modal), true);
+  eq('  the other side when the first has no room', /const left = cardX - GAP - width;/.test(modal), true);
+  eq('    but never under the settings drawer', /if \(left >= DRAWER_WIDTH \+ GAP\) return \{ x: left, y \};/.test(modal), true);
+  eq('  and centred when neither side fits',
+    /return \{ x: Math\.max\(0, Math\.round\(\(window\.innerWidth - width\) \/ 2\)\), y \};/.test(modal), true);
+}
+
+console.log('\n— the rubber band —');
+{
+  // Intersection, not containment: the useful gesture is a stroke across a
+  // row of things rather than a careful loop around them.
+  eq('the band takes everything it touches',
+    /el\.x < right && el\.x \+ el\.width > left && el\.y < bottom && el\.y \+ el\.height > top/.test(modal), true);
+  /*
+   * One check keeps it out of the way of every element's own drag, the form
+   * card's, the settings drawer and the close button: the pointer must have
+   * gone down on the canvas itself and nothing inside it.
+   */
+  eq('  and starts only on bare canvas',
+    /if \(!isEditMode \|\| e\.button !== 0 \|\| e\.target !== canvasRef\.current\) return;/.test(modal), true);
+  eq('  drawn in the same coordinate space the elements are placed in',
+    /<div ref=\{canvasRef\} onPointerDown=\{startBand\} className="relative h-full w-full overflow-hidden">/.test(modal), true);
+  eq('  shift adds to the group, a bare drag replaces it',
+    /const next = prev\.add \? new Set\(current\) : new Set<number>\(\);/.test(modal), true);
+  eq('  so a click on empty canvas clears', /setBand\(\{ x0: x, y0: y, x1: x, y1: y, add: e\.shiftKey \}\)/.test(modal), true);
+  eq('  and it listens to nothing while it is drawn', /pointer-events-none absolute border border-dashed/.test(modal), true);
 }
 
 console.log('\n— the public form, on a phone —');

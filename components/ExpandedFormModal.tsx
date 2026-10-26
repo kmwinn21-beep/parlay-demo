@@ -61,6 +61,9 @@ export interface ConferenceForm {
 /** How far a duplicate lands from the thing it was copied from. */
 const DUPLICATE_OFFSET = 24;
 
+/** The settings drawer's width while editing — nothing new is placed under it. */
+const DRAWER_WIDTH = 340;
+
 interface FormElement {
   id: number;
   conference_form_id: number;
@@ -439,6 +442,66 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     );
   }, [elements, selectedIds]);
 
+  /*
+   * The rubber band.
+   *
+   * Picking five captions out of a toolbar tick each is fine for two and
+   * tedious for five, so dragging across empty canvas selects everything the
+   * box touches — intersection rather than containment, since the useful
+   * gesture is a stroke across a row of things rather than a careful loop
+   * around them.
+   *
+   * It starts only on the canvas itself: the test is that the pointer went
+   * down on the overlay element and nothing inside it. That one check keeps
+   * it out of the way of every element's own drag, the form card's, the
+   * settings drawer and the close button, none of which have to know this
+   * exists. Holding shift adds to the group; without it the band replaces
+   * what was selected, so a click on empty canvas clears.
+   */
+  const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number; add: boolean } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  const startBand = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isEditMode || e.button !== 0 || e.target !== canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setBand({ x0: x, y0: y, x1: x, y1: y, add: e.shiftKey });
+  }, [isEditMode]);
+
+  useEffect(() => {
+    if (!band) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const move = (e: PointerEvent) => {
+      setBand(prev => (prev ? { ...prev, x1: e.clientX - rect.left, y1: e.clientY - rect.top } : prev));
+    };
+    const up = () => {
+      setBand(prev => {
+        if (!prev) return null;
+        const left = Math.min(prev.x0, prev.x1);
+        const right = Math.max(prev.x0, prev.x1);
+        const top = Math.min(prev.y0, prev.y1);
+        const bottom = Math.max(prev.y0, prev.y1);
+        const touched = elements
+          .filter(el => el.x < right && el.x + el.width > left && el.y < bottom && el.y + el.height > top)
+          .map(el => el.id);
+        setSelectedIds(current => {
+          const next = prev.add ? new Set(current) : new Set<number>();
+          touched.forEach(id => next.add(id));
+          return next;
+        });
+        return null;
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [band, elements]);
+
   /** Where each of the others lands, given how far the dragged one has gone. */
   const groupOffsets = (origins: Map<number, { x: number; y: number }>, id: number, x: number, y: number) => {
     const from = origins.get(id);
@@ -488,22 +551,54 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     });
   }, [elements, formMeta.form_z_index, form.id, patchFormMeta]);
 
+  /*
+   * Above everything, the form card included.
+   *
+   * This used to be the highest z among the ELEMENTS, which on an empty form
+   * is zero — and the form card sits at 1000. So the first thing anyone added
+   * was filed behind the card, and since a new element is placed in the middle
+   * of the screen, where the card also is, it landed exactly under it: click
+   * Add Text, nothing appears. It was there the whole time.
+   *
+   * z_index is not contiguous — elements are removed, and the migration
+   * backfill started some at fixed values — so a count is not a next value.
+   */
+  const nextElementZ = useCallback(
+    () => Math.max(formMeta.form_z_index, ...elements.map(e => e.z_index), -1) + 1,
+    [elements, formMeta.form_z_index],
+  );
+
+  /*
+   * Beside the form card rather than on top of it.
+   *
+   * Dropping every new element over the card means covering the form to look
+   * at what was just added, so the gap beside the card is used where there is
+   * one: to its right first, then its left — but only clear of the settings
+   * drawer, which docks over the left while editing and is where new elements
+   * used to disappear. A screen too narrow for either gap falls back to the
+   * middle, which is at least on top now.
+   */
+  const placeNewElement = useCallback((width: number, height: number) => {
+    const GAP = 24;
+    const cardWidth = formMeta.form_width;
+    const cardX = formMeta.form_x ?? Math.round((window.innerWidth - cardWidth) / 2);
+    const y = Math.max(0, Math.round((window.innerHeight - height) / 2));
+    const right = cardX + cardWidth + GAP;
+    if (right + width + GAP <= window.innerWidth) return { x: right, y };
+    const left = cardX - GAP - width;
+    if (left >= DRAWER_WIDTH + GAP) return { x: left, y };
+    return { x: Math.max(0, Math.round((window.innerWidth - width) / 2)), y };
+  }, [formMeta.form_width, formMeta.form_x]);
+
   const addElement = useCallback(async (element_type: 'image' | 'text' | 'video', content: string) => {
-    // Always stack new elements above every existing one — z_index isn't guaranteed to be
-    // contiguous (elements can be removed, or start from the migration backfill's fixed
-    // values), so elements.length is not a reliable "next" value.
-    const nextZ = elements.length > 0 ? Math.max(...elements.map(e => e.z_index)) + 1 : 0;
     const width = element_type === 'text' ? 280 : 300;
     const height = element_type === 'text' ? 180 : 220;
-    // Center in the viewport, not a fixed top-left offset — the settings drawer docks over
-    // that corner while editing, which made new elements land hidden behind it.
     const base = {
       element_type,
-      x: Math.max(0, Math.round((window.innerWidth - width) / 2)),
-      y: Math.max(0, Math.round((window.innerHeight - height) / 2)),
+      ...placeNewElement(width, height),
       width,
       height,
-      z_index: nextZ,
+      z_index: nextElementZ(),
       content,
     };
     try {
@@ -518,7 +613,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     } catch {
       toast.error('Failed to add element');
     }
-  }, [form.id, elements]);
+  }, [form.id, nextElementZ, placeNewElement]);
 
   /*
    * The same element again, a little down and to the right.
@@ -533,7 +628,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
    * position and the id are new.
    */
   const duplicateElement = useCallback(async (el: FormElement) => {
-    const nextZ = elements.length > 0 ? Math.max(...elements.map(e => e.z_index)) + 1 : 0;
+    const nextZ = nextElementZ();
     const copy = {
       element_type: el.element_type,
       x: el.x + DUPLICATE_OFFSET,
@@ -559,7 +654,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     } catch {
       toast.error('Failed to duplicate element');
     }
-  }, [form.id, elements]);
+  }, [form.id, nextElementZ]);
 
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
@@ -1179,8 +1274,27 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       </button>
 
       {isLandscape ? (
-        /* ── Landscape: free-position/resize canvas ── */
-        <div className="relative h-full w-full overflow-hidden">
+        /* ── Landscape: free-position/resize canvas ──
+           The canvas the elements are positioned in is also the surface the
+           selection band is drawn on, so both read one coordinate space and
+           an element's stored x/y can be compared with the band without
+           converting anything. */
+        <div ref={canvasRef} onPointerDown={startBand} className="relative h-full w-full overflow-hidden">
+          {/* Drawn over everything and listening to nothing — the pointer is
+              already held by the window handlers that size it. */}
+          {band && (
+            <div
+              data-selection-band
+              className="pointer-events-none absolute border border-dashed border-white/80 bg-white/10 rounded-sm"
+              style={{
+                left: Math.min(band.x0, band.x1),
+                top: Math.min(band.y0, band.y1),
+                width: Math.abs(band.x1 - band.x0),
+                height: Math.abs(band.y1 - band.y0),
+                zIndex: 10001,
+              }}
+            />
+          )}
           {form.panel_logo_url && (
             <img
               src={form.panel_logo_url}
