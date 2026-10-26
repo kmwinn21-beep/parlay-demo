@@ -147,6 +147,42 @@ console.log('\n— the database that lost the table outright —');
     (await db.execute(`SELECT name FROM sqlite_master WHERE type='index' AND name='idx_form_elements_form'`)).rows.length, 1);
 }
 
+console.log('\n— and the rebuild that widened it for shapes —');
+{
+  /*
+   * Widening the element_type CHECK means rebuilding the table again, which
+   * is the operation that stranded it the first time. So the second rebuild
+   * is written to survive being interrupted, and is followed by the same
+   * repair: whatever a pass leaves behind, the next one finishes.
+   */
+  const db = await freshDb();
+  await seedForm(db);
+  eq('a shape is a kind of element now',
+    await db.execute(`INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content, corner_style)
+                      VALUES (8, 'shape', 0, 0, 200, 120, 0, null, 'circle')`).then(() => true, () => false), true);
+  eq('  with an edge of its own',
+    (await cols(db, 'form_elements')).filter(c => c.startsWith('border_')).sort(), ['border_color', 'border_width']);
+  eq('  and the fill it shares with text panels',
+    (await cols(db, 'form_elements')).filter(c => c.startsWith('background_')).sort(),
+    ['background_color', 'background_opacity']);
+  eq('  while nonsense is still refused',
+    await db.execute(`INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content)
+                      VALUES (8, 'spreadsheet', 0, 0, 200, 120, 0, null)`).then(() => true, () => false), false);
+
+  // Interrupted between the DROP and the RENAME, exactly as before.
+  const rebuilds = migrations.filter(m => /CREATE TABLE IF NOT EXISTS form_elements_new/.test(m));
+  eq('the second rebuild creates its copy only if it has to', rebuilds.length, 1);
+  await db.execute(rebuilds[0]);
+  await db.execute(`INSERT INTO form_elements_new (conference_form_id, element_type, x, y, width, height, z_index, content, corner_style)
+                    VALUES (8, 'shape', 5, 5, 120, 120, 0, null, 'circle')`);
+  await db.execute('DROP TABLE form_elements');
+  for (const sql of migrations) await db.execute(sql).catch(() => {});
+  eq('  and an interrupted one still converges', await tables(db), ['form_elements']);
+  eq('    with the shape that was stranded in it',
+    (await db.execute(`SELECT corner_style FROM form_elements WHERE width = 120`)).rows.map(r => String(r.corner_style)),
+    ['circle']);
+}
+
 rmSync(dir, { recursive: true, force: true });
 rmSync(envDir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed\n`);

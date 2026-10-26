@@ -33,6 +33,8 @@ interface Props {
   onAddImage: (url: string) => void;
   onAddVideo: (url: string) => void;
   onAddText: () => void;
+  /** Which of the three, by the corner it wears. */
+  onAddShape: (corner: 'square' | 'rounded' | 'circle') => void;
 }
 
 type DockSide = 'left' | 'right' | 'top' | 'bottom';
@@ -102,6 +104,7 @@ export function FormEditDrawer({
   onAddImage,
   onAddVideo,
   onAddText,
+  onAddShape,
 }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
@@ -578,6 +581,31 @@ export function FormEditDrawer({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" /></svg>
                 + Add Text
               </button>
+              {/* Three shapes rather than one with a corner setting: the
+                  choice is what the thing IS, and picking it from a row of
+                  pictures is quicker than making a rectangle and then
+                  rounding it. The buttons are drawn as what they add. */}
+              <div className="flex gap-1.5">
+                {([
+                  ['square', 'Rectangle', 'rounded-none'],
+                  ['rounded', 'Rounded rectangle', 'rounded-md'],
+                  ['circle', 'Circle', 'rounded-full'],
+                ] as const).map(([corner, label, cls]) => (
+                  <button
+                    key={corner}
+                    type="button"
+                    onClick={() => onAddShape(corner)}
+                    title={`Add a ${label.toLowerCase()}`}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold border border-gray-300 hover:bg-gray-50 transition-colors"
+                  >
+                    <span className={`w-4 h-4 border-2 border-gray-500 ${cls} ${corner === 'circle' ? '' : ''}`} />
+                    <span className="sr-only">{label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400">
+                + Add Shape — fill, border and transparency are set on the shape itself.
+              </p>
             </Section>
           </div>
         </div>

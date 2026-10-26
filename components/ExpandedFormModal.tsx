@@ -76,6 +76,18 @@ export function elementFill(color: string | null, opacity: number | null): strin
   return `rgba(${r}, ${g}, ${b}, ${pct / 100})`;
 }
 
+/**
+ * What makes a rectangle a rounded rectangle or a circle.
+ *
+ * A circle is 50% rather than a fixed radius, so it follows the element as it
+ * is resized: a wide one is an ellipse, which is what dragging a circle wide
+ * should give you.
+ */
+export function shapeRadius(cornerStyle: string): string {
+  if (cornerStyle === 'circle') return '50%';
+  return cornerStyle === 'square' ? '0px' : '14px';
+}
+
 /** How far a duplicate lands from the thing it was copied from. */
 const DUPLICATE_OFFSET = 24;
 
@@ -85,7 +97,7 @@ const DRAWER_WIDTH = 340;
 interface FormElement {
   id: number;
   conference_form_id: number;
-  element_type: 'image' | 'text' | 'video';
+  element_type: 'image' | 'text' | 'video' | 'shape';
   x: number;
   y: number;
   width: number;
@@ -95,11 +107,15 @@ interface FormElement {
   object_fit: 'contain' | 'cover';
   focal_x: number;
   focal_y: number;
-  corner_style: 'square' | 'rounded';
-  /** A fill behind a text element. Null is no fill at all. */
+  /** A shape's own outline: square, rounded, or a circle. */
+  corner_style: 'square' | 'rounded' | 'circle';
+  /** A fill behind a text element, or a shape's own. Null is no fill at all. */
   background_color: string | null;
   /** How much of that fill shows, 0–100. */
   background_opacity: number;
+  /** A shape's edge. Null, or a width of 0, is no edge. */
+  border_color: string | null;
+  border_width: number;
 }
 
 interface AttendeeOption {
@@ -181,11 +197,13 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerS
   objectFit: 'contain' | 'cover';
   focalX: number;
   focalY: number;
-  cornerStyle: 'square' | 'rounded';
+  /* Media takes the same column shapes do, but reads only two of them: a
+     circular photograph is a crop, not a corner, and is not offered. */
+  cornerStyle: FormElement['corner_style'];
   isEditMode: boolean;
   onFocalCommit: (x: number, y: number) => void;
 }) {
-  const cornerClass = cornerStyle === 'rounded' ? 'rounded-xl' : 'rounded-none';
+  const cornerClass = cornerStyle === 'square' ? 'rounded-none' : 'rounded-xl';
   const [error, setError] = useState(false);
   const [localFocal, setLocalFocal] = useState({ x: focalX, y: focalY });
   const [isDragging, setIsDragging] = useState(false);
@@ -285,6 +303,29 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerS
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A shape: a box with a fill, an edge and a corner.
+ *
+ * Nothing inside it and nothing to click — it is scenery, drawn behind or
+ * beside the things that are read, and the element's own frame is what gets
+ * dragged and resized. The fill is the one text panels use, so a shape and a
+ * caption that share a colour share it exactly.
+ */
+function ShapeElementCanvas({ element }: { element: FormElement }) {
+  const fill = elementFill(element.background_color, element.background_opacity);
+  const width = element.border_width ?? 0;
+  return (
+    <div
+      className="w-full h-full"
+      style={{
+        background: fill,
+        borderRadius: shapeRadius(element.corner_style),
+        border: width > 0 && element.border_color ? `${width}px solid ${element.border_color}` : undefined,
+      }}
+    />
   );
 }
 
@@ -617,9 +658,17 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     return { x: Math.max(0, Math.round((window.innerWidth - width) / 2)), y };
   }, [formMeta.form_width, formMeta.form_x]);
 
-  const addElement = useCallback(async (element_type: 'image' | 'text' | 'video', content: string) => {
+  const addElement = useCallback(async (
+    element_type: 'image' | 'text' | 'video' | 'shape',
+    content: string,
+    /* A shape arrives knowing which one it is, and wearing something: an
+       unfilled, unbordered rectangle is an invisible rectangle, and dropping
+       one of those on the canvas looks exactly like the bug this editor just
+       had. */
+    shape?: { corner_style: FormElement['corner_style']; background_color: string; background_opacity: number },
+  ) => {
     const width = element_type === 'text' ? 280 : 300;
-    const height = element_type === 'text' ? 180 : 220;
+    const height = element_type === 'text' ? 180 : element_type === 'shape' ? 180 : 220;
     const base = {
       element_type,
       ...placeNewElement(width, height),
@@ -627,6 +676,7 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       height,
       z_index: nextElementZ(),
       content,
+      ...(shape ?? {}),
     };
     try {
       const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
@@ -637,10 +687,10 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       if (!res.ok) throw new Error();
       const { id } = await res.json();
       setElements(prev => [...prev, {
-        ...base, id, conference_form_id: form.id,
         object_fit: 'contain', focal_x: 50, focal_y: 50, corner_style: 'rounded',
-        background_color: null, background_opacity: 100,
-      }]);
+        background_color: null, background_opacity: 100, border_color: null, border_width: 0,
+        ...base, id, conference_form_id: form.id,
+      } as FormElement]);
     } catch {
       toast.error('Failed to add element');
     }
@@ -674,6 +724,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       corner_style: el.corner_style,
       background_color: el.background_color,
       background_opacity: el.background_opacity,
+      border_color: el.border_color,
+      border_width: el.border_width,
     };
     try {
       const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
@@ -1410,10 +1462,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                           )}
                         </button>
                       )}
-                      {/* The fill, for text only: an image brings its own
-                          background and a video is one. The swatch shows what
-                          is set — a diagonal through it when nothing is. */}
-                      {el.element_type === 'text' && (
+                      {/* The fill — for text panels and for shapes, which are
+                          little else. An image brings its own background and a
+                          video is one, so neither offers it. The swatch shows
+                          what is set, hatched when nothing is. */}
+                      {(el.element_type === 'text' || el.element_type === 'shape') && (
                         <div className="relative">
                           <button
                             type="button"
@@ -1472,6 +1525,77 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                                   <span className="w-7 text-right tabular-nums">{Math.round(el.background_opacity)}%</span>
                                 </label>
                               )}
+                              {/* A shape is a fill, an edge and a corner, so
+                                  the rest of it is set here rather than in
+                                  three more toolbar buttons. */}
+                              {el.element_type === 'shape' && (
+                                <>
+                                  <div className="flex items-center gap-2 border-t border-white/10 pt-2">
+                                    <input
+                                      type="color"
+                                      value={el.border_color ?? '#ffffff'}
+                                      onChange={e => updateElement(el.id, {
+                                        border_color: e.target.value,
+                                        // An edge with no width is not an edge; choosing a
+                                        // colour is how somebody asks for one.
+                                        border_width: el.border_width > 0 ? el.border_width : 2,
+                                      }, { debounce: true })}
+                                      className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
+                                      title="Border colour"
+                                    />
+                                    <span className="flex-1 text-[10px] text-white/70">
+                                      {el.border_color && el.border_width > 0 ? 'Border' : 'No border'}
+                                    </span>
+                                    {el.border_color && el.border_width > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => updateElement(el.id, { border_width: 0 })}
+                                        title="Remove the border"
+                                        className="text-[10px] text-white/60 hover:text-white"
+                                      >
+                                        Clear
+                                      </button>
+                                    )}
+                                  </div>
+                                  {el.border_color && el.border_width > 0 && (
+                                    <label className="flex items-center gap-2 text-[10px] text-white/70">
+                                      <span className="w-9 flex-shrink-0">Width</span>
+                                      <input
+                                        type="range"
+                                        min={1}
+                                        max={16}
+                                        value={el.border_width}
+                                        onChange={e => updateElement(el.id, { border_width: Number(e.target.value) }, { debounce: true })}
+                                        className="flex-1 accent-brand-highlight"
+                                      />
+                                      <span className="w-7 text-right tabular-nums">{Math.round(el.border_width)}px</span>
+                                    </label>
+                                  )}
+                                  <div className="flex items-center gap-1 border-t border-white/10 pt-2">
+                                    <span className="w-9 flex-shrink-0 text-[10px] text-white/70">Shape</span>
+                                    {(['square', 'rounded', 'circle'] as const).map(corner => (
+                                      <button
+                                        key={corner}
+                                        type="button"
+                                        onClick={() => updateElement(el.id, { corner_style: corner })}
+                                        aria-pressed={el.corner_style === corner}
+                                        title={corner === 'square' ? 'Rectangle' : corner === 'rounded' ? 'Rounded rectangle' : 'Circle'}
+                                        className={`flex-1 h-6 rounded flex items-center justify-center transition-colors ${
+                                          el.corner_style === corner ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                                      >
+                                        {/* Not shapeRadius: a 14px radius on a
+                                            14px icon is a circle, so the
+                                            rounded one would be drawn as the
+                                            thing beside it. */}
+                                        <span
+                                          className="w-3.5 h-3.5 border-2 border-white/80"
+                                          style={{ borderRadius: corner === 'circle' ? '50%' : corner === 'rounded' ? '4px' : '0px' }}
+                                        />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1516,7 +1640,9 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                     </div>
                   </div>
                 )}
-                {el.element_type === 'image' || el.element_type === 'video' ? (
+                {el.element_type === 'shape' ? (
+                  <ShapeElementCanvas element={el} />
+                ) : el.element_type === 'image' || el.element_type === 'video' ? (
                   <MediaElementCanvas
                     src={el.content || ''}
                     mediaType={el.element_type}
@@ -1612,6 +1738,14 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             onAddImage={url => addElement('image', url)}
             onAddVideo={url => addElement('video', url)}
             onAddText={() => addElement('text', '<p>New text</p>')}
+            /* A new shape arrives visible: a mid grey at three-quarters,
+               which reads on a photograph and on a flat colour alike, and is
+               a starting point rather than a decision. */
+            onAddShape={corner => addElement('shape', '', {
+              corner_style: corner,
+              background_color: '#94a3b8',
+              background_opacity: 75,
+            })}
           />
         </div>
       ) : (

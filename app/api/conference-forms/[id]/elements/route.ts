@@ -9,7 +9,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const res = await db.execute({
       sql: `SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content,
-                   object_fit, focal_x, focal_y, corner_style, background_color, background_opacity
+                   object_fit, focal_x, focal_y, corner_style, background_color, background_opacity,
+                   border_color, border_width
             FROM form_elements WHERE conference_form_id = ? ORDER BY z_index, id`,
       args: [params.id],
     });
@@ -32,6 +33,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
          having none rather than as having black at zero. */
       background_color: r.background_color ? String(r.background_color) : null,
       background_opacity: r.background_opacity != null ? Number(r.background_opacity) : 100,
+      border_color: r.border_color ? String(r.border_color) : null,
+      border_width: r.border_width != null ? Number(r.border_width) : 0,
     }));
     return NextResponse.json(elements);
   } catch (error) {
@@ -47,9 +50,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   try {
     const { element_type, x, y, width, height, content, z_index,
             object_fit, focal_x, focal_y, corner_style,
-            background_color, background_opacity } = await request.json();
-    if (!['image', 'text', 'video'].includes(element_type)) {
-      return NextResponse.json({ error: 'element_type must be image, text, or video' }, { status: 400 });
+            background_color, background_opacity, border_color, border_width } = await request.json();
+    if (!['image', 'text', 'video', 'shape'].includes(element_type)) {
+      return NextResponse.json({ error: 'element_type must be image, text, video or shape' }, { status: 400 });
     }
     /*
      * How a media element is framed travels with it.
@@ -63,15 +66,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const result = await db.execute({
       sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content,
                                        object_fit, focal_x, focal_y, corner_style,
-                                       background_color, background_opacity)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                                       background_color, background_opacity, border_color, border_width)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       args: [
         params.id,
         element_type,
         x != null ? Number(x) : 40,
         y != null ? Number(y) : 40,
         width != null ? Number(width) : 280,
-        height != null ? Number(height) : (element_type === 'text' ? 200 : 240),
+        height != null ? Number(height) : (element_type === 'text' ? 200 : element_type === 'shape' ? 180 : 240),
         z_index != null ? Number(z_index) : 0,
         content ?? null,
         object_fit === 'cover' ? 'cover' : 'contain',
@@ -80,6 +83,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         corner_style === 'square' ? 'square' : 'rounded',
         background_color || null,
         background_opacity != null ? Number(background_opacity) : null,
+        border_color || null,
+        border_width != null ? Number(border_width) : null,
       ],
     });
     return NextResponse.json({ id: Number(result.rows[0].id) }, { status: 201 });

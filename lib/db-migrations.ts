@@ -2910,4 +2910,79 @@ export const migrations: string[] = [
      is, and is read as 100 when it is null. */
   `ALTER TABLE form_elements ADD COLUMN background_color TEXT`,
   `ALTER TABLE form_elements ADD COLUMN background_opacity REAL`,
+
+  /* A shape is a fourth kind of element: a rectangle, a rounded one, or a
+     circle, with a fill and a border and nothing inside it.
+
+     The fill it already has — background_color and background_opacity, added
+     just above for text panels, mean the same thing here — so a shape needs
+     only an edge of its own. corner_style carries which of the three it is;
+     that column has never had a CHECK on it, so 'circle' joins 'square' and
+     'rounded' without touching the table.
+
+     element_type does have one, and widening a CHECK means rebuilding the
+     table — the operation that stranded form_elements on a live tenant when
+     it was interrupted between the DROP and the RENAME. So this rebuild is
+     written to survive being interrupted anywhere in the middle: the copy is
+     created IF NOT EXISTS, the drop is IF EXISTS, and the pair of repair
+     statements that finished the last interrupted rename is repeated after
+     it. A pass that stops halfway leaves form_elements_new holding the rows,
+     and the next pass — which replays from the last checkpoint — finishes the
+     rename or, failing everything else, creates the table from scratch.
+
+     The copy reuses the name form_elements_new deliberately: that is the name
+     the existing repair knows, so one repair covers both rebuilds. */
+  `ALTER TABLE form_elements ADD COLUMN border_color TEXT`,
+  `ALTER TABLE form_elements ADD COLUMN border_width REAL`,
+  `CREATE TABLE IF NOT EXISTS form_elements_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video','shape')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50,
+    corner_style TEXT NOT NULL DEFAULT 'rounded',
+    background_color TEXT,
+    background_opacity REAL,
+    border_color TEXT,
+    border_width REAL
+  )`,
+  `INSERT INTO form_elements_new
+     (id, conference_form_id, element_type, x, y, width, height, z_index, content, created_at,
+      object_fit, focal_x, focal_y, corner_style, background_color, background_opacity,
+      border_color, border_width)
+   SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content, created_at,
+          object_fit, focal_x, focal_y, corner_style, background_color, background_opacity,
+          border_color, border_width
+   FROM form_elements`,
+  `DROP TABLE IF EXISTS form_elements`,
+  `ALTER TABLE form_elements_new RENAME TO form_elements`,
+  `CREATE TABLE IF NOT EXISTS form_elements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video','shape')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50,
+    corner_style TEXT NOT NULL DEFAULT 'rounded',
+    background_color TEXT,
+    background_opacity REAL,
+    border_color TEXT,
+    border_width REAL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
 ];

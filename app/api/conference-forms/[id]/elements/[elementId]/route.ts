@@ -8,7 +8,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   const db = await getDb(authResult?.accountId);
   try {
     const { x, y, width, height, content, z_index, object_fit, focal_x, focal_y, corner_style,
-            background_color, background_opacity } = await request.json();
+            background_color, background_opacity, border_color, border_width } = await request.json();
     const sets: string[] = [];
     // Nullable because clearing a fill is a write of null, not an omission.
     const args: (string | number | null)[] = [];
@@ -29,6 +29,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (background_opacity !== undefined) {
       sets.push('background_opacity = ?');
       args.push(background_opacity != null ? Number(background_opacity) : null);
+    }
+    if (border_color !== undefined) { sets.push('border_color = ?'); args.push(border_color || null); }
+    if (border_width !== undefined) {
+      sets.push('border_width = ?');
+      args.push(border_width != null ? Number(border_width) : null);
     }
     if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     args.push(params.elementId, params.id);

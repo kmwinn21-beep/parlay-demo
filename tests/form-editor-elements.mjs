@@ -156,10 +156,13 @@ console.log('\n— a fill behind the words —');
   // the panel.
   eq('the editor draws it', /style=\{\{ color: textColor, background: fill \}\}/.test(modal), true);
   eq('  and so does the public page', /background: elementFill\(el\.background_color, el\.background_opacity\)/.test(publicForm), true);
-  eq('    from the same function', /import \{ buildAccentBackground, elementFill \}/.test(publicForm), true);
+  eq('    from the same function',
+    /import \{ buildAccentBackground, elementFill, shapeRadius \}/.test(publicForm), true);
 
-  // Only text: an image brings its own background and a video is one.
-  eq('only text elements offer one', /\{el\.element_type === 'text' && \([\s\S]{0,400}title="Background colour"/.test(modal), true);
+  // Text panels and shapes. An image brings its own background and a video
+  // is one, so neither offers a fill.
+  eq('text and shapes offer one, media does not',
+    /\{\(el\.element_type === 'text' \|\| el\.element_type === 'shape'\) && \([\s\S]{0,400}title="Background colour"/.test(modal), true);
   eq('  the opacity appears once there is a colour to see through',
     /\{el\.background_color && \([\s\S]{0,300}type="range"/.test(modal), true);
   eq('  and clearing it writes a null rather than a black',
@@ -172,6 +175,64 @@ console.log('\n— a fill behind the words —');
   }
   // A duplicate is a copy of the thing, fill included.
   eq('a duplicate carries the fill', /background_color: el\.background_color/.test(modal), true);
+}
+
+console.log('\n— shapes —');
+{
+  const elementsRoute3 = strip('app/api/conference-forms/[id]/elements/route.ts');
+  const drawer = strip('components/FormEditDrawer.tsx');
+  const migrations = strip('lib/db-migrations.ts');
+
+  eq('the drawer offers three of them', /onAddShape\(corner\)/.test(drawer), true);
+  eq('  rectangle, rounded and circle',
+    /\['square', 'Rectangle', 'rounded-none'\][\s\S]{0,120}\['circle', 'Circle', 'rounded-full'\]/.test(drawer), true);
+  // An unfilled, unbordered rectangle is an invisible rectangle, and dropping
+  // one of those on the canvas looks exactly like the bug this editor had.
+  eq('  and a new one arrives visible',
+    /background_color: '#94a3b8',\n              background_opacity: 75,/.test(modal), true);
+
+  /*
+   * A circle is 50%, so it follows the element as it is resized: dragging one
+   * wide gives an ellipse, which is what dragging a circle wide should do.
+   */
+  eq('one function decides the corner', /export function shapeRadius\(cornerStyle: string\)/.test(modal), true);
+  eq('  a circle follows the box', /if \(cornerStyle === 'circle'\) return '50%';/.test(modal), true);
+  eq('  and the public page draws from it too', /borderRadius: shapeRadius\(el\.corner_style\)/.test(publicForm), true);
+
+  eq('a shape is drawn as a box with an edge', /function ShapeElementCanvas\(\{ element \}: \{ element: FormElement \}\)/.test(modal), true);
+  eq('  with the fill text panels use', /const fill = elementFill\(element\.background_color, element\.background_opacity\);/.test(modal), true);
+  eq('  and no edge at all when it has no width',
+    /width > 0 && element\.border_color \? `\$\{width\}px solid \$\{element\.border_color\}` : undefined/.test(modal), true);
+  // Choosing a border colour is how somebody asks for a border.
+  eq('  picking a colour gives it a width',
+    /border_width: el\.border_width > 0 \? el\.border_width : 2,/.test(modal), true);
+
+  /*
+   * Layering is not gated by what an element is: the four controls sit in
+   * every element's toolbar, so a shape can go behind a photograph or in
+   * front of the form card like anything else. Measured in the editor —
+   * Send to back renumbers the whole stack, the form card included.
+   */
+  eq('a shape layers like everything else',
+    /\{isEditMode && \([\s\S]*?title="Send to back"/.test(modal), true);
+  eq('  against the form card too, which is in the same stack',
+    /\{ kind: 'form' as const, id: 'form' as const, z: formMeta\.form_z_index \}/.test(modal), true);
+
+  eq('the API takes the fourth kind', /\['image', 'text', 'video', 'shape'\]\.includes\(element_type\)/.test(elementsRoute3), true);
+  eq('  and carries the edge', /border_color, border_width/.test(elementsRoute3), true);
+
+  /*
+   * Widening that CHECK means rebuilding the table — the operation that
+   * stranded it on a live tenant. The rebuild is written to survive being
+   * interrupted, and the repair that finished the last one is repeated after
+   * it. tests/form-elements-repair.mjs runs that against a real database.
+   */
+  eq('the rebuild creates its copy only if it has to',
+    /CREATE TABLE IF NOT EXISTS form_elements_new/.test(migrations), true);
+  eq('  drops the original only if it is there', /DROP TABLE IF EXISTS form_elements/.test(migrations), true);
+  eq('  and is followed by the repair that finishes it',
+    migrations.lastIndexOf('ALTER TABLE form_elements_new RENAME TO form_elements')
+      > migrations.indexOf('CREATE TABLE IF NOT EXISTS form_elements_new'), true);
 }
 
 console.log('\n— the public form, on a phone —');

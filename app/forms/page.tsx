@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { buildAccentBackground, elementFill } from '@/components/ExpandedFormModal';
+import { buildAccentBackground, elementFill, shapeRadius } from '@/components/ExpandedFormModal';
 import { resolveVideoEmbed } from '@/lib/videoEmbed';
 
 export const dynamic = 'force-dynamic';
@@ -26,9 +26,11 @@ interface FormElement {
   content: string | null;
   object_fit: 'contain' | 'cover';
   focal_x: number; focal_y: number;
-  corner_style: 'square' | 'rounded';
+  corner_style: 'square' | 'rounded' | 'circle';
   background_color: string | null;
   background_opacity: number;
+  border_color: string | null;
+  border_width: number;
 }
 interface PublicForm {
   id: number;
@@ -80,6 +82,24 @@ function ElementView({ el }: { el: FormElement }) {
   const cornerClass = el.corner_style === 'rounded' ? 'rounded-xl' : 'rounded-none';
   const [errored, setErrored] = useState(false);
   const src = el.content || '';
+
+  /* Scenery: a fill, an edge and a corner, with nothing inside it and
+     nothing to click. Drawn from the same two helpers the editor drew it
+     with, so what was arranged is what arrives. */
+  if (el.element_type === 'shape') {
+    const width = el.border_width ?? 0;
+    return (
+      <div
+        className="absolute"
+        style={{
+          left: el.x, top: el.y, width: el.width, height: el.height, zIndex: el.z_index,
+          background: elementFill(el.background_color, el.background_opacity),
+          borderRadius: shapeRadius(el.corner_style),
+          border: width > 0 && el.border_color ? `${width}px solid ${el.border_color}` : undefined,
+        }}
+      />
+    );
+  }
 
   if (el.element_type === 'text') {
     return (
