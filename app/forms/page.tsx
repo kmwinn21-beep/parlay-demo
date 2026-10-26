@@ -18,6 +18,8 @@ interface FormField {
   required: boolean;
   options_source: string | null;
   options: FormFieldOption[];
+  /** The body of a details field — the one type that carries text. */
+  rich_content?: string | null;
 }
 interface FormElement {
   id: number;
@@ -167,6 +169,8 @@ function PublicFormInner() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  /** Whether the details panel is up over the fields. */
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const honeypotRef = useRef<HTMLInputElement>(null);
 
@@ -299,7 +303,16 @@ function PublicFormInner() {
   const formX = isDesktop ? (form.form_x ?? Math.round((window.innerWidth - formWidth) / 2)) : 0;
   const formY = isDesktop ? (form.form_offset_y ?? Math.round((window.innerHeight - formHeight) / 2)) : 0;
 
+  /*
+   * The details field is not a question, so it is not drawn among them: it
+   * puts a button beside Submit and holds the text that button reveals. Only
+   * one is honoured — a second Details button in the same row would be two
+   * answers to "where is it".
+   */
+  const detailsField = form?.fields.find(f => f.field_type === 'mobile_details' && f.rich_content);
+
   const renderField = (field: FormField) => {
+    if (field.field_type === 'mobile_details') return null;
     if (field.field_key === 'attendee_name') {
       return (
         /* Stacked on a phone, side by side from sm. Two name boxes sharing a
@@ -427,15 +440,29 @@ function PublicFormInner() {
         <label htmlFor="website">Website</label>
         <input ref={honeypotRef} id="website" name="website" type="text" tabIndex={-1} autoComplete="off" />
       </div>
-      <div className="px-6 pb-6">
+      <div className="px-6 pb-6 flex items-center gap-2">
         <button
           type="submit"
           disabled={submitting}
-          className="w-full py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
+          className="flex-1 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90 disabled:opacity-50"
           style={{ background: submitBg, color: submitTextColor }}
         >
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
+        {/* Beside Submit, and only where it is any use: the phone layout of a
+            form somebody opened from its public link. On a desktop the card
+            has room for the details as text. */}
+        {!isDesktop && detailsField && (
+          <button
+            type="button"
+            onClick={() => setDetailsOpen(true)}
+            aria-expanded={detailsOpen}
+            className="flex-shrink-0 px-5 py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+            style={{ border: `1px solid ${submitBg}`, color: textColor }}
+          >
+            Details
+          </button>
+        )}
       </div>
     </form>
   );
@@ -537,8 +564,68 @@ function PublicFormInner() {
           content, and a fourteen-question form quietly lost its Submit button
           off the bottom of a card that had been squashed to fit. It keeps its
           height; the container scrolls. */}
-      <div className="my-auto mx-auto w-full max-w-[480px] flex-shrink-0 rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor, border: '2px solid rgba(255,255,255,0.2)' }}>
+      {/* `relative` so the details panel can rise inside this card rather
+          than over the whole screen: what is being read belongs to the form,
+          and the green page around it stays where it is. */}
+      <div className="relative my-auto mx-auto w-full max-w-[480px] flex-shrink-0 rounded-2xl shadow-2xl overflow-hidden" style={{ background: bgColor, border: '2px solid rgba(255,255,255,0.2)' }}>
         {formCard}
+        {detailsField && (
+          /*
+             Always mounted, moved rather than added: a panel that only
+             exists while it is open has no previous position to animate
+             from, and would appear rather than rise.
+
+             Covering the card, not the viewport — it is pinned to this box's
+             own edges, so the fields disappear behind it and nothing else
+             does. inert while down, or a finger scrolling the form would
+             land in text it cannot see.
+          */
+          <div
+            data-details-panel
+            aria-hidden={!detailsOpen}
+            /* Not `inert`: the types here take a boolean and React 18 drops
+               an unknown boolean prop, so inert={true} never reached the DOM
+               — measured. A panel that is only translated away still holds
+               its buttons, so while it is down nothing in it takes a pointer
+               or a tab stop. */
+            className={`absolute inset-0 z-20 flex flex-col transition-transform duration-300 ease-out ${
+              detailsOpen ? 'translate-y-0' : 'translate-y-full pointer-events-none'}`}
+            style={{ background: bgColor }}
+          >
+            <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-3">
+              <h2 className="text-base font-bold" style={{ color: textColor }}>Details</h2>
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(false)}
+                tabIndex={detailsOpen ? 0 : -1}
+                aria-label="Close the details"
+                className="p-1 rounded-lg transition-opacity hover:opacity-70"
+                style={{ color: textColor }}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="h-px mx-6 opacity-20" style={{ background: textColor }} />
+            {/* The text scrolls inside the panel: an evening's worth of
+                directions is longer than the form it covers. */}
+            <div
+              className="prose prose-sm max-w-none flex-1 overflow-y-auto px-6 py-4"
+              style={{ color: textColor }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(detailsField.rich_content ?? '') }}
+            />
+            <div className="px-6 pb-6 pt-2">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(false)}
+                tabIndex={detailsOpen ? 0 : -1}
+                className="w-full py-3 rounded-xl text-sm font-bold transition-all hover:opacity-90"
+                style={{ background: submitBg, color: submitTextColor }}
+              >
+                Back to the form
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

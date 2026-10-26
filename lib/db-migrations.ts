@@ -2985,4 +2985,14 @@ export const migrations: string[] = [
     border_width REAL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
+
+  /* The words behind a form's Details button.
+
+     One field type — the mobile event details button — carries a body of
+     text rather than collecting one: times, an address, what to bring. It is
+     written in the field builder and read on the phone, and it is rich text,
+     so it has nowhere to live among placeholder and options_source. Null for
+     every other kind of field, which is all of them until somebody adds this
+     one. */
+  `ALTER TABLE form_fields ADD COLUMN rich_content TEXT`,
 ];

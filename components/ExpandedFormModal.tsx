@@ -20,6 +20,8 @@ export interface FormField {
   sort_order: number;
   options_source: string | null;
   options: { id: number; value: string; sort_order: number }[];
+  /** The body of a details field — the one type that carries text. */
+  rich_content?: string | null;
   is_template_field?: boolean;
 }
 

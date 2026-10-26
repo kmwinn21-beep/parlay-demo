@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
       }));
     }
     const cfFieldsRes = await db.execute({
-      sql: `SELECT id, field_type, field_key, label, placeholder, required, sort_order, options_source
+      sql: `SELECT id, field_type, field_key, label, placeholder, required, sort_order, options_source,
+                   rich_content
             FROM form_fields WHERE conference_form_id = ? ORDER BY sort_order`,
       args: [f.id as number],
     });
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
         field_key: ef.field_key ? String(ef.field_key) : null,
         label: String(ef.label),
         placeholder: ef.placeholder ? String(ef.placeholder) : null,
+        rich_content: ef.rich_content ? String(ef.rich_content) : null,
         required: Number(ef.required) === 1,
         sort_order: Number(ef.sort_order),
         options_source: ef.options_source ? String(ef.options_source) : null,
