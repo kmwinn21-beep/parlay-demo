@@ -4,8 +4,9 @@ import { getSessionUser } from '@/lib/auth';
 import { SLACK_EVENTS, slackColumn } from '@/lib/slack/preferences';
 
 const OPT_OUT_KEYS = [
-  'company_status_change', 'follow_up_assigned', 'note_tagged',
+  'company_status_change', 'follow_up_assigned', 'note_tagged', 'form_submission_received',
   'company_status_change_email', 'follow_up_assigned_email', 'note_tagged_email',
+  'form_submission_received_email',
 ] as const;
 
 // New engagement prefs default to 0 (opted out); existing rows missing the columns also read as false

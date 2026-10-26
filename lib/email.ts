@@ -132,6 +132,71 @@ export async function sendNotificationEmail(
   ).catch(() => {}); // best-effort — never throws
 }
 
+/**
+ * A public form submission, to the person who created the form.
+ *
+ * Its own template rather than the generic notification email, because the
+ * point of this one is the answers: the form's name, who filled it in, and
+ * every label/value pair they submitted. A one-line "somebody submitted a
+ * form" would send the reader into the app to find out what they said.
+ *
+ * Best-effort, like `sendNotificationEmail` — a submission is already saved by
+ * the time this runs and must not be undone by a mail failure. Values are
+ * escaped: they are typed by whoever opened the public link, which is anyone.
+ */
+export interface FormSubmissionEmailOpts {
+  to: string;
+  formName: string;
+  conferenceName: string;
+  submitterName: string;
+  submitterCompany: string | null;
+  values: { label: string; value: string }[];
+  link: string | null;
+}
+
+/**
+ * The body, built separately so it can be read in a test.
+ *
+ * `sendEmail`'s dev mode logs the recipient, the subject and the link and
+ * nothing else, so a test that went through the sender could not see whether
+ * the answers made it into the message — which is the one thing this email is
+ * for. Same split as `buildInputRequestEmailHtml` above.
+ */
+export function buildFormSubmissionEmailHtml(opts: FormSubmissionEmailOpts): string {
+  const esc = (s: string) => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+  const rows = opts.values.length > 0
+    ? opts.values.map(v => `
+        <tr>
+          <td style="padding:6px 16px 6px 0;color:#555;font-size:13px;vertical-align:top;white-space:nowrap">${esc(v.label)}</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:600;vertical-align:top">${esc(v.value) || '—'}</td>
+        </tr>`).join('')
+    : `<tr><td style="padding:6px 0;color:#888;font-size:13px">No fields were submitted.</td></tr>`;
+
+  const who = opts.submitterCompany
+    ? `${esc(opts.submitterName)} from ${esc(opts.submitterCompany)}`
+    : esc(opts.submitterName);
+
+  return `<div style="${baseStyle}">
+      <h2 style="color:#0B3C62">New Form Submission</h2>
+      <p style="margin:0 0 4px"><strong>${esc(opts.formName)}</strong>${opts.conferenceName ? ` — ${esc(opts.conferenceName)}` : ''}</p>
+      <p style="margin:0 0 16px;color:#555;font-size:14px">Submitted by ${who}.</p>
+      <table style="border-collapse:collapse;margin:8px 0 4px">${rows}</table>
+      ${opts.link ? `<p style="margin:24px 0"><a href="${opts.link}" style="${btnStyle}">View Submissions</a></p>` : ''}
+      <p style="${footerStyle}">You are receiving this because you created this form. Manage your preferences in account settings.</p>
+    </div>`;
+}
+
+export async function sendFormSubmissionEmail(opts: FormSubmissionEmailOpts): Promise<void> {
+  await sendEmail(
+    opts.to,
+    `New submission: ${opts.formName}`,
+    buildFormSubmissionEmailHtml(opts),
+  ).catch(() => {}); // best-effort — never throws
+}
+
 export async function sendDebriefEmail(opts: {
   email: string;
   firstName: string;

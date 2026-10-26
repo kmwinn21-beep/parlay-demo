@@ -23,6 +23,9 @@ interface NotifPrefs {
   company_status_change_slack: boolean;
   follow_up_assigned_slack: boolean;
   note_tagged_slack: boolean;
+  form_submission_received: boolean;
+  form_submission_received_email: boolean;
+  form_submission_received_slack: boolean;
   note_comment_received: boolean;
   note_comment_received_email: boolean;
   note_comment_received_slack: boolean;
@@ -340,6 +343,7 @@ const prefItemsOptOut: PrefItem[] = [
   { key: 'company_status_change', emailKey: 'company_status_change_email', slackKey: 'company_status_change_slack', label: 'Company Status Changes', description: 'When a company you\'re assigned to changes status.' },
   { key: 'follow_up_assigned', emailKey: 'follow_up_assigned_email', slackKey: 'follow_up_assigned_slack', label: 'Follow-up Assigned', description: 'When a follow-up task is assigned to you.' },
   { key: 'note_tagged', emailKey: 'note_tagged_email', slackKey: 'note_tagged_slack', label: 'Note Mentions', description: 'When someone @mentions you in a note.' },
+  { key: 'form_submission_received', emailKey: 'form_submission_received_email', slackKey: 'form_submission_received_slack', label: 'Form Submissions', description: 'When someone submits a form you created. The email lists what they answered.' },
 ];
 
 const prefItemsOptIn: PrefItem[] = [

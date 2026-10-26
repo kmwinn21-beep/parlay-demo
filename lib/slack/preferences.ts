@@ -58,15 +58,17 @@ export const SLACK_EVENTS = [
   'note_reaction_received',
   'note_lets_talk',
   'comment_reaction_received',
+  'form_submission_received',
 ] as const;
 
 export type SlackEvent = typeof SLACK_EVENTS[number];
 
-/** The three events whose in-app and email columns default to on. Slack's does not. */
+/** The events whose in-app and email columns default to on. Slack's does not. */
 export const OPT_OUT_EVENTS: readonly SlackEvent[] = [
   'company_status_change',
   'follow_up_assigned',
   'note_tagged',
+  'form_submission_received',
 ];
 
 export const slackColumn = (event: SlackEvent): string => `${event}_slack`;

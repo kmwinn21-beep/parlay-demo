@@ -2995,4 +2995,19 @@ export const migrations: string[] = [
      every other kind of field, which is all of them until somebody adds this
      one. */
   `ALTER TABLE form_fields ADD COLUMN rich_content TEXT`,
+
+  /* Telling the person who built a form that somebody filled it in.
+
+     Three columns, one event, and they do not share a default. The in-app row
+     and the email are on unless the user turns them off: the recipient is the
+     single person who created the form and published its link, so a submission
+     is the thing they were waiting for rather than an interruption.
+
+     Slack is DEFAULT 0, like every other event — see lib/slack/preferences.ts.
+     Linking a Slack account says where somebody is, not that they want to be
+     messaged there, and this column inheriting the opt-out default above would
+     start sending direct messages nobody agreed to. */
+  `ALTER TABLE notification_preferences ADD COLUMN form_submission_received INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE notification_preferences ADD COLUMN form_submission_received_email INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE notification_preferences ADD COLUMN form_submission_received_slack INTEGER NOT NULL DEFAULT 0`,
 ];
