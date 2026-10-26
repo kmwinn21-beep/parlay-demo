@@ -53,7 +53,12 @@ export async function GET(request: NextRequest) {
       }
       // Extra conference-form-specific fields
       const cfFieldsRes = await db.execute({
-        sql: `SELECT id, field_type, field_key, label, placeholder, required, sort_order, options_source
+        /* rich_content is read below, so it has to be selected here. It was
+           not, and the mapping quietly produced null: the details text
+           reached the phone, where the public route selects it, but the
+           builder opened its editor empty and there was nothing to edit. */
+        sql: `SELECT id, field_type, field_key, label, placeholder, required, sort_order, options_source,
+                     rich_content
               FROM form_fields WHERE conference_form_id = ? ORDER BY sort_order`,
         args: [f.id as number],
       });
