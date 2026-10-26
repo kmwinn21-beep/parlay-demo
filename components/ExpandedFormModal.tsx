@@ -368,7 +368,11 @@ function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
   return (
     <div
       className="prose prose-sm max-w-none h-full overflow-y-auto px-2 py-1 rounded-xl"
-      style={{ color: textColor, background: fill }}
+      /* pre-wrap, or the spaces somebody typed to push a line across are
+         collapsed to one on the way out — HTML's rule, not theirs. The
+         editor keeps them (ProseMirror sets this on its own content), so
+         without it here the text moves when it is saved. */
+      style={{ color: textColor, background: fill, whiteSpace: 'pre-wrap' }}
       dangerouslySetInnerHTML={{ __html: sanitizeHtml(element.content || '') }}
     />
   );
