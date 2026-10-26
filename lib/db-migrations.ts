@@ -2853,4 +2853,48 @@ export const migrations: string[] = [
      both the form's default and what the calendar had been drawing them as.
      Writing a value into the old rows would be inventing a fact about them. */
   `ALTER TABLE meetings ADD COLUMN duration_minutes INTEGER`,
+
+  /* Put form_elements back where a half-finished rebuild left it stranded.
+
+     Reported from a live tenant: every request to the form canvas failed with
+     "no such table: form_elements", so opening the form editor read nothing
+     and Add Text saved nothing.
+
+     The table is rebuilt earlier in this list — migration 486 widens its
+     element_type CHECK to allow 'video', which SQLite cannot do in place, so
+     it builds form_elements_new, copies the rows across, DROPs the original
+     and RENAMEs the new one into its place. Four statements, and the runner
+     swallows each one's error because an already-applied migration is
+     expected to fail. A database that got as far as the DROP and no further
+     is therefore left with no form_elements at all, a form_elements_new
+     holding its rows, and a version counter saying the work is done. Nothing
+     retries it, and schemaReconcile cannot: it repairs missing COLUMNS in
+     tables that exist, and skips tables that do not.
+
+     The rename below finishes that job wherever it was interrupted. It fails
+     harmlessly everywhere else — there is nothing called form_elements_new on
+     a healthy database, and where both somehow exist SQLite refuses the name
+     rather than clobbering the real one. The CREATE after it is the backstop
+     for a database that has neither, written in the shape the table has
+     today: the wider CHECK from 486 and the corner_style added in 489, so a
+     table restored this way is the current one rather than a version that
+     cannot hold a video. */
+  `ALTER TABLE form_elements_new RENAME TO form_elements`,
+  `CREATE TABLE IF NOT EXISTS form_elements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50,
+    corner_style TEXT NOT NULL DEFAULT 'rounded'
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
 ];
