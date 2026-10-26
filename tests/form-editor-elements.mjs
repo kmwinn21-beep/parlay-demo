@@ -235,6 +235,24 @@ console.log('\n— shapes —');
       > migrations.indexOf('CREATE TABLE IF NOT EXISTS form_elements_new'), true);
 }
 
+console.log('\n— the form card\u2019s actions, named —');
+{
+  const tab = strip('components/ConferenceFormsTab.tsx');
+  /*
+   * Six unlabelled glyphs is a guessing game, and a desktop has room for the
+   * words. They are hidden below lg, where the row would wrap to three lines
+   * and push the Expand button off the card.
+   */
+  for (const label of ['Download', 'Form Settings', 'Add/edit Form Fields', 'Duplicate Form', 'Generate Link', 'Delete Form']) {
+    eq(`${label} is named beside its icon`,
+      new RegExp(`<span className="hidden lg:inline">${label.replace('/', '\\/')}</span>`).test(tab), true);
+  }
+  eq('  and the row wraps rather than growing',
+    /<div className="flex flex-wrap items-center gap-1">/.test(tab), true);
+  // The titles stay: they are what a phone has instead of the words.
+  eq('  while the tooltips stay for the phone', /title="Export to Excel"/.test(tab), true);
+}
+
 console.log('\n— the public form, on a phone —');
 {
   // Two name boxes sharing a 360px line leave about 150px each.
