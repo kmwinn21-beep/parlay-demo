@@ -35,7 +35,7 @@ const publicForm = strip('app/forms/page.tsx');
 console.log('\n— typing on the page, not on a card —');
 {
   eq('the editing surface is transparent',
-    /<div className="w-full h-full overflow-hidden rounded-xl" style=\{\{ color: textColor \}\}>/.test(modal), true);
+    /<div className="w-full h-full overflow-hidden rounded-xl" style=\{\{ color: textColor, background: fill \}\}>/.test(modal), true);
   eq('  and carries the colour the text will be drawn in', /style=\{\{ color: textColor \}\}/.test(modal), true);
   eq('  with no white card left under it', /rounded-xl bg-white"><RichTextEditor/.test(modal), false);
 }
@@ -84,8 +84,11 @@ console.log('\n— several at once —');
   eq('  and the group is written once, on drop',
     /for \(const \[id, pos\] of groupOffsets\(origins, el\.id, d\.x, d\.y\) \?\? \[\]\) \{\n                  updateElement\(id, pos\);/.test(modal), true);
 
-  eq('escape lets the group go', /if \(e\.key === 'Escape'\) setSelectedIds\(new Set\(\)\);/.test(modal), true);
-  eq('  and so does leaving edit mode', /if \(!isEditMode\) \{ setSelectedIds\(new Set\(\)\); return; \}/.test(modal), true);
+  // Escape drops the group and shuts the fill picker with it.
+  eq('escape lets the group go',
+    /if \(e\.key !== 'Escape'\) return;[\s\S]{0,60}setSelectedIds\(new Set\(\)\);/.test(modal), true);
+  eq('  and so does leaving edit mode',
+    /if \(!isEditMode\) \{ setSelectedIds\(new Set\(\)\); setFillOpenFor\(null\); return; \}/.test(modal), true);
   eq('  a removed element leaves it too', /if \(!prev\.has\(id\)\) return prev;/.test(modal), true);
 }
 
@@ -130,6 +133,45 @@ console.log('\n— the rubber band —');
     /const next = prev\.add \? new Set\(current\) : new Set<number>\(\);/.test(modal), true);
   eq('  so a click on empty canvas clears', /setBand\(\{ x0: x, y0: y, x1: x, y1: y, add: e\.shiftKey \}\)/.test(modal), true);
   eq('  and it listens to nothing while it is drawn', /pointer-events-none absolute border border-dashed/.test(modal), true);
+}
+
+console.log('\n— a fill behind the words —');
+{
+  const elementsRoute2 = strip('app/api/conference-forms/[id]/elements/route.ts');
+  const publicRoute = strip('app/api/public/conference-forms/route.ts');
+
+  /*
+   * Colour and opacity are stored apart rather than as one rgba string: a
+   * colour input cannot read rgba, and nudging the opacity of a string means
+   * parsing it back out. They are put together in exactly one place, so the
+   * editor and the public page cannot disagree about what a half-transparent
+   * panel looks like.
+   */
+  eq('one function turns the two into CSS', /export function elementFill\(color: string \| null, opacity: number \| null\)/.test(modal), true);
+  eq('  no colour means no fill at all', /if \(!color\) return undefined;/.test(modal), true);
+  eq('  a junk colour is ignored rather than drawn', /if \(!\/\^\[0-9a-f\]\{6\}\$\/i\.test\(hex\)\) return undefined;/.test(modal), true);
+  eq('  and the percentage is clamped', /Math\.min\(100, Math\.max\(0, opacity \?\? 100\)\)/.test(modal), true);
+
+  // Drawn while editing too: judging white text on a 40% panel means seeing
+  // the panel.
+  eq('the editor draws it', /style=\{\{ color: textColor, background: fill \}\}/.test(modal), true);
+  eq('  and so does the public page', /background: elementFill\(el\.background_color, el\.background_opacity\)/.test(publicForm), true);
+  eq('    from the same function', /import \{ buildAccentBackground, elementFill \}/.test(publicForm), true);
+
+  // Only text: an image brings its own background and a video is one.
+  eq('only text elements offer one', /\{el\.element_type === 'text' && \([\s\S]{0,400}title="Background colour"/.test(modal), true);
+  eq('  the opacity appears once there is a colour to see through',
+    /\{el\.background_color && \([\s\S]{0,300}type="range"/.test(modal), true);
+  eq('  and clearing it writes a null rather than a black',
+    /updateElement\(el\.id, \{ background_color: null \}\)/.test(modal), true);
+
+  for (const [label, route] of [['the editor', elementsRoute2], ['the public read', publicRoute]]) {
+    eq(`${label} returns both fields`, /background_color, background_opacity/.test(route), true);
+    eq(`  with no fill left as null`, /background_color: r\.background_color \? String\(r\.background_color\) : null/.test(route), true);
+    eq(`  and a missing opacity read as full`, /background_opacity: r\.background_opacity != null \? Number\(r\.background_opacity\) : 100/.test(route), true);
+  }
+  // A duplicate is a copy of the thing, fill included.
+  eq('a duplicate carries the fill', /background_color: el\.background_color/.test(modal), true);
 }
 
 console.log('\n— the public form, on a phone —');

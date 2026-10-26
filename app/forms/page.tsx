@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { buildAccentBackground } from '@/components/ExpandedFormModal';
+import { buildAccentBackground, elementFill } from '@/components/ExpandedFormModal';
 import { resolveVideoEmbed } from '@/lib/videoEmbed';
 
 export const dynamic = 'force-dynamic';
@@ -27,6 +27,8 @@ interface FormElement {
   object_fit: 'contain' | 'cover';
   focal_x: number; focal_y: number;
   corner_style: 'square' | 'rounded';
+  background_color: string | null;
+  background_opacity: number;
 }
 interface PublicForm {
   id: number;
@@ -82,8 +84,13 @@ function ElementView({ el }: { el: FormElement }) {
   if (el.element_type === 'text') {
     return (
       <div
-        className="absolute overflow-hidden"
-        style={{ left: el.x, top: el.y, width: el.width, height: el.height, zIndex: el.z_index }}
+        className="absolute overflow-hidden rounded-xl"
+        style={{
+          left: el.x, top: el.y, width: el.width, height: el.height, zIndex: el.z_index,
+          // The same fill the editor drew, from the same function — a panel
+          // that reads at 40% while being made has to read at 40% here.
+          background: elementFill(el.background_color, el.background_opacity),
+        }}
       >
         <div className="prose prose-sm max-w-none h-full overflow-y-auto" dangerouslySetInnerHTML={{ __html: sanitizeHtml(src) }} />
       </div>

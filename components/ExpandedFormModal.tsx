@@ -58,6 +58,24 @@ export interface ConferenceForm {
   template_id?: number | null;
 }
 
+/**
+ * A text element's fill, as CSS — or nothing at all.
+ *
+ * Colour and opacity are stored apart rather than as one rgba string: a
+ * colour input cannot read rgba, and nudging the opacity of a string means
+ * parsing it back out. They are only ever put together here, so the editor
+ * and the public page cannot disagree about what a half-transparent panel
+ * looks like.
+ */
+export function elementFill(color: string | null, opacity: number | null): string | undefined {
+  if (!color) return undefined;
+  const pct = Math.min(100, Math.max(0, opacity ?? 100));
+  const hex = color.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return undefined;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${pct / 100})`;
+}
+
 /** How far a duplicate lands from the thing it was copied from. */
 const DUPLICATE_OFFSET = 24;
 
@@ -78,6 +96,10 @@ interface FormElement {
   focal_x: number;
   focal_y: number;
   corner_style: 'square' | 'rounded';
+  /** A fill behind a text element. Null is no fill at all. */
+  background_color: string | null;
+  /** How much of that fill shows, 0–100. */
+  background_opacity: number;
 }
 
 interface AttendeeOption {
@@ -272,6 +294,9 @@ function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
   textColor: string;
   onChange: (html: string) => void;
 }) {
+  // The fill is drawn while editing too — it is half the reason for choosing
+  // one, and judging white text on a 40% panel means seeing the panel.
+  const fill = elementFill(element.background_color, element.background_opacity);
   const editor = useEditor({
     extensions: getEditorExtensions(),
     content: element.content || '<p></p>',
@@ -292,15 +317,15 @@ function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
    */
   if (isEditMode) {
     return (
-      <div className="w-full h-full overflow-hidden rounded-xl" style={{ color: textColor }}>
+      <div className="w-full h-full overflow-hidden rounded-xl" style={{ color: textColor, background: fill }}>
         <RichTextEditor editor={editor} minHeight="100%" />
       </div>
     );
   }
   return (
     <div
-      className="prose prose-sm max-w-none h-full overflow-y-auto px-2 py-1"
-      style={{ color: textColor }}
+      className="prose prose-sm max-w-none h-full overflow-y-auto px-2 py-1 rounded-xl"
+      style={{ color: textColor, background: fill }}
       dangerouslySetInnerHTML={{ __html: sanitizeHtml(element.content || '') }}
     />
   );
@@ -318,6 +343,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   const [attendeeDropOpen, setAttendeeDropOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [mounted, setMounted] = useState(false);
+  /** Which text element has its fill picker open, if any. */
+  const [fillOpenFor, setFillOpenFor] = useState<number | null>(null);
   /** Elements moving together, and where they stood when the drag began. */
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const groupDrag = useRef<Map<number, { x: number; y: number }> | null>(null);
@@ -609,7 +636,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       });
       if (!res.ok) throw new Error();
       const { id } = await res.json();
-      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id, object_fit: 'contain', focal_x: 50, focal_y: 50, corner_style: 'rounded' }]);
+      setElements(prev => [...prev, {
+        ...base, id, conference_form_id: form.id,
+        object_fit: 'contain', focal_x: 50, focal_y: 50, corner_style: 'rounded',
+        background_color: null, background_opacity: 100,
+      }]);
     } catch {
       toast.error('Failed to add element');
     }
@@ -641,6 +672,8 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       focal_x: el.focal_x,
       focal_y: el.focal_y,
       corner_style: el.corner_style,
+      background_color: el.background_color,
+      background_opacity: el.background_opacity,
     };
     try {
       const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
@@ -667,8 +700,12 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
    * the person has stopped thinking about.
    */
   useEffect(() => {
-    if (!isEditMode) { setSelectedIds(new Set()); return; }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedIds(new Set()); };
+    if (!isEditMode) { setSelectedIds(new Set()); setFillOpenFor(null); return; }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setSelectedIds(new Set());
+      setFillOpenFor(null);
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isEditMode]);
@@ -1372,6 +1409,72 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="4" y="4" width="16" height="16" rx="0" /></svg>
                           )}
                         </button>
+                      )}
+                      {/* The fill, for text only: an image brings its own
+                          background and a video is one. The swatch shows what
+                          is set — a diagonal through it when nothing is. */}
+                      {el.element_type === 'text' && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setFillOpenFor(prev => (prev === el.id ? null : el.id))}
+                            aria-expanded={fillOpenFor === el.id}
+                            title="Background colour"
+                            className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white"
+                          >
+                            <span
+                              className="block w-3.5 h-3.5 rounded-sm border border-white/50"
+                              style={{
+                                background: elementFill(el.background_color, el.background_opacity)
+                                  ?? 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.6) 3px, rgba(255,255,255,0.6) 4px)',
+                              }}
+                            />
+                          </button>
+                          {fillOpenFor === el.id && (
+                            <div
+                              className="absolute top-6 left-0 z-30 w-44 rounded-lg bg-gray-800/95 p-2 shadow-xl space-y-2"
+                              onPointerDown={e => e.stopPropagation()}
+                            >
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  value={el.background_color ?? '#000000'}
+                                  onChange={e => updateElement(el.id, { background_color: e.target.value }, { debounce: true })}
+                                  className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
+                                  title="Pick a colour"
+                                />
+                                <span className="flex-1 text-[10px] text-white/70">
+                                  {el.background_color ?? 'No fill'}
+                                </span>
+                                {el.background_color && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateElement(el.id, { background_color: null })}
+                                    title="Remove the fill"
+                                    className="text-[10px] text-white/60 hover:text-white"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
+                              </div>
+                              {/* Only once there is something to see through. */}
+                              {el.background_color && (
+                                <label className="flex items-center gap-2 text-[10px] text-white/70">
+                                  <span className="w-9 flex-shrink-0">Opacity</span>
+                                  <input
+                                    type="range"
+                                    min={0}
+                                    max={100}
+                                    value={el.background_opacity}
+                                    onChange={e => updateElement(el.id, { background_opacity: Number(e.target.value) }, { debounce: true })}
+                                    className="flex-1 accent-brand-highlight"
+                                  />
+                                  <span className="w-7 text-right tabular-nums">{Math.round(el.background_opacity)}%</span>
+                                </label>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       )}
                       <button
                         type="button"

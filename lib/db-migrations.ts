@@ -2897,4 +2897,17 @@ export const migrations: string[] = [
     corner_style TEXT NOT NULL DEFAULT 'rounded'
   )`,
   `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
+
+  /* A fill behind a text element, and how much of it shows.
+
+     Null is no fill, which is what every text element has been until now and
+     what the editor goes on drawing by default: the point of a caption over a
+     photograph is usually the photograph. A colour with an opacity under it
+     is the other thing people want — a panel just solid enough to read white
+     text off a busy background — so the two are stored apart rather than as
+     one rgba string, which would be unreadable in a colour input and awkward
+     to nudge. Opacity is a percentage, as every other opacity in this schema
+     is, and is read as 100 when it is null. */
+  `ALTER TABLE form_elements ADD COLUMN background_color TEXT`,
+  `ALTER TABLE form_elements ADD COLUMN background_opacity REAL`,
 ];

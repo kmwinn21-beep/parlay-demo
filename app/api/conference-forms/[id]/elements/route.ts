@@ -9,7 +9,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const res = await db.execute({
       sql: `SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content,
-                   object_fit, focal_x, focal_y, corner_style
+                   object_fit, focal_x, focal_y, corner_style, background_color, background_opacity
             FROM form_elements WHERE conference_form_id = ? ORDER BY z_index, id`,
       args: [params.id],
     });
@@ -27,6 +27,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       focal_x: r.focal_x != null ? Number(r.focal_x) : 50,
       focal_y: r.focal_y != null ? Number(r.focal_y) : 50,
       corner_style: r.corner_style ? String(r.corner_style) : 'rounded',
+      /* Null means no fill, which is not the same as a transparent one: the
+         element has never been given a colour, and the editor shows it as
+         having none rather than as having black at zero. */
+      background_color: r.background_color ? String(r.background_color) : null,
+      background_opacity: r.background_opacity != null ? Number(r.background_opacity) : 100,
     }));
     return NextResponse.json(elements);
   } catch (error) {
@@ -41,7 +46,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const db = await getDb(authResult?.accountId);
   try {
     const { element_type, x, y, width, height, content, z_index,
-            object_fit, focal_x, focal_y, corner_style } = await request.json();
+            object_fit, focal_x, focal_y, corner_style,
+            background_color, background_opacity } = await request.json();
     if (!['image', 'text', 'video'].includes(element_type)) {
       return NextResponse.json({ error: 'element_type must be image, text, or video' }, { status: 400 });
     }
@@ -56,8 +62,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
      */
     const result = await db.execute({
       sql: `INSERT INTO form_elements (conference_form_id, element_type, x, y, width, height, z_index, content,
-                                       object_fit, focal_x, focal_y, corner_style)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+                                       object_fit, focal_x, focal_y, corner_style,
+                                       background_color, background_opacity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       args: [
         params.id,
         element_type,
@@ -71,6 +78,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         focal_x != null ? Number(focal_x) : 50,
         focal_y != null ? Number(focal_y) : 50,
         corner_style === 'square' ? 'square' : 'rounded',
+        background_color || null,
+        background_opacity != null ? Number(background_opacity) : null,
       ],
     });
     return NextResponse.json({ id: Number(result.rows[0].id) }, { status: 201 });

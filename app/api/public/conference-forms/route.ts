@@ -80,7 +80,8 @@ export async function GET(request: NextRequest) {
     const allFields = [...templateFields, ...extraFields].sort((a: any, b: any) => a.sort_order - b.sort_order);
 
     const elementsRes = await db.execute({
-      sql: `SELECT id, element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y, corner_style
+      sql: `SELECT id, element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y,
+                   corner_style, background_color, background_opacity
             FROM form_elements WHERE conference_form_id = ? ORDER BY z_index, id`,
       args: [f.id as number],
     });
@@ -97,6 +98,8 @@ export async function GET(request: NextRequest) {
       focal_x: r.focal_x != null ? Number(r.focal_x) : 50,
       focal_y: r.focal_y != null ? Number(r.focal_y) : 50,
       corner_style: r.corner_style ? String(r.corner_style) : 'rounded',
+      background_color: r.background_color ? String(r.background_color) : null,
+      background_opacity: r.background_opacity != null ? Number(r.background_opacity) : 100,
     }));
 
     return NextResponse.json({
