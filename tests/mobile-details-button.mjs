@@ -53,6 +53,41 @@ console.log('\n— the field that carries text instead of collecting it —');
   eq('  and the public read returns', /rich_content: ef\.rich_content \? String\(ef\.rich_content\) : null/.test(publicRead), true);
 }
 
+console.log('\n— what a reader reads, it must have selected —');
+{
+  /*
+   * This is the bug that shipped: the mapping read ef.rich_content and the
+   * query above it did not select the column, so every field came back with
+   * the details text as null. The phone was fine — the public route selects
+   * it — so the text displayed correctly while the builder opened its editor
+   * empty, which reads as the text having been lost.
+   *
+   * Checked by comparing the two rather than by naming the column: any
+   * future field that is read without being selected fails here.
+   */
+  const readers = [
+    ['the builder', 'app/api/conference-forms/route.ts'],
+    ['the public form', 'app/api/public/conference-forms/route.ts'],
+  ];
+  for (const [label, file] of readers) {
+    const src = readFileSync(file, 'utf8');
+    // Every `SELECT … FROM form_fields` and the row object mapped from it.
+    const queries = [...src.matchAll(/SELECT\s+([\s\S]*?)\s+FROM form_fields/g)]
+      .map(m => new Set(m[1].split(',').map(c => c.trim()).filter(Boolean)));
+    const aliases = [...src.matchAll(/\((tf|ef)\) => \{/g)].map(m => m[1]);
+    eq(`${label} has a query for each row shape`, queries.length >= aliases.length, true);
+
+    for (const alias of new Set(aliases)) {
+      const read = new Set([...src.matchAll(new RegExp(`${alias}\\.([a-z_]+)`, 'g'))].map(m => m[1]));
+      // A column read from any of this file's form_fields queries counts: the
+      // template and conference-form rows are mapped the same way.
+      const selected = new Set(queries.flatMap(q => [...q]));
+      const missing = [...read].filter(c => !selected.has(c));
+      eq(`  every column ${alias} reads is selected`, missing, []);
+    }
+  }
+}
+
 console.log('\n— where the button appears —');
 {
   // A details field is not drawn among the questions.
