@@ -18,7 +18,7 @@
  * See tests/notification-tenant-db.mjs, which stands up both databases.
  */
 import type { Client } from '@libsql/client';
-import { sendNotificationEmail } from './email';
+import { sendNotificationEmail, sendFormSubmissionEmail } from './email';
 import { sendSlackNotification } from './slack/send';
 import { accountIdForClient } from './getDb';
 
@@ -29,7 +29,11 @@ const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? 'Conference Hub';
 // the one site that uses it outside the type.
 export type NotifType = 'company' | 'attendee' | 'conference' | 'meeting';
 
-type NotifPrefKey = 'company_status_change' | 'follow_up_assigned' | 'note_tagged';
+type NotifPrefKey =
+  | 'company_status_change'
+  | 'follow_up_assigned'
+  | 'note_tagged'
+  | 'form_submission_received';
 
 /**
  * The note-engagement preferences, which are off until a user turns them on.
@@ -161,6 +165,8 @@ async function deliverToSlack(
   message: string,
   entityType: string,
   entityId: number,
+  /** Where to send the reader instead of the entity's own page. */
+  linkOverride?: string | null,
 ): Promise<void> {
   try {
     if (userIds.length === 0) return;
@@ -169,7 +175,7 @@ async function deliverToSlack(
     const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
     await sendSlackNotification({
       client, accountId, event, userIds, message,
-      link: entityLink(BASE, entityType, entityId),
+      link: linkOverride !== undefined ? linkOverride : entityLink(BASE, entityType, entityId),
     });
   } catch (err) {
     // sendSlackNotification does not throw. This is the second net, so that a
@@ -602,5 +608,135 @@ export async function notifyForAttendee(client: Client, opts: {
     });
   } catch (err) {
     console.error('[notifications] notifyForAttendee error:', err);
+  }
+}
+
+// ─── Public form submissions ─────────────────────────────────────────────────
+
+/**
+ * Tell the person who created a form that somebody filled it in.
+ *
+ * One recipient, and it is not the conference's internal attendee list: the
+ * form's `created_by` is the person who built it and handed out its link, and
+ * they are the one waiting on the answers. The conference-wide notification
+ * that already fires on submission stays as it is — this is addressed to an
+ * individual, and it carries what was actually submitted.
+ *
+ * Its preference columns are opt-out on the in-app row and the email (you
+ * published the link; the submissions are the point) and opt-in on Slack, like
+ * every other event — see lib/slack/preferences.ts.
+ *
+ * Written out rather than routed through `createNotifications` for one reason:
+ * the email. The generic one carries a single sentence, and the whole purpose
+ * here is the field values, so this path sends its own template and reads the
+ * `_email` column itself.
+ *
+ * Best-effort and never throws. A submission is already saved by the time this
+ * runs, and nothing here may undo it.
+ */
+export async function notifyFormSubmission(client: Client, opts: {
+  conferenceFormId: number;
+  formName: string;
+  conferenceId: number;
+  conferenceName: string;
+  submitterName: string;
+  submitterCompany: string | null;
+  /** Every label/value pair submitted, in the order the form asked for them. */
+  values: { label: string; value: string }[];
+}): Promise<void> {
+  try {
+    const formRow = await client.execute({
+      sql: 'SELECT created_by FROM conference_forms WHERE id = ?',
+      args: [opts.conferenceFormId],
+    });
+    const createdBy = formRow.rows[0]?.created_by;
+    // A form built before created_by was recorded, or seeded data. There is no
+    // individual to tell, and the conference-wide notification still fires.
+    if (!createdBy) return;
+
+    // Matched case-insensitively: created_by is whatever string the session
+    // carried when the form was saved, and an address that differs only in
+    // case is the same person.
+    const userRow = await client.execute({
+      sql: 'SELECT id, email FROM users WHERE LOWER(email) = LOWER(?)',
+      args: [String(createdBy)],
+    });
+    // The creator has left the account, or created_by holds something that was
+    // never a user. Nobody to notify.
+    if (userRow.rows.length === 0) return;
+    const userId = Number(userRow.rows[0].id);
+    const userEmail = String(userRow.rows[0].email);
+
+    const who = opts.submitterCompany
+      ? `${opts.submitterName} from ${opts.submitterCompany}`
+      : opts.submitterName;
+    const message = `${who} submitted your "${opts.formName}" form`;
+
+    const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? '';
+    // The form and its submissions live on the conference's Forms tab, which
+    // reads ?tab= on load — so this lands where the answers are rather than on
+    // whichever tab the page opens with.
+    const link = BASE ? `${BASE}/conferences/${opts.conferenceId}?tab=forms` : null;
+
+    // Opt-out: an absent row, and a row written before these columns existed,
+    // both read as "receives".
+    const prefRow = await client.execute({
+      sql: `SELECT form_submission_received, form_submission_received_email
+            FROM notification_preferences WHERE user_id = ?`,
+      args: [userId],
+    });
+    const pref = prefRow.rows[0];
+    const wantsInApp = pref?.form_submission_received == null
+      ? true : Boolean(pref.form_submission_received);
+    const wantsEmail = pref?.form_submission_received_email == null
+      ? true : Boolean(pref.form_submission_received_email);
+
+    if (wantsInApp) {
+      await client.execute({
+        sql: `INSERT INTO notifications
+              (user_id, type, record_id, record_name, message,
+               changed_by_config_id, changed_by_email, entity_type, entity_id, is_read)
+              VALUES (?, 'conference', ?, ?, ?, NULL, ?, 'conference', ?, 0)`,
+        args: [
+          userId, opts.conferenceId, opts.formName, message,
+          'Public Form Submission', opts.conferenceId,
+        ],
+      });
+    }
+
+    if (wantsEmail) {
+      try {
+        await sendFormSubmissionEmail({
+          to: userEmail,
+          formName: opts.formName,
+          conferenceName: opts.conferenceName,
+          submitterName: opts.submitterName,
+          submitterCompany: opts.submitterCompany,
+          values: opts.values,
+          link,
+        });
+      } catch (err) {
+        console.error('[notifications] form submission email error:', err);
+      }
+    }
+
+    // Last, and only for someone who has asked for it in Slack. The DM carries
+    // the answers too — it is a message somebody reads in full, not a row in a
+    // list, so sending them back to the app for the values would waste it.
+    const slackLines = opts.values
+      .filter(v => v.value)
+      .map(v => `• ${v.label}: ${v.value}`)
+      .join('\n');
+    await deliverToSlack(
+      client,
+      'form_submission_received',
+      [userId],
+      slackLines ? `${message}\n\n${slackLines}` : message,
+      'conference',
+      opts.conferenceId,
+      link,
+    );
+  } catch (err) {
+    console.error('[notifications] notifyFormSubmission error:', err);
   }
 }

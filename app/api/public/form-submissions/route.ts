@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/getDb';
 import { resolveOrCreateAttendee } from '@/lib/resolveOrCreateAttendee';
-import { notifyConferenceInternalAttendees } from '@/lib/notifications';
+import { notifyConferenceInternalAttendees, notifyFormSubmission } from '@/lib/notifications';
 import { findRsvpFieldId, mapRsvpAnswerToStatus, applySocialEventRsvp } from '@/lib/applySocialEventRsvp';
 
 export const dynamic = 'force-dynamic';
@@ -174,6 +174,21 @@ export async function POST(request: NextRequest) {
       message: `${nameVal || 'Someone'}${companyVal ? ` from ${companyVal}` : ''} submitted the "${formName}" form via the public link`,
       changedByEmail: 'Public Form Submission',
       changedByConfigId: null,
+    });
+
+    // And the person who built the form, individually, with the answers. Same
+    // contract: best-effort, never throws.
+    await notifyFormSubmission(db, {
+      conferenceFormId: conference_form_id,
+      formName,
+      conferenceId: conference_id,
+      conferenceName,
+      submitterName: nameVal || 'Someone',
+      submitterCompany: companyVal || null,
+      // The submitted values as they were asked for, with the name the
+      // dedicated inputs collected at the top — the same list the submissions
+      // table reads, so the email matches the row it will appear as.
+      values: valuesWithName.map(v => ({ label: v.field_label, value: v.field_value || '' })),
     });
 
     return NextResponse.json({ id: submissionId }, { status: 201 });
