@@ -1465,140 +1465,28 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                       {/* The fill — for text panels and for shapes, which are
                           little else. An image brings its own background and a
                           video is one, so neither offers it. The swatch shows
-                          what is set, hatched when nothing is. */}
+                          what is set, hatched when nothing is.
+
+                          The panel it opens is NOT in here: this strip is 28px
+                          tall with overflow-hidden, which cut the panel down to
+                          a sliver of its first row. It is a sibling of the
+                          toolbar instead, where nothing clips it. */}
                       {(el.element_type === 'text' || el.element_type === 'shape') && (
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => setFillOpenFor(prev => (prev === el.id ? null : el.id))}
-                            aria-expanded={fillOpenFor === el.id}
-                            title="Background colour"
-                            className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white"
-                          >
-                            <span
-                              className="block w-3.5 h-3.5 rounded-sm border border-white/50"
-                              style={{
-                                background: elementFill(el.background_color, el.background_opacity)
-                                  ?? 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.6) 3px, rgba(255,255,255,0.6) 4px)',
-                              }}
-                            />
-                          </button>
-                          {fillOpenFor === el.id && (
-                            <div
-                              className="absolute top-6 left-0 z-30 w-44 rounded-lg bg-gray-800/95 p-2 shadow-xl space-y-2"
-                              onPointerDown={e => e.stopPropagation()}
-                            >
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="color"
-                                  value={el.background_color ?? '#000000'}
-                                  onChange={e => updateElement(el.id, { background_color: e.target.value }, { debounce: true })}
-                                  className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
-                                  title="Pick a colour"
-                                />
-                                <span className="flex-1 text-[10px] text-white/70">
-                                  {el.background_color ?? 'No fill'}
-                                </span>
-                                {el.background_color && (
-                                  <button
-                                    type="button"
-                                    onClick={() => updateElement(el.id, { background_color: null })}
-                                    title="Remove the fill"
-                                    className="text-[10px] text-white/60 hover:text-white"
-                                  >
-                                    Clear
-                                  </button>
-                                )}
-                              </div>
-                              {/* Only once there is something to see through. */}
-                              {el.background_color && (
-                                <label className="flex items-center gap-2 text-[10px] text-white/70">
-                                  <span className="w-9 flex-shrink-0">Opacity</span>
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={100}
-                                    value={el.background_opacity}
-                                    onChange={e => updateElement(el.id, { background_opacity: Number(e.target.value) }, { debounce: true })}
-                                    className="flex-1 accent-brand-highlight"
-                                  />
-                                  <span className="w-7 text-right tabular-nums">{Math.round(el.background_opacity)}%</span>
-                                </label>
-                              )}
-                              {/* A shape is a fill, an edge and a corner, so
-                                  the rest of it is set here rather than in
-                                  three more toolbar buttons. */}
-                              {el.element_type === 'shape' && (
-                                <>
-                                  <div className="flex items-center gap-2 border-t border-white/10 pt-2">
-                                    <input
-                                      type="color"
-                                      value={el.border_color ?? '#ffffff'}
-                                      onChange={e => updateElement(el.id, {
-                                        border_color: e.target.value,
-                                        // An edge with no width is not an edge; choosing a
-                                        // colour is how somebody asks for one.
-                                        border_width: el.border_width > 0 ? el.border_width : 2,
-                                      }, { debounce: true })}
-                                      className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
-                                      title="Border colour"
-                                    />
-                                    <span className="flex-1 text-[10px] text-white/70">
-                                      {el.border_color && el.border_width > 0 ? 'Border' : 'No border'}
-                                    </span>
-                                    {el.border_color && el.border_width > 0 && (
-                                      <button
-                                        type="button"
-                                        onClick={() => updateElement(el.id, { border_width: 0 })}
-                                        title="Remove the border"
-                                        className="text-[10px] text-white/60 hover:text-white"
-                                      >
-                                        Clear
-                                      </button>
-                                    )}
-                                  </div>
-                                  {el.border_color && el.border_width > 0 && (
-                                    <label className="flex items-center gap-2 text-[10px] text-white/70">
-                                      <span className="w-9 flex-shrink-0">Width</span>
-                                      <input
-                                        type="range"
-                                        min={1}
-                                        max={16}
-                                        value={el.border_width}
-                                        onChange={e => updateElement(el.id, { border_width: Number(e.target.value) }, { debounce: true })}
-                                        className="flex-1 accent-brand-highlight"
-                                      />
-                                      <span className="w-7 text-right tabular-nums">{Math.round(el.border_width)}px</span>
-                                    </label>
-                                  )}
-                                  <div className="flex items-center gap-1 border-t border-white/10 pt-2">
-                                    <span className="w-9 flex-shrink-0 text-[10px] text-white/70">Shape</span>
-                                    {(['square', 'rounded', 'circle'] as const).map(corner => (
-                                      <button
-                                        key={corner}
-                                        type="button"
-                                        onClick={() => updateElement(el.id, { corner_style: corner })}
-                                        aria-pressed={el.corner_style === corner}
-                                        title={corner === 'square' ? 'Rectangle' : corner === 'rounded' ? 'Rounded rectangle' : 'Circle'}
-                                        className={`flex-1 h-6 rounded flex items-center justify-center transition-colors ${
-                                          el.corner_style === corner ? 'bg-white/20' : 'hover:bg-white/10'}`}
-                                      >
-                                        {/* Not shapeRadius: a 14px radius on a
-                                            14px icon is a circle, so the
-                                            rounded one would be drawn as the
-                                            thing beside it. */}
-                                        <span
-                                          className="w-3.5 h-3.5 border-2 border-white/80"
-                                          style={{ borderRadius: corner === 'circle' ? '50%' : corner === 'rounded' ? '4px' : '0px' }}
-                                        />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFillOpenFor(prev => (prev === el.id ? null : el.id))}
+                          aria-expanded={fillOpenFor === el.id}
+                          title="Background colour"
+                          className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white"
+                        >
+                          <span
+                            className="block w-3.5 h-3.5 rounded-sm border border-white/50"
+                            style={{
+                              background: elementFill(el.background_color, el.background_opacity)
+                                ?? 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.6) 3px, rgba(255,255,255,0.6) 4px)',
+                            }}
+                          />
+                        </button>
                       )}
                       <button
                         type="button"
@@ -1638,6 +1526,122 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
                       </button>
                     </div>
+                  </div>
+                )}
+                {/* The fill panel, outside the toolbar so that 28px strip
+                    does not clip it. Over the element's own top-left corner,
+                    which is the nearest box that clips nothing and keeps the
+                    panel beside the swatch that opened it. */}
+                {isEditMode && fillOpenFor === el.id && (
+                  <div
+                    className="absolute top-0 left-0 z-30 w-44 rounded-lg bg-gray-800/95 p-2 shadow-xl space-y-2"
+                    onPointerDown={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={el.background_color ?? '#000000'}
+                        onChange={e => updateElement(el.id, { background_color: e.target.value }, { debounce: true })}
+                        className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
+                        title="Pick a colour"
+                      />
+                      <span className="flex-1 text-[10px] text-white/70">{el.background_color ?? 'No fill'}</span>
+                      {el.background_color && (
+                        <button
+                          type="button"
+                          onClick={() => updateElement(el.id, { background_color: null })}
+                          title="Remove the fill"
+                          className="text-[10px] text-white/60 hover:text-white"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {/* Only once there is something to see through. */}
+                    {el.background_color && (
+                      <label className="flex items-center gap-2 text-[10px] text-white/70">
+                        <span className="w-9 flex-shrink-0">Opacity</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={el.background_opacity}
+                          onChange={e => updateElement(el.id, { background_opacity: Number(e.target.value) }, { debounce: true })}
+                          className="flex-1 accent-brand-highlight"
+                        />
+                        <span className="w-7 text-right tabular-nums">{Math.round(el.background_opacity)}%</span>
+                      </label>
+                    )}
+                    {/* A shape is a fill, an edge and a corner, so the rest of
+                        it is set here rather than in three more toolbar
+                        buttons. */}
+                    {el.element_type === 'shape' && (
+                      <>
+                        <div className="flex items-center gap-2 border-t border-white/10 pt-2">
+                          <input
+                            type="color"
+                            value={el.border_color ?? '#ffffff'}
+                            onChange={e => updateElement(el.id, {
+                              border_color: e.target.value,
+                              // An edge with no width is not an edge; choosing
+                              // a colour is how somebody asks for one.
+                              border_width: el.border_width > 0 ? el.border_width : 2,
+                            }, { debounce: true })}
+                            className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
+                            title="Border colour"
+                          />
+                          <span className="flex-1 text-[10px] text-white/70">
+                            {el.border_color && el.border_width > 0 ? 'Border' : 'No border'}
+                          </span>
+                          {el.border_color && el.border_width > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => updateElement(el.id, { border_width: 0 })}
+                              title="Remove the border"
+                              className="text-[10px] text-white/60 hover:text-white"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        {el.border_color && el.border_width > 0 && (
+                          <label className="flex items-center gap-2 text-[10px] text-white/70">
+                            <span className="w-9 flex-shrink-0">Width</span>
+                            <input
+                              type="range"
+                              min={1}
+                              max={16}
+                              value={el.border_width}
+                              onChange={e => updateElement(el.id, { border_width: Number(e.target.value) }, { debounce: true })}
+                              className="flex-1 accent-brand-highlight"
+                            />
+                            <span className="w-7 text-right tabular-nums">{Math.round(el.border_width)}px</span>
+                          </label>
+                        )}
+                        <div className="flex items-center gap-1 border-t border-white/10 pt-2">
+                          <span className="w-9 flex-shrink-0 text-[10px] text-white/70">Shape</span>
+                          {(['square', 'rounded', 'circle'] as const).map(corner => (
+                            <button
+                              key={corner}
+                              type="button"
+                              onClick={() => updateElement(el.id, { corner_style: corner })}
+                              aria-pressed={el.corner_style === corner}
+                              title={corner === 'square' ? 'Rectangle' : corner === 'rounded' ? 'Rounded rectangle' : 'Circle'}
+                              className={`flex-1 h-6 rounded flex items-center justify-center transition-colors ${
+                                el.corner_style === corner ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                            >
+                              {/* Not shapeRadius: a 14px radius on a 14px icon
+                                  is a circle, so the rounded one would be drawn
+                                  as the thing beside it. */}
+                              <span
+                                className="w-3.5 h-3.5 border-2 border-white/80"
+                                style={{ borderRadius: corner === 'circle' ? '50%' : corner === 'rounded' ? '4px' : '0px' }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
                 {el.element_type === 'shape' ? (
