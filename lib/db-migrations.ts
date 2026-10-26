@@ -2853,4 +2853,146 @@ export const migrations: string[] = [
      both the form's default and what the calendar had been drawing them as.
      Writing a value into the old rows would be inventing a fact about them. */
   `ALTER TABLE meetings ADD COLUMN duration_minutes INTEGER`,
+
+  /* Put form_elements back where a half-finished rebuild left it stranded.
+
+     Reported from a live tenant: every request to the form canvas failed with
+     "no such table: form_elements", so opening the form editor read nothing
+     and Add Text saved nothing.
+
+     The table is rebuilt earlier in this list — migration 486 widens its
+     element_type CHECK to allow 'video', which SQLite cannot do in place, so
+     it builds form_elements_new, copies the rows across, DROPs the original
+     and RENAMEs the new one into its place. Four statements, and the runner
+     swallows each one's error because an already-applied migration is
+     expected to fail. A database that got as far as the DROP and no further
+     is therefore left with no form_elements at all, a form_elements_new
+     holding its rows, and a version counter saying the work is done. Nothing
+     retries it, and schemaReconcile cannot: it repairs missing COLUMNS in
+     tables that exist, and skips tables that do not.
+
+     The rename below finishes that job wherever it was interrupted. It fails
+     harmlessly everywhere else — there is nothing called form_elements_new on
+     a healthy database, and where both somehow exist SQLite refuses the name
+     rather than clobbering the real one. The CREATE after it is the backstop
+     for a database that has neither, written in the shape the table has
+     today: the wider CHECK from 486 and the corner_style added in 489, so a
+     table restored this way is the current one rather than a version that
+     cannot hold a video. */
+  `ALTER TABLE form_elements_new RENAME TO form_elements`,
+  `CREATE TABLE IF NOT EXISTS form_elements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50,
+    corner_style TEXT NOT NULL DEFAULT 'rounded'
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
+
+  /* A fill behind a text element, and how much of it shows.
+
+     Null is no fill, which is what every text element has been until now and
+     what the editor goes on drawing by default: the point of a caption over a
+     photograph is usually the photograph. A colour with an opacity under it
+     is the other thing people want — a panel just solid enough to read white
+     text off a busy background — so the two are stored apart rather than as
+     one rgba string, which would be unreadable in a colour input and awkward
+     to nudge. Opacity is a percentage, as every other opacity in this schema
+     is, and is read as 100 when it is null. */
+  `ALTER TABLE form_elements ADD COLUMN background_color TEXT`,
+  `ALTER TABLE form_elements ADD COLUMN background_opacity REAL`,
+
+  /* A shape is a fourth kind of element: a rectangle, a rounded one, or a
+     circle, with a fill and a border and nothing inside it.
+
+     The fill it already has — background_color and background_opacity, added
+     just above for text panels, mean the same thing here — so a shape needs
+     only an edge of its own. corner_style carries which of the three it is;
+     that column has never had a CHECK on it, so 'circle' joins 'square' and
+     'rounded' without touching the table.
+
+     element_type does have one, and widening a CHECK means rebuilding the
+     table — the operation that stranded form_elements on a live tenant when
+     it was interrupted between the DROP and the RENAME. So this rebuild is
+     written to survive being interrupted anywhere in the middle: the copy is
+     created IF NOT EXISTS, the drop is IF EXISTS, and the pair of repair
+     statements that finished the last interrupted rename is repeated after
+     it. A pass that stops halfway leaves form_elements_new holding the rows,
+     and the next pass — which replays from the last checkpoint — finishes the
+     rename or, failing everything else, creates the table from scratch.
+
+     The copy reuses the name form_elements_new deliberately: that is the name
+     the existing repair knows, so one repair covers both rebuilds. */
+  `ALTER TABLE form_elements ADD COLUMN border_color TEXT`,
+  `ALTER TABLE form_elements ADD COLUMN border_width REAL`,
+  `CREATE TABLE IF NOT EXISTS form_elements_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video','shape')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50,
+    corner_style TEXT NOT NULL DEFAULT 'rounded',
+    background_color TEXT,
+    background_opacity REAL,
+    border_color TEXT,
+    border_width REAL
+  )`,
+  `INSERT INTO form_elements_new
+     (id, conference_form_id, element_type, x, y, width, height, z_index, content, created_at,
+      object_fit, focal_x, focal_y, corner_style, background_color, background_opacity,
+      border_color, border_width)
+   SELECT id, conference_form_id, element_type, x, y, width, height, z_index, content, created_at,
+          object_fit, focal_x, focal_y, corner_style, background_color, background_opacity,
+          border_color, border_width
+   FROM form_elements`,
+  `DROP TABLE IF EXISTS form_elements`,
+  `ALTER TABLE form_elements_new RENAME TO form_elements`,
+  `CREATE TABLE IF NOT EXISTS form_elements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conference_form_id INTEGER NOT NULL REFERENCES conference_forms(id) ON DELETE CASCADE,
+    element_type TEXT NOT NULL CHECK(element_type IN ('image','text','video','shape')),
+    x REAL NOT NULL DEFAULT 40,
+    y REAL NOT NULL DEFAULT 40,
+    width REAL NOT NULL DEFAULT 280,
+    height REAL NOT NULL DEFAULT 200,
+    z_index INTEGER NOT NULL DEFAULT 0,
+    content TEXT,
+    created_at TEXT DEFAULT (datetime('now')),
+    object_fit TEXT NOT NULL DEFAULT 'contain',
+    focal_x REAL NOT NULL DEFAULT 50,
+    focal_y REAL NOT NULL DEFAULT 50,
+    corner_style TEXT NOT NULL DEFAULT 'rounded',
+    background_color TEXT,
+    background_opacity REAL,
+    border_color TEXT,
+    border_width REAL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_form_elements_form ON form_elements(conference_form_id)`,
+
+  /* The words behind a form's Details button.
+
+     One field type — the mobile event details button — carries a body of
+     text rather than collecting one: times, an address, what to bring. It is
+     written in the field builder and read on the phone, and it is rich text,
+     so it has nowhere to live among placeholder and options_source. Null for
+     every other kind of field, which is all of them until somebody adds this
+     one. */
+  `ALTER TABLE form_fields ADD COLUMN rich_content TEXT`,
 ];

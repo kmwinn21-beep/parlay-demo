@@ -7,9 +7,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    const { x, y, width, height, content, z_index, object_fit, focal_x, focal_y, corner_style } = await request.json();
+    const { x, y, width, height, content, z_index, object_fit, focal_x, focal_y, corner_style,
+            background_color, background_opacity, border_color, border_width } = await request.json();
     const sets: string[] = [];
-    const args: (string | number)[] = [];
+    // Nullable because clearing a fill is a write of null, not an omission.
+    const args: (string | number | null)[] = [];
     if (x !== undefined) { sets.push('x = ?'); args.push(Number(x)); }
     if (y !== undefined) { sets.push('y = ?'); args.push(Number(y)); }
     if (width !== undefined) { sets.push('width = ?'); args.push(Number(width)); }
@@ -20,6 +22,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (focal_x !== undefined) { sets.push('focal_x = ?'); args.push(Number(focal_x)); }
     if (focal_y !== undefined) { sets.push('focal_y = ?'); args.push(Number(focal_y)); }
     if (corner_style !== undefined) { sets.push('corner_style = ?'); args.push(String(corner_style)); }
+    /* Null clears the fill — "no background" is a value here, not a missing
+       field, which is why these are written when they arrive as null and
+       left alone only when they are absent. */
+    if (background_color !== undefined) { sets.push('background_color = ?'); args.push(background_color || null); }
+    if (background_opacity !== undefined) {
+      sets.push('background_opacity = ?');
+      args.push(background_opacity != null ? Number(background_opacity) : null);
+    }
+    if (border_color !== undefined) { sets.push('border_color = ?'); args.push(border_color || null); }
+    if (border_width !== undefined) {
+      sets.push('border_width = ?');
+      args.push(border_width != null ? Number(border_width) : null);
+    }
     if (sets.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     args.push(params.elementId, params.id);
     await db.execute({

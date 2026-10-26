@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import { useEditor } from '@tiptap/react';
 import toast from 'react-hot-toast';
 import type { FormField } from './ExpandedFormModal';
+import { RichTextEditor, getEditorExtensions } from './RichTextEditor';
 
 const FIELD_TYPES = [
   { value: 'text_single', label: 'Text (Single Line)' },
@@ -15,7 +17,15 @@ const FIELD_TYPES = [
   { value: 'dropdown', label: 'Dropdown' },
   { value: 'searchable_dropdown', label: 'Searchable Dropdown' },
   { value: 'attendee_picker', label: 'Attendee Name Picker' },
+  /* Not a question. It puts a Details button beside Submit on the phone and
+     holds the text that button reveals — the times, the address, what to
+     bring — which is why it is the one field type with a body rather than a
+     placeholder. */
+  { value: 'mobile_details', label: 'Mobile Event Details Button' },
 ];
+
+/** The type that carries text instead of collecting it. */
+const DETAILS_TYPE = 'mobile_details';
 
 const OPTIONS_SOURCES = [
   { value: '', label: 'Custom options (enter below)' },
@@ -34,6 +44,34 @@ interface NewField {
   required: boolean;
   options_source: string;
   options: string[];
+  /** The details text, for the one type that has any. */
+  rich_content?: string;
+}
+
+/**
+ * The body of a details field, written where its placeholder would be.
+ *
+ * Its own component because a hook cannot be called conditionally: the
+ * editor exists only while this is mounted, which is only while the field
+ * being added or edited is a details one.
+ */
+function DetailsBody({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+  const editor = useEditor({
+    extensions: getEditorExtensions(),
+    content: value || '<p></p>',
+    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    immediatelyRender: false,
+  });
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">Details Text</label>
+      <RichTextEditor editor={editor} minHeight="140px" />
+      <p className="text-xs text-gray-400 mt-1">
+        Shown when somebody taps Details on a phone. The button appears beside Submit on the
+        public link only.
+      </p>
+    </div>
+  );
 }
 
 interface Props {
@@ -98,7 +136,7 @@ export function FormBuilderModal({
     onReorderFields?.(updates);
   }, [orderedFields, onReorderFields]);
 
-  const emptyNew: NewField = { field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''] };
+  const emptyNew: NewField = { field_type: 'text_single', label: '', placeholder: '', required: false, options_source: '', options: [''], rich_content: '' };
   const [newField, setNewField] = useState<NewField>(emptyNew);
   const [editDraft, setEditDraft] = useState<Partial<NewField>>({});
 
@@ -130,6 +168,7 @@ export function FormBuilderModal({
       required: f.required,
       options_source: f.options_source || '',
       options: f.options.length > 0 ? f.options.map(o => o.value) : [''],
+      rich_content: f.rich_content || '',
     });
   };
 
@@ -144,6 +183,9 @@ export function FormBuilderModal({
   };
 
   const showOptionsFor = (ft: string) => HAS_OPTIONS.includes(ft);
+  /* A details field asks nothing, so a placeholder, a required flag and a
+     list of options would all be settings for a question it does not pose. */
+  const isDetails = (ft: string | undefined) => ft === DETAILS_TYPE;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-auto" style={{ background: 'rgba(0,0,0,0.5)' }}>
@@ -191,21 +233,30 @@ export function FormBuilderModal({
                         className="input-field text-sm w-full"
                       />
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-xs font-semibold text-gray-500 mb-1">Placeholder</label>
-                      <input
-                        type="text"
-                        value={editDraft.placeholder || ''}
-                        onChange={e => setEditDraft(d => ({ ...d, placeholder: e.target.value }))}
-                        className="input-field text-sm w-full"
-                      />
-                    </div>
+                    {!isDetails(f.field_type) && (
+                      <div className="flex-1">
+                        <label className="block text-xs font-semibold text-gray-500 mb-1">Placeholder</label>
+                        <input
+                          type="text"
+                          value={editDraft.placeholder || ''}
+                          onChange={e => setEditDraft(d => ({ ...d, placeholder: e.target.value }))}
+                          className="input-field text-sm w-full"
+                        />
+                      </div>
+                    )}
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" checked={!!editDraft.required} onChange={e => setEditDraft(d => ({ ...d, required: e.target.checked }))} className="accent-brand-secondary" />
-                    Required
-                  </label>
-                  {showOptionsFor(f.field_type) && (
+                  {isDetails(f.field_type) ? (
+                    <DetailsBody
+                      value={editDraft.rich_content ?? ''}
+                      onChange={html => setEditDraft(d => ({ ...d, rich_content: html }))}
+                    />
+                  ) : (
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input type="checkbox" checked={!!editDraft.required} onChange={e => setEditDraft(d => ({ ...d, required: e.target.checked }))} className="accent-brand-secondary" />
+                      Required
+                    </label>
+                  )}
+                  {showOptionsFor(f.field_type) && !isDetails(f.field_type) && (
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Options Source</label>
                       <select
@@ -323,15 +374,24 @@ export function FormBuilderModal({
                   <input type="text" value={newField.label} onChange={e => setNewField(f => ({ ...f, label: e.target.value }))} className="input-field text-sm w-full" placeholder="Field label" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Placeholder</label>
-                <input type="text" value={newField.placeholder} onChange={e => setNewField(f => ({ ...f, placeholder: e.target.value }))} className="input-field text-sm w-full" placeholder="Optional placeholder text" />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input type="checkbox" checked={newField.required} onChange={e => setNewField(f => ({ ...f, required: e.target.checked }))} className="accent-brand-secondary" />
-                Required
-              </label>
-              {showOptionsFor(newField.field_type) && (
+              {isDetails(newField.field_type) ? (
+                <DetailsBody
+                  value={newField.rich_content ?? ''}
+                  onChange={html => setNewField(f => ({ ...f, rich_content: html }))}
+                />
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">Placeholder</label>
+                    <input type="text" value={newField.placeholder} onChange={e => setNewField(f => ({ ...f, placeholder: e.target.value }))} className="input-field text-sm w-full" placeholder="Optional placeholder text" />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" checked={newField.required} onChange={e => setNewField(f => ({ ...f, required: e.target.checked }))} className="accent-brand-secondary" />
+                    Required
+                  </label>
+                </>
+              )}
+              {showOptionsFor(newField.field_type) && !isDetails(newField.field_type) && (
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1">Options Source</label>
                   <select value={newField.options_source} onChange={e => setNewField(f => ({ ...f, options_source: e.target.value }))} className="input-field text-sm w-full mb-2">

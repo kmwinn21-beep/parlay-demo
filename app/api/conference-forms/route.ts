@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
           field_key: ef.field_key ? String(ef.field_key) : null,
           label: String(ef.label),
           placeholder: ef.placeholder ? String(ef.placeholder) : null,
+          rich_content: ef.rich_content ? String(ef.rich_content) : null,
           required: Number(ef.required) === 1,
           sort_order: Number(ef.sort_order),
           options_source: ef.options_source ? String(ef.options_source) : null,

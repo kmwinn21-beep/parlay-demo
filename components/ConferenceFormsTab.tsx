@@ -737,16 +737,22 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
 
                 {/* Row 3: action bar */}
                 <div className="flex items-center justify-between gap-2">
-                  {/* Utility icons — left cluster */}
-                  <div className="flex items-center gap-1">
+                  {/* Utility icons — left cluster.
+
+                      Labelled from lg: six unlabelled glyphs is a guessing
+                      game, and there is room for the words on a desktop. The
+                      row wraps rather than growing, so the Expand button on
+                      the right keeps its place on a narrow window. */}
+                  <div className="flex flex-wrap items-center gap-1">
                     {/* Export */}
                     <button
                       type="button"
                       onClick={() => { loadSubmissions(form.id); setTimeout(() => handleExport(form), 300); }}
                       title="Export to Excel"
-                      className="p-2 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-medium text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h4a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>
+                      <span className="hidden lg:inline">Download</span>
                     </button>
                     {/* Edit form settings */}
                     <button
@@ -764,27 +770,30 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                         });
                       }}
                       title="Edit form settings"
-                      className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-medium text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      <span className="hidden lg:inline">Form Settings</span>
                     </button>
                     {/* Build / add fields */}
                     <button
                       type="button"
                       onClick={() => setBuilderFormId(form.id)}
                       title="Add/edit fields"
-                      className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-medium text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                      <span className="hidden lg:inline">Add/edit Form Fields</span>
                     </button>
                     {/* Duplicate to another conference */}
                     <button
                       type="button"
                       onClick={e => openDuplicateDropdown(form.id, e.currentTarget)}
                       title="Duplicate form to another conference"
-                      className="p-2 rounded-lg text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-medium text-gray-400 hover:text-brand-secondary hover:bg-blue-50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      <span className="hidden lg:inline">Duplicate Form</span>
                     </button>
                     {duplicatingFormId === form.id && dupDropPos && createPortal(
                       <div
@@ -837,9 +846,10 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                       type="button"
                       onClick={e => openPublicLinkDropdown(form.id, e.currentTarget)}
                       title="Public link"
-                      className={`p-2 rounded-lg transition-colors ${form.is_public ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:text-brand-secondary hover:bg-blue-50'}`}
+                      className={`inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-medium transition-colors ${form.is_public ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:text-brand-secondary hover:bg-blue-50'}`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-4 4a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l4-4a4 4 0 015.656 5.656l-1.5 1.5" /></svg>
+                      <span className="hidden lg:inline">Generate Link</span>
                     </button>
                     {publicLinkFormId === form.id && publicLinkDropPos && createPortal(
                       <div
@@ -878,9 +888,10 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
                       type="button"
                       onClick={() => handleDeleteForm(form.id)}
                       title="Delete form"
-                      className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      <span className="hidden lg:inline">Delete Form</span>
                     </button>
                   </div>
                   {/* Expand Form — primary CTA, right side */}

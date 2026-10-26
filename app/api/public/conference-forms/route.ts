@@ -56,7 +56,8 @@ export async function GET(request: NextRequest) {
       }));
     }
     const cfFieldsRes = await db.execute({
-      sql: `SELECT id, field_type, field_key, label, placeholder, required, sort_order, options_source
+      sql: `SELECT id, field_type, field_key, label, placeholder, required, sort_order, options_source,
+                   rich_content
             FROM form_fields WHERE conference_form_id = ? ORDER BY sort_order`,
       args: [f.id as number],
     });
@@ -71,6 +72,7 @@ export async function GET(request: NextRequest) {
         field_key: ef.field_key ? String(ef.field_key) : null,
         label: String(ef.label),
         placeholder: ef.placeholder ? String(ef.placeholder) : null,
+        rich_content: ef.rich_content ? String(ef.rich_content) : null,
         required: Number(ef.required) === 1,
         sort_order: Number(ef.sort_order),
         options_source: ef.options_source ? String(ef.options_source) : null,
@@ -80,7 +82,8 @@ export async function GET(request: NextRequest) {
     const allFields = [...templateFields, ...extraFields].sort((a: any, b: any) => a.sort_order - b.sort_order);
 
     const elementsRes = await db.execute({
-      sql: `SELECT id, element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y, corner_style
+      sql: `SELECT id, element_type, x, y, width, height, z_index, content, object_fit, focal_x, focal_y,
+                   corner_style, background_color, background_opacity, border_color, border_width
             FROM form_elements WHERE conference_form_id = ? ORDER BY z_index, id`,
       args: [f.id as number],
     });
@@ -97,6 +100,10 @@ export async function GET(request: NextRequest) {
       focal_x: r.focal_x != null ? Number(r.focal_x) : 50,
       focal_y: r.focal_y != null ? Number(r.focal_y) : 50,
       corner_style: r.corner_style ? String(r.corner_style) : 'rounded',
+      background_color: r.background_color ? String(r.background_color) : null,
+      background_opacity: r.background_opacity != null ? Number(r.background_opacity) : 100,
+      border_color: r.border_color ? String(r.border_color) : null,
+      border_width: r.border_width != null ? Number(r.border_width) : 0,
     }));
 
     return NextResponse.json({

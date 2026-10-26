@@ -67,7 +67,10 @@ console.log('\n— and the card inside it —');
 {
   // Auto margins share free space when there is some and resolve to zero when
   // there is none — unlike justify-center, which would cut off the top.
-  eq('the card centres with auto margins', /className="my-auto mx-auto w-full max-w-\[480px\] flex-shrink-0/.test(phone), true);
+  // `relative` joined it when the details panel arrived — the panel is
+  // pinned to this card's edges rather than to the page's.
+  eq('the card centres with auto margins',
+    /className="relative my-auto mx-auto w-full max-w-\[480px\] flex-shrink-0/.test(phone), true);
   /*
    * Measured: a fourteen-question card was squashed from 1403px to 568px and
    * lost its Submit button, because a flex item whose overflow is hidden may

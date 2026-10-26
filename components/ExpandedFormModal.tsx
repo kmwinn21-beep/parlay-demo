@@ -20,6 +20,8 @@ export interface FormField {
   sort_order: number;
   options_source: string | null;
   options: { id: number; value: string; sort_order: number }[];
+  /** The body of a details field — the one type that carries text. */
+  rich_content?: string | null;
   is_template_field?: boolean;
 }
 
@@ -58,10 +60,46 @@ export interface ConferenceForm {
   template_id?: number | null;
 }
 
+/**
+ * A text element's fill, as CSS — or nothing at all.
+ *
+ * Colour and opacity are stored apart rather than as one rgba string: a
+ * colour input cannot read rgba, and nudging the opacity of a string means
+ * parsing it back out. They are only ever put together here, so the editor
+ * and the public page cannot disagree about what a half-transparent panel
+ * looks like.
+ */
+export function elementFill(color: string | null, opacity: number | null): string | undefined {
+  if (!color) return undefined;
+  const pct = Math.min(100, Math.max(0, opacity ?? 100));
+  const hex = color.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return undefined;
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${pct / 100})`;
+}
+
+/**
+ * What makes a rectangle a rounded rectangle or a circle.
+ *
+ * A circle is 50% rather than a fixed radius, so it follows the element as it
+ * is resized: a wide one is an ellipse, which is what dragging a circle wide
+ * should give you.
+ */
+export function shapeRadius(cornerStyle: string): string {
+  if (cornerStyle === 'circle') return '50%';
+  return cornerStyle === 'square' ? '0px' : '14px';
+}
+
+/** How far a duplicate lands from the thing it was copied from. */
+const DUPLICATE_OFFSET = 24;
+
+/** The settings drawer's width while editing — nothing new is placed under it. */
+const DRAWER_WIDTH = 340;
+
 interface FormElement {
   id: number;
   conference_form_id: number;
-  element_type: 'image' | 'text' | 'video';
+  element_type: 'image' | 'text' | 'video' | 'shape';
   x: number;
   y: number;
   width: number;
@@ -71,7 +109,15 @@ interface FormElement {
   object_fit: 'contain' | 'cover';
   focal_x: number;
   focal_y: number;
-  corner_style: 'square' | 'rounded';
+  /** A shape's own outline: square, rounded, or a circle. */
+  corner_style: 'square' | 'rounded' | 'circle';
+  /** A fill behind a text element, or a shape's own. Null is no fill at all. */
+  background_color: string | null;
+  /** How much of that fill shows, 0–100. */
+  background_opacity: number;
+  /** A shape's edge. Null, or a width of 0, is no edge. */
+  border_color: string | null;
+  border_width: number;
 }
 
 interface AttendeeOption {
@@ -153,11 +199,13 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerS
   objectFit: 'contain' | 'cover';
   focalX: number;
   focalY: number;
-  cornerStyle: 'square' | 'rounded';
+  /* Media takes the same column shapes do, but reads only two of them: a
+     circular photograph is a crop, not a corner, and is not offered. */
+  cornerStyle: FormElement['corner_style'];
   isEditMode: boolean;
   onFocalCommit: (x: number, y: number) => void;
 }) {
-  const cornerClass = cornerStyle === 'rounded' ? 'rounded-xl' : 'rounded-none';
+  const cornerClass = cornerStyle === 'square' ? 'rounded-none' : 'rounded-xl';
   const [error, setError] = useState(false);
   const [localFocal, setLocalFocal] = useState({ x: focalX, y: focalY });
   const [isDragging, setIsDragging] = useState(false);
@@ -260,12 +308,38 @@ function MediaElementCanvas({ src, mediaType, objectFit, focalX, focalY, cornerS
   );
 }
 
+/**
+ * A shape: a box with a fill, an edge and a corner.
+ *
+ * Nothing inside it and nothing to click — it is scenery, drawn behind or
+ * beside the things that are read, and the element's own frame is what gets
+ * dragged and resized. The fill is the one text panels use, so a shape and a
+ * caption that share a colour share it exactly.
+ */
+function ShapeElementCanvas({ element }: { element: FormElement }) {
+  const fill = elementFill(element.background_color, element.background_opacity);
+  const width = element.border_width ?? 0;
+  return (
+    <div
+      className="w-full h-full"
+      style={{
+        background: fill,
+        borderRadius: shapeRadius(element.corner_style),
+        border: width > 0 && element.border_color ? `${width}px solid ${element.border_color}` : undefined,
+      }}
+    />
+  );
+}
+
 function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
   element: FormElement;
   isEditMode: boolean;
   textColor: string;
   onChange: (html: string) => void;
 }) {
+  // The fill is drawn while editing too — it is half the reason for choosing
+  // one, and judging white text on a 40% panel means seeing the panel.
+  const fill = elementFill(element.background_color, element.background_opacity);
   const editor = useEditor({
     extensions: getEditorExtensions(),
     content: element.content || '<p></p>',
@@ -274,13 +348,27 @@ function TextElementCanvas({ element, isEditMode, textColor, onChange }: {
     immediatelyRender: false,
   });
 
+  /*
+   * Typed over the page, not over a white card.
+   *
+   * The editor used to sit on bg-white, so text being written was black on
+   * white however it was going to look once saved — which on a photograph or
+   * a dark panel is a different piece of text entirely. The surface is
+   * transparent now and carries the colour the element will be drawn in, so
+   * what is typed is what will be read. The toolbar keeps its own fill; it is
+   * chrome rather than content, and it has to stay legible over anything.
+   */
   if (isEditMode) {
-    return <div className="w-full h-full overflow-hidden rounded-xl bg-white"><RichTextEditor editor={editor} minHeight="100%" /></div>;
+    return (
+      <div className="w-full h-full overflow-hidden rounded-xl" style={{ color: textColor, background: fill }}>
+        <RichTextEditor editor={editor} minHeight="100%" />
+      </div>
+    );
   }
   return (
     <div
-      className="prose prose-sm max-w-none h-full overflow-y-auto px-2 py-1"
-      style={{ color: textColor }}
+      className="prose prose-sm max-w-none h-full overflow-y-auto px-2 py-1 rounded-xl"
+      style={{ color: textColor, background: fill }}
       dangerouslySetInnerHTML={{ __html: sanitizeHtml(element.content || '') }}
     />
   );
@@ -298,6 +386,11 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
   const [attendeeDropOpen, setAttendeeDropOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [mounted, setMounted] = useState(false);
+  /** Which text element has its fill picker open, if any. */
+  const [fillOpenFor, setFillOpenFor] = useState<number | null>(null);
+  /** Elements moving together, and where they stood when the drag began. */
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const groupDrag = useRef<Map<number, { x: number; y: number }> | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanBanner, setScanBanner] = useState(false);
   const [scanCompanyMatches, setScanCompanyMatches] = useState<{ id: number; name: string }[]>([]);
@@ -375,8 +468,122 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
 
   const removeElement = useCallback((id: number) => {
     setElements(prev => prev.filter(e => e.id !== id));
+    setSelectedIds(prev => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
     fetch(`/api/conference-forms/${form.id}/elements/${id}`, { method: 'DELETE' }).catch(() => {});
   }, [form.id]);
+
+  /*
+   * Moving several things at once.
+   *
+   * A form built out of a heading, a rule and three captions is laid out once
+   * and then nudged as a group, and doing that one element at a time undoes
+   * the alignment between them every time. Elements are put in a set by the
+   * tick in their own toolbar, and dragging any one of them carries the rest
+   * by the same offset.
+   *
+   * The offsets are measured from where each element stood when the drag
+   * began rather than accumulated frame by frame, so a long drag cannot
+   * drift: the positions are a function of the pointer, not a sum of its
+   * steps.
+   */
+  const toggleSelected = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const beginGroupDrag = useCallback((id: number) => {
+    if (!selectedIds.has(id)) {
+      // Dragging something outside the selection is an ordinary single move,
+      // and leaving the old rings lit would say otherwise.
+      setSelectedIds(new Set());
+      groupDrag.current = null;
+      return;
+    }
+    groupDrag.current = new Map(
+      elements.filter(e => selectedIds.has(e.id)).map(e => [e.id, { x: e.x, y: e.y }]),
+    );
+  }, [elements, selectedIds]);
+
+  /*
+   * The rubber band.
+   *
+   * Picking five captions out of a toolbar tick each is fine for two and
+   * tedious for five, so dragging across empty canvas selects everything the
+   * box touches — intersection rather than containment, since the useful
+   * gesture is a stroke across a row of things rather than a careful loop
+   * around them.
+   *
+   * It starts only on the canvas itself: the test is that the pointer went
+   * down on the overlay element and nothing inside it. That one check keeps
+   * it out of the way of every element's own drag, the form card's, the
+   * settings drawer and the close button, none of which have to know this
+   * exists. Holding shift adds to the group; without it the band replaces
+   * what was selected, so a click on empty canvas clears.
+   */
+  const [band, setBand] = useState<{ x0: number; y0: number; x1: number; y1: number; add: boolean } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  const startBand = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isEditMode || e.button !== 0 || e.target !== canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setBand({ x0: x, y0: y, x1: x, y1: y, add: e.shiftKey });
+  }, [isEditMode]);
+
+  useEffect(() => {
+    if (!band) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const move = (e: PointerEvent) => {
+      setBand(prev => (prev ? { ...prev, x1: e.clientX - rect.left, y1: e.clientY - rect.top } : prev));
+    };
+    const up = () => {
+      setBand(prev => {
+        if (!prev) return null;
+        const left = Math.min(prev.x0, prev.x1);
+        const right = Math.max(prev.x0, prev.x1);
+        const top = Math.min(prev.y0, prev.y1);
+        const bottom = Math.max(prev.y0, prev.y1);
+        const touched = elements
+          .filter(el => el.x < right && el.x + el.width > left && el.y < bottom && el.y + el.height > top)
+          .map(el => el.id);
+        setSelectedIds(current => {
+          const next = prev.add ? new Set(current) : new Set<number>();
+          touched.forEach(id => next.add(id));
+          return next;
+        });
+        return null;
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+  }, [band, elements]);
+
+  /** Where each of the others lands, given how far the dragged one has gone. */
+  const groupOffsets = (origins: Map<number, { x: number; y: number }>, id: number, x: number, y: number) => {
+    const from = origins.get(id);
+    if (!from) return null;
+    const dx = Math.round(x - from.x);
+    const dy = Math.round(y - from.y);
+    return Array.from(origins.entries())
+      .filter(([otherId]) => otherId !== id)
+      // Clamped at the edges, as the dragged one is by bounds="parent" — a
+      // group dragged into the corner must not push its other members off.
+      .map(([otherId, o]) => [otherId, { x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) }] as const);
+  };
 
   // Unified layering stack: the form card is just another item alongside the image/text
   // elements, so it can be sent behind or brought in front of them too.
@@ -414,23 +621,64 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
     });
   }, [elements, formMeta.form_z_index, form.id, patchFormMeta]);
 
-  const addElement = useCallback(async (element_type: 'image' | 'text' | 'video', content: string) => {
-    // Always stack new elements above every existing one — z_index isn't guaranteed to be
-    // contiguous (elements can be removed, or start from the migration backfill's fixed
-    // values), so elements.length is not a reliable "next" value.
-    const nextZ = elements.length > 0 ? Math.max(...elements.map(e => e.z_index)) + 1 : 0;
+  /*
+   * Above everything, the form card included.
+   *
+   * This used to be the highest z among the ELEMENTS, which on an empty form
+   * is zero — and the form card sits at 1000. So the first thing anyone added
+   * was filed behind the card, and since a new element is placed in the middle
+   * of the screen, where the card also is, it landed exactly under it: click
+   * Add Text, nothing appears. It was there the whole time.
+   *
+   * z_index is not contiguous — elements are removed, and the migration
+   * backfill started some at fixed values — so a count is not a next value.
+   */
+  const nextElementZ = useCallback(
+    () => Math.max(formMeta.form_z_index, ...elements.map(e => e.z_index), -1) + 1,
+    [elements, formMeta.form_z_index],
+  );
+
+  /*
+   * Beside the form card rather than on top of it.
+   *
+   * Dropping every new element over the card means covering the form to look
+   * at what was just added, so the gap beside the card is used where there is
+   * one: to its right first, then its left — but only clear of the settings
+   * drawer, which docks over the left while editing and is where new elements
+   * used to disappear. A screen too narrow for either gap falls back to the
+   * middle, which is at least on top now.
+   */
+  const placeNewElement = useCallback((width: number, height: number) => {
+    const GAP = 24;
+    const cardWidth = formMeta.form_width;
+    const cardX = formMeta.form_x ?? Math.round((window.innerWidth - cardWidth) / 2);
+    const y = Math.max(0, Math.round((window.innerHeight - height) / 2));
+    const right = cardX + cardWidth + GAP;
+    if (right + width + GAP <= window.innerWidth) return { x: right, y };
+    const left = cardX - GAP - width;
+    if (left >= DRAWER_WIDTH + GAP) return { x: left, y };
+    return { x: Math.max(0, Math.round((window.innerWidth - width) / 2)), y };
+  }, [formMeta.form_width, formMeta.form_x]);
+
+  const addElement = useCallback(async (
+    element_type: 'image' | 'text' | 'video' | 'shape',
+    content: string,
+    /* A shape arrives knowing which one it is, and wearing something: an
+       unfilled, unbordered rectangle is an invisible rectangle, and dropping
+       one of those on the canvas looks exactly like the bug this editor just
+       had. */
+    shape?: { corner_style: FormElement['corner_style']; background_color: string; background_opacity: number },
+  ) => {
     const width = element_type === 'text' ? 280 : 300;
-    const height = element_type === 'text' ? 180 : 220;
-    // Center in the viewport, not a fixed top-left offset — the settings drawer docks over
-    // that corner while editing, which made new elements land hidden behind it.
+    const height = element_type === 'text' ? 180 : element_type === 'shape' ? 180 : 220;
     const base = {
       element_type,
-      x: Math.max(0, Math.round((window.innerWidth - width) / 2)),
-      y: Math.max(0, Math.round((window.innerHeight - height) / 2)),
+      ...placeNewElement(width, height),
       width,
       height,
-      z_index: nextZ,
+      z_index: nextElementZ(),
       content,
+      ...(shape ?? {}),
     };
     try {
       const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
@@ -440,14 +688,81 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       });
       if (!res.ok) throw new Error();
       const { id } = await res.json();
-      setElements(prev => [...prev, { ...base, id, conference_form_id: form.id, object_fit: 'contain', focal_x: 50, focal_y: 50, corner_style: 'rounded' }]);
+      setElements(prev => [...prev, {
+        object_fit: 'contain', focal_x: 50, focal_y: 50, corner_style: 'rounded',
+        background_color: null, background_opacity: 100, border_color: null, border_width: 0,
+        ...base, id, conference_form_id: form.id,
+      } as FormElement]);
     } catch {
       toast.error('Failed to add element');
     }
-  }, [form.id, elements]);
+  }, [form.id, nextElementZ, placeNewElement]);
+
+  /*
+   * The same element again, a little down and to the right.
+   *
+   * Offset rather than exactly on top, or the copy is invisible and the next
+   * drag moves whichever one the stack happened to put in front. Stacked
+   * above everything, like a new element, so what was just made is the thing
+   * being looked at.
+   *
+   * Everything about the element travels: a duplicated image keeps its crop
+   * and its focal point, a duplicated text keeps its markup. Only the
+   * position and the id are new.
+   */
+  const duplicateElement = useCallback(async (el: FormElement) => {
+    const nextZ = nextElementZ();
+    const copy = {
+      element_type: el.element_type,
+      x: el.x + DUPLICATE_OFFSET,
+      y: el.y + DUPLICATE_OFFSET,
+      width: el.width,
+      height: el.height,
+      z_index: nextZ,
+      content: el.content,
+      object_fit: el.object_fit,
+      focal_x: el.focal_x,
+      focal_y: el.focal_y,
+      corner_style: el.corner_style,
+      background_color: el.background_color,
+      background_opacity: el.background_opacity,
+      border_color: el.border_color,
+      border_width: el.border_width,
+    };
+    try {
+      const res = await fetch(`/api/conference-forms/${form.id}/elements`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(copy),
+      });
+      if (!res.ok) throw new Error();
+      const { id } = await res.json();
+      setElements(prev => [...prev, { ...copy, id, conference_form_id: form.id }]);
+    } catch {
+      toast.error('Failed to duplicate element');
+    }
+  }, [form.id, nextElementZ]);
 
   // Portal SSR safety — document.body is only available client-side
   useEffect(() => { setMounted(true); }, []);
+
+  /*
+   * Escape lets the group go, and leaving edit mode does too.
+   *
+   * A selection that outlives the editing it was made for is a set of lit
+   * rings nobody asked for, and worse, a drag that quietly carries elements
+   * the person has stopped thinking about.
+   */
+  useEffect(() => {
+    if (!isEditMode) { setSelectedIds(new Set()); setFillOpenFor(null); return; }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setSelectedIds(new Set());
+      setFillOpenFor(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isEditMode]);
 
   useEffect(() => {
     const mq = window.matchMedia('(orientation: landscape) and (min-width: 768px)');
@@ -1050,8 +1365,27 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
       </button>
 
       {isLandscape ? (
-        /* ── Landscape: free-position/resize canvas ── */
-        <div className="relative h-full w-full overflow-hidden">
+        /* ── Landscape: free-position/resize canvas ──
+           The canvas the elements are positioned in is also the surface the
+           selection band is drawn on, so both read one coordinate space and
+           an element's stored x/y can be compared with the band without
+           converting anything. */
+        <div ref={canvasRef} onPointerDown={startBand} className="relative h-full w-full overflow-hidden">
+          {/* Drawn over everything and listening to nothing — the pointer is
+              already held by the window handlers that size it. */}
+          {band && (
+            <div
+              data-selection-band
+              className="pointer-events-none absolute border border-dashed border-white/80 bg-white/10 rounded-sm"
+              style={{
+                left: Math.min(band.x0, band.x1),
+                top: Math.min(band.y0, band.y1),
+                width: Math.abs(band.x1 - band.x0),
+                height: Math.abs(band.y1 - band.y0),
+                zIndex: 10001,
+              }}
+            />
+          )}
           {form.panel_logo_url && (
             <img
               src={form.panel_logo_url}
@@ -1070,8 +1404,31 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
               dragHandleClassName="rnd-drag-handle"
               bounds="parent"
               style={{ zIndex: el.z_index }}
-              className={isEditMode ? 'ring-2 ring-white/60 rounded-xl' : ''}
-              onDragStop={(_e, d) => updateElement(el.id, { x: Math.round(d.x), y: Math.round(d.y) })}
+              className={isEditMode
+                ? `rounded-xl ring-2 ${selectedIds.has(el.id) ? 'ring-brand-highlight' : 'ring-white/60'}`
+                : ''}
+              onDragStart={() => beginGroupDrag(el.id)}
+              onDrag={(_e, d) => {
+                const origins = groupDrag.current;
+                if (!origins) return;
+                const moves = groupOffsets(origins, el.id, d.x, d.y);
+                if (!moves) return;
+                // Local only while the pointer is down; the writes go out once,
+                // on drop, rather than once per frame per element.
+                setElements(prev => prev.map(e => {
+                  const move = moves.find(([id]) => id === e.id);
+                  return move ? { ...e, ...move[1] } : e;
+                }));
+              }}
+              onDragStop={(_e, d) => {
+                const origins = groupDrag.current;
+                groupDrag.current = null;
+                updateElement(el.id, { x: Math.round(d.x), y: Math.round(d.y) });
+                if (!origins) return;
+                for (const [id, pos] of groupOffsets(origins, el.id, d.x, d.y) ?? []) {
+                  updateElement(id, pos);
+                }
+              }}
               onResizeStop={(_e, _dir, ref, _delta, pos) => updateElement(el.id, {
                 width: ref.offsetWidth, height: ref.offsetHeight, x: Math.round(pos.x), y: Math.round(pos.y),
               })}
@@ -1107,6 +1464,49 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                           )}
                         </button>
                       )}
+                      {/* The fill — for text panels and for shapes, which are
+                          little else. An image brings its own background and a
+                          video is one, so neither offers it. The swatch shows
+                          what is set, hatched when nothing is.
+
+                          The panel it opens is NOT in here: this strip is 28px
+                          tall with overflow-hidden, which cut the panel down to
+                          a sliver of its first row. It is a sibling of the
+                          toolbar instead, where nothing clips it. */}
+                      {(el.element_type === 'text' || el.element_type === 'shape') && (
+                        <button
+                          type="button"
+                          onClick={() => setFillOpenFor(prev => (prev === el.id ? null : el.id))}
+                          aria-expanded={fillOpenFor === el.id}
+                          title="Background colour"
+                          className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white"
+                        >
+                          <span
+                            className="block w-3.5 h-3.5 rounded-sm border border-white/50"
+                            style={{
+                              background: elementFill(el.background_color, el.background_opacity)
+                                ?? 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(255,255,255,0.6) 3px, rgba(255,255,255,0.6) 4px)',
+                            }}
+                          />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleSelected(el.id)}
+                        aria-pressed={selectedIds.has(el.id)}
+                        title={selectedIds.has(el.id) ? 'Remove from the group' : 'Move with others'}
+                        className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                          selectedIds.has(el.id) ? 'text-brand-highlight' : 'text-white/70 hover:text-white'}`}
+                      >
+                        {selectedIds.has(el.id) ? (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><rect x="4" y="4" width="16" height="16" rx="3" /><path strokeLinecap="round" strokeLinejoin="round" d="M8 12l3 3 5-6" /></svg>
+                        ) : (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="4" y="4" width="16" height="16" rx="3" /></svg>
+                        )}
+                      </button>
+                      <button type="button" onClick={() => duplicateElement(el)} title="Duplicate" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><rect x="9" y="9" width="11" height="11" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1" /></svg>
+                      </button>
                       <button type="button" onClick={() => reorderStack({ kind: 'element', id: el.id }, 'back')} title="Send to back" className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-5 5m5-5l5 5" /><path strokeLinecap="round" strokeLinejoin="round" d="M5 19h14" /></svg>
                       </button>
@@ -1130,7 +1530,125 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
                     </div>
                   </div>
                 )}
-                {el.element_type === 'image' || el.element_type === 'video' ? (
+                {/* The fill panel, outside the toolbar so that 28px strip
+                    does not clip it. Over the element's own top-left corner,
+                    which is the nearest box that clips nothing and keeps the
+                    panel beside the swatch that opened it. */}
+                {isEditMode && fillOpenFor === el.id && (
+                  <div
+                    className="absolute top-0 left-0 z-30 w-44 rounded-lg bg-gray-800/95 p-2 shadow-xl space-y-2"
+                    onPointerDown={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={el.background_color ?? '#000000'}
+                        onChange={e => updateElement(el.id, { background_color: e.target.value }, { debounce: true })}
+                        className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
+                        title="Pick a colour"
+                      />
+                      <span className="flex-1 text-[10px] text-white/70">{el.background_color ?? 'No fill'}</span>
+                      {el.background_color && (
+                        <button
+                          type="button"
+                          onClick={() => updateElement(el.id, { background_color: null })}
+                          title="Remove the fill"
+                          className="text-[10px] text-white/60 hover:text-white"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {/* Only once there is something to see through. */}
+                    {el.background_color && (
+                      <label className="flex items-center gap-2 text-[10px] text-white/70">
+                        <span className="w-9 flex-shrink-0">Opacity</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={el.background_opacity}
+                          onChange={e => updateElement(el.id, { background_opacity: Number(e.target.value) }, { debounce: true })}
+                          className="flex-1 accent-brand-highlight"
+                        />
+                        <span className="w-7 text-right tabular-nums">{Math.round(el.background_opacity)}%</span>
+                      </label>
+                    )}
+                    {/* A shape is a fill, an edge and a corner, so the rest of
+                        it is set here rather than in three more toolbar
+                        buttons. */}
+                    {el.element_type === 'shape' && (
+                      <>
+                        <div className="flex items-center gap-2 border-t border-white/10 pt-2">
+                          <input
+                            type="color"
+                            value={el.border_color ?? '#ffffff'}
+                            onChange={e => updateElement(el.id, {
+                              border_color: e.target.value,
+                              // An edge with no width is not an edge; choosing
+                              // a colour is how somebody asks for one.
+                              border_width: el.border_width > 0 ? el.border_width : 2,
+                            }, { debounce: true })}
+                            className="h-6 w-8 cursor-pointer rounded border border-white/20 bg-transparent p-0"
+                            title="Border colour"
+                          />
+                          <span className="flex-1 text-[10px] text-white/70">
+                            {el.border_color && el.border_width > 0 ? 'Border' : 'No border'}
+                          </span>
+                          {el.border_color && el.border_width > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => updateElement(el.id, { border_width: 0 })}
+                              title="Remove the border"
+                              className="text-[10px] text-white/60 hover:text-white"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        {el.border_color && el.border_width > 0 && (
+                          <label className="flex items-center gap-2 text-[10px] text-white/70">
+                            <span className="w-9 flex-shrink-0">Width</span>
+                            <input
+                              type="range"
+                              min={1}
+                              max={16}
+                              value={el.border_width}
+                              onChange={e => updateElement(el.id, { border_width: Number(e.target.value) }, { debounce: true })}
+                              className="flex-1 accent-brand-highlight"
+                            />
+                            <span className="w-7 text-right tabular-nums">{Math.round(el.border_width)}px</span>
+                          </label>
+                        )}
+                        <div className="flex items-center gap-1 border-t border-white/10 pt-2">
+                          <span className="w-9 flex-shrink-0 text-[10px] text-white/70">Shape</span>
+                          {(['square', 'rounded', 'circle'] as const).map(corner => (
+                            <button
+                              key={corner}
+                              type="button"
+                              onClick={() => updateElement(el.id, { corner_style: corner })}
+                              aria-pressed={el.corner_style === corner}
+                              title={corner === 'square' ? 'Rectangle' : corner === 'rounded' ? 'Rounded rectangle' : 'Circle'}
+                              className={`flex-1 h-6 rounded flex items-center justify-center transition-colors ${
+                                el.corner_style === corner ? 'bg-white/20' : 'hover:bg-white/10'}`}
+                            >
+                              {/* Not shapeRadius: a 14px radius on a 14px icon
+                                  is a circle, so the rounded one would be drawn
+                                  as the thing beside it. */}
+                              <span
+                                className="w-3.5 h-3.5 border-2 border-white/80"
+                                style={{ borderRadius: corner === 'circle' ? '50%' : corner === 'rounded' ? '4px' : '0px' }}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                {el.element_type === 'shape' ? (
+                  <ShapeElementCanvas element={el} />
+                ) : el.element_type === 'image' || el.element_type === 'video' ? (
                   <MediaElementCanvas
                     src={el.content || ''}
                     mediaType={el.element_type}
@@ -1226,6 +1744,14 @@ export function ExpandedFormModal({ form, conferenceId, conferenceName, attendee
             onAddImage={url => addElement('image', url)}
             onAddVideo={url => addElement('video', url)}
             onAddText={() => addElement('text', '<p>New text</p>')}
+            /* A new shape arrives visible: a mid grey at three-quarters,
+               which reads on a photograph and on a flat colour alike, and is
+               a starting point rather than a decision. */
+            onAddShape={corner => addElement('shape', '', {
+              corner_style: corner,
+              background_color: '#94a3b8',
+              background_opacity: 75,
+            })}
           />
         </div>
       ) : (

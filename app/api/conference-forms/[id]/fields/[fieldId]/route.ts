@@ -7,7 +7,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    const { label, placeholder, required, sort_order, options_source, options } = await request.json();
+    const { label, placeholder, required, sort_order, options_source, options, rich_content } = await request.json();
     const sets: string[] = [];
     const args: (string | number | null)[] = [];
     if (label !== undefined) { sets.push('label = ?'); args.push(label.trim()); }
@@ -15,6 +15,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (required !== undefined) { sets.push('required = ?'); args.push(required ? 1 : 0); }
     if (sort_order !== undefined) { sets.push('sort_order = ?'); args.push(sort_order); }
     if (options_source !== undefined) { sets.push('options_source = ?'); args.push(options_source || null); }
+    if (rich_content !== undefined) { sets.push('rich_content = ?'); args.push(rich_content || null); }
     if (sets.length > 0) {
       args.push(params.fieldId);
       await db.execute({ sql: `UPDATE form_fields SET ${sets.join(', ')} WHERE id = ?`, args });

@@ -7,13 +7,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   if (authResult instanceof NextResponse) return authResult;
   const db = await getDb(authResult?.accountId);
   try {
-    const { field_type, label, placeholder, required, sort_order, options_source, options } = await request.json();
+    const { field_type, label, placeholder, required, sort_order, options_source, options,
+            rich_content } = await request.json();
     if (!field_type || !label?.trim()) return NextResponse.json({ error: 'field_type and label required' }, { status: 400 });
 
     const result = await db.execute({
-      sql: `INSERT INTO form_fields (conference_form_id, field_type, label, placeholder, required, sort_order, options_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-      args: [params.id, field_type, label.trim(), placeholder || null, required ? 1 : 0, sort_order ?? 99, options_source || null],
+      sql: `INSERT INTO form_fields (conference_form_id, field_type, label, placeholder, required, sort_order,
+                                     options_source, rich_content)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      args: [params.id, field_type, label.trim(), placeholder || null, required ? 1 : 0, sort_order ?? 99,
+             options_source || null, rich_content || null],
     });
     const fieldId = Number(result.rows[0].id);
 
