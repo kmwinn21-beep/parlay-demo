@@ -295,7 +295,7 @@ console.log('\n— the form card\u2019s actions, named —');
    * words. They are hidden below lg, where the row would wrap to three lines
    * and push the Expand button off the card.
    */
-  for (const label of ['Download', 'Form Settings', 'Add/edit Form Fields', 'Duplicate Form', 'Generate Link', 'Delete Form']) {
+  for (const label of ['Download', 'Form Settings', 'Add/edit Form Fields', 'Duplicate Form', 'Generate/Copy Link', 'Delete Form']) {
     eq(`${label} is named beside its icon`,
       new RegExp(`<span className="hidden lg:inline">${label.replace('/', '\\/')}</span>`).test(tab), true);
   }
