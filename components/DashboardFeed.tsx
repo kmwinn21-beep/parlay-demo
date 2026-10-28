@@ -18,6 +18,7 @@ import { useMobileCollapse } from '@/lib/useMobileCollapse';
 import { NoteSheet } from '@/components/NoteSheet';
 import { avatarColour, initials } from '@/lib/authorAvatar';
 import { NoteSheetBody, NoteSheetFooter, NoteSheetHeader } from '@/components/NoteSheetLayout';
+import { pickOpeningScope } from '@/lib/feed/openingScope';
 import {
   FEED_SCOPES, matchesFilter, rendersBody,
   type FeedColour, type FeedFilter, type FeedItem, type FeedKind, type FeedScope,
@@ -468,6 +469,7 @@ const POLL_BG_MS = 120_000;
 /** Where "new since you last looked" is remembered. Per browser, by design. */
 const SEEN_KEY = 'parlay.feed.lastSeenAt';
 
+
 export function DashboardFeed({ className = '', footer }: {
   className?: string;
   /**
@@ -500,6 +502,26 @@ export function DashboardFeed({ className = '', footer }: {
   const { isMobile, expanded, toggle, showBody } = useMobileCollapse();
   const scopeRef = useRef(scope);
   scopeRef.current = scope;
+  /** Whether the opening scope has been settled. Set on the first mount pass. */
+  const resolvedRef = useRef(false);
+  /**
+   * True while the opening scope is being worked out.
+   *
+   * React's development Strict Mode runs an effect, tears it down and runs it
+   * again, so the second pass arrives with `resolvedRef` already set and the
+   * walk still in flight. Without this it fetches Active alongside the walk
+   * and whichever lands last wins — which can leave the toggle on Upcoming
+   * showing Active's empty response.
+   */
+  const resolvingRef = useRef(false);
+  /**
+   * The scope the data on screen came from.
+   *
+   * The opening fallback below does its own fetching, so when it lands on
+   * Upcoming the scope-change effect must not immediately fetch Upcoming
+   * again.
+   */
+  const loadedScopeRef = useRef<FeedScope | null>(null);
 
   useEffect(() => {
     try { setLastSeen(window.localStorage.getItem(SEEN_KEY)); } catch { /* private mode */ }
@@ -512,6 +534,7 @@ export function DashboardFeed({ className = '', footer }: {
       const res = await fetch(`/api/feed?scope=${scopeRef.current}&limit=${PAGE}`, { cache: 'no-store' });
       if (!res.ok) throw new Error();
       setData(await res.json() as FeedResponse);
+      loadedScopeRef.current = scopeRef.current;
       setNowMs(Date.now());
     } catch {
       // A feed is furniture. Keep whatever is on screen rather than blanking it
@@ -525,7 +548,53 @@ export function DashboardFeed({ className = '', footer }: {
     }
   }, []);
 
-  useEffect(() => { load(); }, [scope, load]);
+  /**
+   * The opening view: the first scope with anything in it. See
+   * lib/feed/openingScope.ts for why, and for the order.
+   *
+   * Runs ONCE, on mount. A scope the user picked is their choice and stays put
+   * even when it turns out to be empty — that is what the empty states and
+   * their "Switch to All" prompts are for.
+   */
+  const chooseScope = useCallback(async () => {
+    setLoading(true);
+    resolvingRef.current = true;
+    try {
+      const { scope: picked, payload } = await pickOpeningScope(async candidate => {
+        const res = await fetch(`/api/feed?scope=${candidate}&limit=${PAGE}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error();
+        return await res.json() as FeedResponse;
+      });
+      setScope(picked);
+      // Set here as well as by the render pass, so a poll that fires before
+      // React re-renders asks for the scope now on screen.
+      scopeRef.current = picked;
+      loadedScopeRef.current = picked;
+      setData(payload);
+      setNowMs(Date.now());
+    } catch {
+      // Same as `load`: a feed is furniture, and a failed fetch leaves the
+      // scope where it started rather than walking on in the dark.
+      setData(d => d ?? { items: [], hasMore: false, activeCount: 0, upcomingCount: 0 });
+    } finally {
+      resolvingRef.current = false;
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!resolvedRef.current) {
+      resolvedRef.current = true;
+      void chooseScope();
+      return;
+    }
+    // The walk owns the first load; see `resolvingRef`.
+    if (resolvingRef.current) return;
+    // Already on screen — this ran because `chooseScope` settled on a scope it
+    // had just fetched, not because anybody switched views.
+    if (loadedScopeRef.current === scope) return;
+    void load();
+  }, [scope, load, chooseScope]);
 
   // Poll only while something is running. An account between shows polls
   // nothing at all — there is no source of new items to discover.

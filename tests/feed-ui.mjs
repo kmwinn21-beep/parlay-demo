@@ -93,7 +93,12 @@ console.log('\n— the scope toggle —');
   // so a scope added to the type cannot go missing from the control.
   eq('the toggle renders from that list', /FEED_SCOPES\.map\(\(\{ key, label \}\)/.test(feed), true);
   eq('  and no longer hardcodes the old two', /'in_progress', 'In progress'/.test(feed), false);
-  eq('Active is the default view', /useState<FeedScope>\('active'\)/.test(feed), true);
+  // Active is where it starts. It does not necessarily stay there: an empty
+  // Active falls through to Upcoming and then to All on mount, which is
+  // tests/feed-opening-scope.mjs. The state still begins here, so a show that
+  // is running opens on it with one request.
+  eq('Active is where the view starts', /useState<FeedScope>\('active'\)/.test(feed), true);
+  eq('  and an empty one falls through on mount', /void chooseScope\(\)/.test(feed), true);
 }
 
 console.log('\n— the stream scrolls —');
