@@ -133,17 +133,44 @@ export async function POST(
     // ── Company conflicts ──────────────────────────────────────────────────────
     const seenCoIds = new Set<number>();
     const askedIdentity = new Set<string>();
+
+    /*
+     * One hit per uploaded company name, resolved before any question is
+     * asked.
+     *
+     * Still matched row by row — a row carrying an email or a website can
+     * confirm a match that the bare name cannot, so the first row's absence of
+     * one must not settle it. What is kept per name is the best hit seen: a
+     * confident match replaces a guess, and once a name is confidently matched
+     * the remaining rows for it are not matched again.
+     */
+    const hitByName = new Map<string, { existing: typeof existingCompanies[number]; isGuess: boolean }>();
     for (const p of valid) {
-      if (!p.company?.trim()) continue;
-      const coName = p.company.trim();
+      const coName = p.company?.trim();
+      if (!coName) continue;
+      const prev = hitByName.get(coName);
+      if (prev && !prev.isGuess) continue;
       const hit = matchCompany(coName, existingCompanies, companyMatcher, p.email?.trim(), p.website?.trim(), nameDecisions);
       if (!hit) continue;
-      const existing = hit.match;
+      const isGuess = hit.stage === 'fuzzy';
+      if (!prev || !isGuess) hitByName.set(coName, { existing: hit.match, isGuess });
+    }
 
+    /*
+     * Confident matches first, so that a company both named exactly by one row
+     * and guessed at by another spelling has its field questions asked against
+     * the name that is certainly it — `seenCoIds` below asks about each
+     * company once, and this decides which name wins that slot.
+     */
+    const orderedHits: Array<[string, { existing: typeof existingCompanies[number]; isGuess: boolean }]> = [];
+    hitByName.forEach((hit, coName) => { orderedHits.push([coName, hit]); });
+    orderedHits.sort((a, b) => Number(a[1].isGuess) - Number(b[1].isGuess));
+
+    for (const [coName, { existing, isGuess }] of orderedHits) {
       // A fuzzy hit is a guess, so it becomes a question rather than a match.
       // Asked once per uploaded name, with the attendee count attached — one
       // answer decides where all of them land.
-      if (hit.stage === 'fuzzy') {
+      if (isGuess) {
         const normalized = deepNormalizeCompanyName(coName);
         if (!askedIdentity.has(normalized)) {
           askedIdentity.add(normalized);
@@ -171,9 +198,23 @@ export async function POST(
             detail: `${who} in this file · closest existing match`,
           });
         }
-        // Its field values belong to a company that may not be this one, so
-        // they aren't compared here.
-        continue;
+        /*
+         * And then fall through to the field comparison below rather than
+         * stopping here.
+         *
+         * Stopping was the bug. Answering "Same company" binds the uploaded
+         * rows to this existing record, and the write path then applies the
+         * file's values with COALESCE(?, field) — which takes the uploaded
+         * value whenever there is one. So a company reached through a fuzzy
+         * name had its stored Company Type (and website, CRM link, WSE)
+         * overwritten by the file without anybody being asked, which is the
+         * one thing this step exists to prevent.
+         *
+         * The rows are marked as conditional, since they only take effect if
+         * the identity answer above was "Same company" — answered "New
+         * company", the existing record is not touched and the answer is
+         * inert.
+         */
       }
 
       if (seenCoIds.has(existing.id)) continue;
@@ -187,6 +228,15 @@ export async function POST(
       const rawWse = coRows.find(q => q.wse?.trim())?.wse?.trim() ?? null;
       const proposedWse = rawWse ? (parseInt(rawWse, 10) || null) : null;
 
+      /*
+       * One question per differing field. Three ways to have nothing to ask,
+       * and they are the reason this is not simply "the two values differ":
+       *
+       *   the stored value is blank  → the file fills it in, nothing to decide
+       *   the file's value is blank  → nothing is being proposed
+       *   they are the same value    → compared trimmed and case-insensitively,
+       *                                so "Operator" and "operator " agree
+       */
       const checkCo = (field: string, existVal: string | number | null | undefined, propVal: string | number | null | undefined) => {
         if (existVal == null || existVal === '') return; // existing blank → auto-apply, no conflict
         if (propVal == null || propVal === '') return;   // nothing proposed
@@ -199,6 +249,9 @@ export async function POST(
           fieldLabel: fieldLabel(field),
           currentValue: String(existVal).trim(),
           proposedValue: String(propVal).trim(),
+          // Named for what it is: a question that only matters if the identity
+          // question above was answered "Same company".
+          detail: isGuess ? `Only if "${coName}" is this company` : undefined,
         });
       };
 

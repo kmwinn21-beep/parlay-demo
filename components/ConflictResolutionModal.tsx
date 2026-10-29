@@ -113,9 +113,15 @@ export function ConflictResolutionModal({ conflicts, onResolve, onCancel }: Prop
     const valueClass = (col: ConflictColumn) =>
       chosen(col) ? 'font-semibold text-gray-900' : 'text-gray-500';
 
+    // A field row's own `detail`, where it has one, is appended rather than
+    // dropped: it carries the condition on the answer — a company reached by a
+    // guessed name is only updated if the identity question above was answered
+    // "Same company", and a reader who cannot see that is being asked to
+    // decide something whose effect is hidden from them.
     const subtitle = c.entityType === 'company_identity'
       ? (c.detail ?? 'Company match')
-      : `${c.fieldLabel} · ${c.entityType === 'attendee' ? 'Attendee' : 'Company'}`;
+      : [`${c.fieldLabel} · ${c.entityType === 'attendee' ? 'Attendee' : 'Company'}`, c.detail]
+          .filter(Boolean).join(' · ');
 
     return (
       <div
