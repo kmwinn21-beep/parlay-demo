@@ -689,8 +689,8 @@ export default function ConferenceDetailPage() {
   const [addCompanyOnly, setAddCompanyOnly] = useState(false);
   const [addCompanyOnlyName, setAddCompanyOnlyName] = useState('');
   const [addCompanyOnlyOther, setAddCompanyOnlyOther] = useState(false);
-  // The picker here needs EVERY company, not just this conference's — the
-  // whole point is to add one that isn't on it yet.
+  // Both of the add form's pickers need EVERY company, not just this
+  // conference's — the whole point is to add one that isn't on it yet.
   const [allCompanies, setAllCompanies] = useState<{ id: number; name: string }[]>([]);
   const unitTypeLabel = useUnitTypeLabel();
   const [executiveBriefOpen, setExecutiveBriefOpen] = useState(false);
@@ -1241,16 +1241,21 @@ export default function ConferenceDetailPage() {
     }
   }, [visibleConferenceTabs, loadCompanies]);
 
-  // The add-attendee company picker lists this conference's companies, so pull
-  // them in when the form opens rather than only when the Companies tab does.
+  // The add form reads this conference's companies for the rest of its work,
+  // so pull them in when it opens rather than only when the Companies tab does.
   useEffect(() => {
     if (showAddForm) loadCompanies();
   }, [showAddForm, loadCompanies]);
 
-  // Company-only mode picks from every company on file, so it needs its own
-  // fetch — loadCompanies above narrows to the ones already at this conference.
+  /*
+   * And every company on file, which is what both of the add form's company
+   * pickers offer: `loadCompanies` above narrows to the ones already at this
+   * conference, and neither picker wants that — one is adding a company that
+   * is not on the conference yet, and the other is adding a person who works
+   * at one.
+   */
   useEffect(() => {
-    if (!addCompanyOnly || allCompanies.length > 0) return;
+    if ((!showAddForm && !addCompanyOnly) || allCompanies.length > 0) return;
     let cancelled = false;
     fetch('/api/companies')
       .then(r => r.json())
@@ -1261,7 +1266,7 @@ export default function ConferenceDetailPage() {
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [addCompanyOnly, allCompanies.length]);
+  }, [showAddForm, addCompanyOnly, allCompanies.length]);
 
   // Track A onboarding: mark pre-conference review visited when this page loads for track A users
   useEffect(() => {
@@ -4838,9 +4843,14 @@ export default function ConferenceDetailPage() {
                 </div>
                 <div>
                   <label className="label text-xs">Company</label>
-                  {/* Pick from the companies already at this conference; "Other"
-                      falls back to typing a new one, as the floor-note assign
-                      flow does. */}
+                  {/* Every company on file, not just the ones already at this
+                      conference. Somebody being added by hand usually works
+                      somewhere that is not on the list yet — that is most of
+                      the reason to add them — and a picker narrowed to the
+                      conference answered a question nobody asked, leaving the
+                      company to be retyped through "Other" and matched back
+                      to the record it was already sitting next to.
+                      "Other" still takes a genuinely new name. */}
                   {addCompanyOther ? (
                     <div className="flex items-center gap-1.5">
                       <input
@@ -4863,8 +4873,8 @@ export default function ConferenceDetailPage() {
                     </div>
                   ) : (
                     <SearchableSelect
-                      options={conferenceCompanies}
-                      value={conferenceCompanies.find(c => c.name === addFormData.company) ?? null}
+                      options={allCompanies}
+                      value={allCompanies.find(c => c.name === addFormData.company) ?? null}
                       onChange={(c) => setAddFormData(p => ({ ...p, company: c?.name ?? '' }))}
                       getLabel={(c) => c.name}
                       placeholder="Select a company…"
