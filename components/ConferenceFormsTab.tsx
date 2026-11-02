@@ -10,6 +10,7 @@ import { FormBuilderModal } from './FormBuilderModal';
 import { useUser } from './UserContext';
 import { useConfigColors } from '@/lib/useConfigColors';
 import { getBadgeClass } from '@/lib/colors';
+import { publicFormUrl as publicFormUrl_ } from '@/lib/publicFormUrl';
 
 function getCssVarHex(varName: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback;
@@ -268,11 +269,9 @@ export function ConferenceFormsTab({ conferenceId, conferenceName, attendees, is
     }
   };
 
-  const publicFormUrl = (form: ConferenceForm) => {
-    if (!form.public_token) return '';
-    const aid = user?.accountId || 'master';
-    return `${window.location.origin}/forms?token=${form.public_token}&aid=${aid}`;
-  };
+  // Shared with the social event action menu, which offers the same link from
+  // the event the form feeds — see lib/publicFormUrl.ts.
+  const publicFormUrl = (form: ConferenceForm) => publicFormUrl_(form.public_token, user?.accountId);
 
   const handleCopyPublicLink = async (form: ConferenceForm) => {
     try {

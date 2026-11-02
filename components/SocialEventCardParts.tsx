@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ScrollRow } from '@/components/ScrollRow';
 import { getPreset } from '@/lib/colors';
 import { useConfigColors } from '@/lib/useConfigColors';
@@ -289,25 +290,82 @@ export function SocialEventCardBody({
  * The card's action menu — a dark-gray kebab that opens Edit / Delete (and,
  * below sm, Notes, since the notes icon button is desktop-only there).
  */
-export function CardActionMenu({ onEdit, onDelete, onNotes, noteCount }: {
+export function CardActionMenu({ onEdit, onDelete, onNotes, noteCount, onCopyFormLink }: {
   onEdit: () => void;
   onDelete: () => void;
   onNotes?: () => void;
   noteCount?: number;
+  /**
+   * Copy the public link of the form that feeds this event, when it has one.
+   *
+   * Its presence is the whole signal: given, the kebab wears a green dot and
+   * the menu offers the entry in the same green. There is no second prop
+   * saying whether a link exists, because two that could disagree is how a
+   * badge ends up promising a menu entry that is not there.
+   */
+  onCopyFormLink?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrapRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onEsc);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onEsc); };
   }, [open]);
+
+  /*
+   * The menu is portalled to the body, not drawn inside the card.
+   *
+   * The card is `overflow-hidden`, and the menu used to end a few pixels
+   * inside its bottom edge — so a third entry (Copy Form Link) clipped Delete
+   * away entirely: still in the DOM, painted nowhere, and the next card
+   * answering the click. Measured, not guessed: the menu ran to 686px against
+   * a card ending at 658.
+   *
+   * So it is positioned in viewport coordinates against the button, flipping
+   * above when there is no room below, and it closes on scroll — a fixed
+   * panel measured once would otherwise drift away from the kebab it belongs
+   * to.
+   */
+  const MENU_WIDTH = 176; // w-44
+  const place = useCallback(() => {
+    const anchor = wrapRef.current?.querySelector('button');
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const height = menuRef.current?.offsetHeight ?? 120;
+    const below = r.bottom + 4;
+    const flip = below + height > window.innerHeight - 8 && r.top - height - 4 > 8;
+    setPos({
+      top: flip ? r.top - height - 4 : below,
+      // Right-aligned with the kebab, and never off the left edge.
+      left: Math.max(8, r.right - MENU_WIDTH),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!open) { setPos(null); return; }
+    place();
+    // Once more after the panel exists, so a flip measures its real height.
+    const raf = requestAnimationFrame(place);
+    const onScroll = () => setOpen(false);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [open, place]);
 
   const itemCls = 'w-full text-left px-3 py-2 text-xs font-medium flex items-center gap-2 transition-colors';
 
@@ -316,17 +374,52 @@ export function CardActionMenu({ onEdit, onDelete, onNotes, noteCount }: {
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        title="Actions"
+        // The dot is decorative, so what it means is said here instead —
+        // otherwise the only announcement of a live form is an entry nobody
+        // has opened the menu to hear yet.
+        title={onCopyFormLink ? 'Actions — this event has a public form link' : 'Actions'}
         aria-haspopup="menu"
         aria-expanded={open}
-        className={`p-1.5 rounded-lg transition-colors ${open ? 'bg-gray-100 text-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}
+        className={`relative p-1.5 rounded-lg transition-colors ${open ? 'bg-gray-100 text-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}
       >
         <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
           <path d="M10 6a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
         </svg>
+        {/* A live public form, marked where the thing to do about it is. A
+            closed menu is otherwise identical whether the event has a link to
+            hand out or not, and the ring keeps the dot visible against the
+            hover fill behind it. */}
+        {onCopyFormLink && (
+          <span
+            aria-hidden
+            // green-600, the same value as the menu entry below rather than
+            // the brighter green-500 a badge would usually take: the dot's
+            // whole job is to stand for that entry, and text light enough to
+            // match a 500 would not be readable on white.
+            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-600 ring-2 ring-white"
+          />
+        )}
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 top-full mt-1 z-30 w-36 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+      {open && createPortal(
+        // Wider than it was: "Copy Form Link" does not fit 36 and a wrapped
+        // menu entry reads as two. Fixed, because it is in the body now.
+        <div
+          ref={menuRef}
+          role="menu"
+          style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}
+          className="fixed z-[10000] w-44 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+        >
+          {onCopyFormLink && (
+            // First, and in the green the dot promised: it is the one entry
+            // that is only sometimes there, and the reason the kebab is
+            // marked at all.
+            <button type="button" role="menuitem" onClick={() => { setOpen(false); onCopyFormLink(); }} className={`${itemCls} text-green-600 hover:bg-green-50`}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-4 4a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l4-4a4 4 0 015.656 5.656l-1.5 1.5" />
+              </svg>
+              Copy Form Link
+            </button>
+          )}
           {onNotes && (
             // Desktop has its own notes icon button beside the kebab, so this
             // entry only earns its place on mobile.
@@ -352,7 +445,8 @@ export function CardActionMenu({ onEdit, onDelete, onNotes, noteCount }: {
             </svg>
             Delete
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
