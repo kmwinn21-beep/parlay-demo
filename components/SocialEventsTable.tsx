@@ -26,6 +26,7 @@ import {
   type GuestRank,
 } from '@/lib/guestRank';
 import { sortSocialEvents } from '@/lib/socialEventOrder';
+import { publicFormUrl } from '@/lib/publicFormUrl';
 
 type RsvpStatus = 'yes' | 'no' | 'maybe' | 'attended';
 
@@ -48,6 +49,14 @@ export interface SocialEvent {
   /** Optional cap on how many guests can attend. Null means no limit. */
   guest_limit?: number | null;
   created_at: string;
+  /**
+   * The public token of the form that feeds this event, when one is linked
+   * AND published. Null covers both "no form" and "a form nobody has
+   * generated a link for" — neither has anything to copy.
+   */
+  public_form_token?: string | null;
+  /** That form's name, for the toast that confirms the copy. */
+  public_form_name?: string | null;
   rsvps: Array<{
     attendee_id: number;
     rsvp_status: string;
@@ -1451,6 +1460,28 @@ export function SocialEventsTable({
     }
   }, [events, onRefresh, getEffectiveGuestIds, localGuests]);
 
+  /**
+   * Copy the public link of the form that collects this event's RSVPs.
+   *
+   * The link is the same one the Forms tab generates — built here rather than
+   * sent down with the event, because it carries the browser's own origin.
+   * Offered only where the API returned a token, which it does only for a
+   * linked form that has actually been published.
+   */
+  const handleCopyFormLink = async (ev: SocialEvent) => {
+    const url = publicFormUrl(ev.public_form_token, user?.accountId);
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success(ev.public_form_name ? `Link to "${ev.public_form_name}" copied` : 'Form link copied');
+    } catch {
+      // Clipboard access is refused outside a secure context and in some
+      // embedded browsers. Saying so beats a success toast for a copy that
+      // did not happen.
+      toast.error('Failed to copy the link');
+    }
+  };
+
   const handleDelete = async (eventId: number) => {
     if (!confirm('Delete this social event? This cannot be undone.')) return;
     try {
@@ -1761,6 +1792,9 @@ export function SocialEventsTable({
                         onDelete={() => handleDelete(ev.id)}
                         onNotes={() => setNotesEventId(ev.id)}
                         noteCount={noteCounts[ev.id] ?? 0}
+                        // Passed only when there is a link, since this prop is
+                        // what puts the green dot on the kebab.
+                        onCopyFormLink={ev.public_form_token ? () => handleCopyFormLink(ev) : undefined}
                       />
                     </div>
                   )}

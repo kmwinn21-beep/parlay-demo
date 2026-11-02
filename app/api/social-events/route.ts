@@ -24,6 +24,41 @@ export async function GET(request: NextRequest) {
     });
 
     const eventIds = result.rows.map(r => Number(r.id));
+
+    /*
+     * The public link of the form that feeds each event, where there is one.
+     *
+     * A form is tied to a social event by conference_forms.social_event_id,
+     * and only a form that has been made public has a link to hand out — so
+     * both conditions are in the query rather than left to the client to
+     * check. An event with a form that nobody has published yet comes back
+     * with no token, which is the same answer as having no form at all:
+     * there is nothing to copy.
+     *
+     * Only the token travels. The address it goes into is built in the
+     * browser (lib/publicFormUrl.ts) because it carries the origin.
+     */
+    const formTokenByEventId: Record<number, { token: string; formName: string }> = {};
+    if (eventIds.length > 0) {
+      const formRes = await db.execute({
+        sql: `SELECT social_event_id, name, public_token FROM conference_forms
+              WHERE social_event_id IN (${eventIds.map(() => '?').join(',')})
+                AND is_public = 1 AND public_token IS NOT NULL AND public_token != ''
+              ORDER BY id`,
+        args: eventIds,
+      }).catch(() => ({ rows: [] as Record<string, unknown>[] }));
+      for (const r of formRes.rows) {
+        const eid = Number(r.social_event_id);
+        // First wins: two published forms on one event is not a state the UI
+        // offers, and a menu entry can only copy one link.
+        if (formTokenByEventId[eid]) continue;
+        formTokenByEventId[eid] = {
+          token: String(r.public_token),
+          formName: r.name ? String(r.name) : '',
+        };
+      }
+    }
+
     const rsvpsByEventId: Record<number, Array<{ attendee_id: number; rsvp_status: string; rep_rank: number | null; team_rank: number | null }>> = {};
     if (eventIds.length > 0) {
       const rsvpResult = await db.execute({
@@ -62,6 +97,8 @@ export async function GET(request: NextRequest) {
         notes: r.notes ? String(r.notes) : null,
         created_at: String(r.created_at),
         rsvps: rsvpsByEventId[Number(r.id)] || [],
+        public_form_token: formTokenByEventId[Number(r.id)]?.token ?? null,
+        public_form_name: formTokenByEventId[Number(r.id)]?.formName ?? null,
       }))
     );
   } catch (error) {
