@@ -151,6 +151,83 @@ export function authCookieOptions(maxAge = COOKIE_MAX_AGE) {
  * serverless function returning/freezing right after the response is sent,
  * and can get silently dropped before they reach the DB.
  */
+/**
+ * Records a single sign-on session the first time it is seen, and says
+ * whether this was that first time.
+ *
+ * The password routes know the moment a login happens and write one row for
+ * it. Single sign-on has no such moment to hook: Clerk issues the session
+ * elsewhere and the app only ever meets an existing one, on every request it
+ * serves. So the row is keyed by the provider's session id and written with
+ * INSERT OR IGNORE — the first request of a session inserts, every later one
+ * collides with the unique index and changes nothing.
+ *
+ * That makes the count mean the same thing on both paths: rows are sign-ins,
+ * not requests. `last_seen_at` is moved only on the insert, so it marks when
+ * the session began rather than when it was last used — the activity stamp is
+ * `touchLastSeen` below, which is a different question.
+ *
+ * Returns false on any failure. A usage statistic must never be the reason a
+ * request fails.
+ */
+export async function recordSessionOnce(
+  db: Client,
+  userId: number,
+  sessionKey: string,
+  info: { ip?: string | null; userAgent?: string | null } = {},
+): Promise<boolean> {
+  try {
+    /*
+     * Asked before it is written, rather than leaning on the unique index
+     * alone. The index is the race guard and is created by the migration —
+     * but a tenant database that reaches the current version through the
+     * column reconciler instead has the column and NO index (the reconciler
+     * repairs columns only), and there the INSERT OR IGNORE would never
+     * collide and every request would add a login. A read per new session is
+     * the price of that not depending on which path a database took.
+     */
+    const existing = await db.execute({
+      sql: 'SELECT 1 FROM user_sessions WHERE session_key = ? LIMIT 1',
+      args: [sessionKey],
+    });
+    if (existing.rows.length > 0) return false;
+
+    const res = await db.execute({
+      sql: `INSERT OR IGNORE INTO user_sessions (user_id, ip_address, user_agent, session_key)
+            VALUES (?, ?, ?, ?)`,
+      args: [userId, info.ip ?? null, info.userAgent ?? null, sessionKey],
+    });
+    const inserted = Number(res.rowsAffected ?? 0) > 0;
+    if (inserted) {
+      await db.execute({
+        sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
+        args: [userId],
+      });
+    }
+    return inserted;
+  } catch (err) {
+    console.error('Failed to record SSO session:', err);
+    return false;
+  }
+}
+
+/**
+ * Moves a user's activity stamp forward.
+ *
+ * Separate from the session row because they answer different questions. With
+ * single sign-on a session can live for weeks, so "when did they last sign
+ * in" and "when were they last here" stop being the same date — and the
+ * second is the one that says whether somebody is using the product.
+ *
+ * Callers throttle; this just writes.
+ */
+export async function touchLastSeen(db: Client, userId: number): Promise<void> {
+  await db.execute({
+    sql: `UPDATE users SET last_seen_at = datetime('now') WHERE id = ?`,
+    args: [userId],
+  }).catch(err => console.error('Failed to update last_seen_at:', err));
+}
+
 export async function recordUserSession(db: Client, userId: number, request: NextRequest): Promise<void> {
   await Promise.all([
     db.execute({

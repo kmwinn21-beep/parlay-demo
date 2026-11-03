@@ -3010,4 +3010,26 @@ export const migrations: string[] = [
   `ALTER TABLE notification_preferences ADD COLUMN form_submission_received INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE notification_preferences ADD COLUMN form_submission_received_email INTEGER NOT NULL DEFAULT 1`,
   `ALTER TABLE notification_preferences ADD COLUMN form_submission_received_slack INTEGER NOT NULL DEFAULT 0`,
+
+  /* Which sign-in a user_sessions row belongs to.
+
+     The table was written only by the password routes, one row per POST to
+     /api/auth/login. Single sign-on never reaches those routes — Clerk hands
+     back a session and the app simply reads it — so every SSO sign-in went
+     unrecorded, and Admin > Usage reported "Never" for people who are in the
+     product daily.
+
+     An SSO session has to be recorded where it is first SEEN rather than
+     where it is created, which means the same session is met again on every
+     request. The key is Clerk's session id, and the unique index below is
+     what turns "met again" into one row: an INSERT OR IGNORE that collides is
+     the second request of a session, not a second sign-in. The in-memory
+     guard in lib/clerkAuth.ts keeps most of those from reaching the database
+     at all; this is what makes it correct across server instances rather than
+     merely cheap.
+
+     Nullable, and the index is a plain UNIQUE: SQLite allows any number of
+     NULLs in one, so every password-login row ever written stays valid. */
+  `ALTER TABLE user_sessions ADD COLUMN session_key TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_user_sessions_key ON user_sessions(session_key)`,
 ];
