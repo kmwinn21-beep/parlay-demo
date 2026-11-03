@@ -6061,7 +6061,10 @@ interface UsageUser {
   role: string;
   active: number;
   created_at: string;
+  /** Last time they were in the app at all — stamped as they use it. */
   last_seen_at: string | null;
+  /** Start of their most recent session. Null when none was ever recorded. */
+  last_login_at: string | null;
   total_logins: number;
   logins_30d: number;
   notes_written: number;
@@ -6083,16 +6086,29 @@ function AdminUsageTab() {
   const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  /** When the figures on screen were read. */
+  const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [sortKey, setSortKey] = useState<UsageSortKey>('logins_30d');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  useEffect(() => {
-    fetch('/api/admin/usage')
+  /**
+   * Reading the figures. A refresh keeps the table on screen and spins its
+   * own button — replacing a table you are reading with a spinner because you
+   * asked for fresher numbers is the wrong trade.
+   */
+  const load = useCallback((opts: { manual?: boolean } = {}) => {
+    if (opts.manual) setRefreshing(true); else setLoading(true);
+    // cache: no-store, because the whole point of the button is to go and ask
+    // again rather than be handed what the browser already had.
+    return fetch('/api/admin/usage', { cache: 'no-store' })
       .then(r => { if (!r.ok) throw new Error('Failed to load'); return r.json(); })
-      .then((d: UsageData) => setData(d))
+      .then((d: UsageData) => { setData(d); setError(null); setLoadedAt(new Date()); })
       .catch(e => setError(String(e)))
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); setRefreshing(false); });
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
 
   const handleSort = (key: UsageSortKey) => {
     if (sortKey === key) {
@@ -6161,7 +6177,11 @@ function AdminUsageTab() {
     { key: 'role', label: 'Role' },
     { key: 'active', label: 'Status' },
     { key: 'created_at', label: 'Member Since' },
-    { key: 'last_seen_at', label: 'Last Login' },
+    // Two dates, because single sign-on separated them: a session lasts for
+    // weeks, so the last sign-in and the last time somebody was here are not
+    // the same day, and the second is the one that says who is using this.
+    { key: 'last_login_at', label: 'Last Login' },
+    { key: 'last_seen_at', label: 'Last Active' },
     { key: 'total_logins', label: 'Total Logins' },
     { key: 'logins_30d', label: '30d Logins' },
     { key: 'notes_written', label: 'Notes' },
@@ -6206,6 +6226,28 @@ function AdminUsageTab() {
       </div>
 
       <div className="card overflow-hidden">
+        {/* Above the table: when these figures were read, and a way to read
+            them again. Usage changes while the page is open — somebody signs
+            in, somebody writes a note — and the alternative was reloading the
+            whole admin page to find out. */}
+        <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-gray-100">
+          <p className="text-xs text-gray-400">
+            {loadedAt
+              ? `As of ${loadedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+              : ''}
+          </p>
+          <button
+            type="button"
+            onClick={() => { void load({ manual: true }); }}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-50 transition-colors"
+          >
+            <svg className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
@@ -6237,8 +6279,14 @@ function AdminUsageTab() {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">{fmtDate(u.created_at)}</td>
+                  {/* Read from the session rows themselves rather than from
+                      total_logins, which was the old tell: a count of zero
+                      printed "Never" over a date the row actually had. */}
                   <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
-                    {u.total_logins === 0 ? <span className="text-gray-300">Never</span> : fmtDate(u.last_seen_at)}
+                    {u.last_login_at ? fmtDate(u.last_login_at) : <span className="text-gray-300">Never</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-gray-400 text-xs whitespace-nowrap">
+                    {u.last_seen_at ? fmtDate(u.last_seen_at) : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{u.total_logins || <span className="text-gray-300">—</span>}</td>
                   <td className="px-3 py-2.5 text-center font-semibold text-gray-700">{u.logins_30d || <span className="text-gray-300">—</span>}</td>

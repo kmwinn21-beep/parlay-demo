@@ -24,6 +24,15 @@ export async function GET(request: NextRequest) {
             u.active,
             u.created_at,
             u.last_seen_at,
+            /*
+             * Two different questions, which single sign-on pulled apart. A
+             * session can live for weeks, so the last time somebody SIGNED IN
+             * (the newest session row) and the last time they were HERE
+             * (last_seen_at, stamped as they use the app) stop being the same
+             * date — and it is the second that says whether the product is
+             * being used.
+             */
+            MAX(s.created_at)                                                                       AS last_login_at,
             COUNT(DISTINCT s.id)                                                                    AS total_logins,
             COUNT(DISTINCT CASE WHEN s.created_at >= date('now', '-30 days') THEN s.id END)         AS logins_30d,
             COUNT(DISTINCT en.id)                                                                   AS notes_written,
@@ -62,6 +71,7 @@ export async function GET(request: NextRequest) {
       active:           Number(r.active),
       created_at:       String(r.created_at),
       last_seen_at:     r.last_seen_at ? String(r.last_seen_at) : null,
+      last_login_at:    r.last_login_at ? String(r.last_login_at) : null,
       total_logins:     Number(r.total_logins),
       logins_30d:       Number(r.logins_30d),
       notes_written:    Number(r.notes_written),
